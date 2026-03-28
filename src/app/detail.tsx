@@ -81,15 +81,25 @@ export default function DetailScreen() {
           }
         } else if (type === "blogpost" && blogId && postId) {
           // Fetch single blog post content
+          console.log("[nōto] Fetching blog post:", blogId, postId);
           const res = await fetch(`${creds.apiBaseUrl}/blog/post/list/all/${blogId}`, {
             headers: { Accept: "application/json" },
           });
-          if (res.ok) {
-            const posts = await res.json();
+          console.log("[nōto] Blog post response:", res.status);
+          const text = await res.text();
+          console.log("[nōto] Blog post preview:", text.substring(0, 100));
+
+          if (res.ok && !text.includes("<!DOCTYPE")) {
+            const posts = JSON.parse(text);
             if (Array.isArray(posts)) {
+              console.log("[nōto] Found", posts.length, "posts, looking for", postId);
               const post = posts.find((p: Record<string, unknown>) => String(p._id) === postId);
               if (post) {
-                setHtmlContent(String(post.content ?? ""));
+                const content = String(post.content ?? "");
+                console.log("[nōto] Post content length:", content.length);
+                setHtmlContent(content);
+              } else {
+                console.warn("[nōto] Post not found in list");
               }
             }
           }
