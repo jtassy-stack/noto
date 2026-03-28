@@ -38,41 +38,45 @@ function EntPhotoGallery() {
         const data = await res.json();
         if (!Array.isArray(data)) { setLoading(false); return; }
 
-        // Get post count for each blog
-        const blogsWithCount = await Promise.all(
+        // Get post count + author for each blog
+        const blogsWithMeta = await Promise.all(
           data.map(async (b: Record<string, unknown>) => {
             const postsRes = await fetch(`${creds.apiBaseUrl}/blog/post/list/all/${b._id}`, {
               headers: { Accept: "application/json" },
             });
             const posts = postsRes.ok ? await postsRes.json() : [];
+            const author = b.author as { username?: string } | undefined;
             return {
               id: String(b._id),
               title: String(b.title ?? "").trim(),
               postCount: Array.isArray(posts) ? posts.length : 0,
+              authorName: author?.username ?? "",
             };
           })
         );
 
-        // Filter blogs by child's class
+        // Filter by matching blog author with child's teacher
         const className = activeChild?.className ?? "";
-        // Extract class short name: "MS" from "MS - Mme Céline DESBATS", "CM1 - CM2 A" from "CM1 - CM2 A - M. Lucas TOLOTTA"
+        // Extract teacher name: "Céline DESBATS" from "MS - Mme Céline DESBATS"
         const classParts = className.split(" - ");
-        const classShort = classParts.length > 2
-          ? classParts.slice(0, -1).join(" - ").trim() // "CM1 - CM2 A"
-          : classParts[0]?.trim() ?? ""; // "MS"
+        const teacherPart = classParts[classParts.length - 1]?.replace(/^(M\.|Mme|M)\s*/i, "").trim() ?? "";
+        // Extract last name from teacher: "DESBATS" from "Céline DESBATS", "TOLOTTA" from "Lucas TOLOTTA"
+        const teacherLastName = teacherPart.split(/\s+/).pop()?.toUpperCase() ?? "";
 
-        const filtered = className
-          ? blogsWithCount.filter((b) => {
-              const titleUpper = b.title.toUpperCase();
-              // Match class short name in blog title
-              if (classShort && titleUpper.includes(classShort.toUpperCase())) return true;
-              // Also check individual parts (e.g., "CM1", "CM2", "MS")
-              const words = classShort.split(/[\s-]+/).filter(w => w.length >= 2);
-              return words.some(w => titleUpper.includes(w.toUpperCase()));
+        const filtered = teacherLastName
+          ? blogsWithMeta.filter((b) => {
+              // Match author last name with teacher last name
+              if (teacherLastName && b.authorName.toUpperCase().includes(teacherLastName)) return true;
+              // Fallback: match class short name in title
+              const classShort = classParts.length > 2
+                ? classParts.slice(0, -1).join(" - ").trim()
+                : classParts[0]?.trim() ?? "";
+              if (classShort && b.title.toUpperCase().includes(classShort.toUpperCase())) return true;
+              return false;
             })
-          : blogsWithCount;
+          : blogsWithMeta;
 
-        console.log("[nōto] Blogs:", blogsWithCount.length, "total →", filtered.length, "for", activeChild?.firstName, "(class:", classShort, ")");
+        console.log("[nōto] Blogs:", blogsWithMeta.length, "total →", filtered.length, "for", activeChild?.firstName, "(teacher:", teacherLastName, ")");
         setBlogs(filtered);
       } catch (e) {
         console.warn("[nōto] Blog list error:", e);
