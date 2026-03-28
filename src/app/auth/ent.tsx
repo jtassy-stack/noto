@@ -1,198 +1,149 @@
-import { useState, useRef } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import {
+  View, Text, TextInput, Pressable, StyleSheet,
+  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
+} from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { WebView } from "react-native-webview";
-import type { WebViewNavigation } from "react-native-webview";
-import { Fonts, FontSize, Spacing } from "@/constants/theme";
+import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { saveEntSession } from "@/lib/ent/auth";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
+import { saveMailCredentials, fetchUnreadCount } from "@/lib/ent/mail";
+import { saveEntSession } from "@/lib/ent/auth";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
   const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
-  const [status, setStatus] = useState("Connexion à " + entProvider.name + "...");
-  const phaseRef = useRef<"login" | "mail">("login");
-  const sawCallbackRef = useRef(false);
-  const doneRef = useRef(false);
-  const webViewRef = useRef<WebView>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleNavigationChange(event: WebViewNavigation) {
-    const url = event.url;
-    console.log("[nōto] WebView:", url.substring(0, 80));
-
-    if (phaseRef.current === "login") {
-      // Phase 1: Login on psn.monlycee.net via Keycloak
-      if (url.includes("auth.monlycee.net") && url.includes("login-actions")) {
-        setStatus("Saisissez vos identifiants...");
-      }
-
-      if (url.includes("/oauth2/callback")) {
-        sawCallbackRef.current = true;
-        setStatus("Connexion réussie !");
-        console.log("[nōto] OAuth callback — login done");
-      }
-
-      // After login, when back on ENT homepage, navigate to webmail
-      if (
-        sawCallbackRef.current &&
-        url.startsWith(entProvider.apiBaseUrl) &&
-        !url.includes("/oauth2/callback") &&
-        !url.includes("/cas/init") &&
-        !url.includes("auth.monlycee.net")
-      ) {
-        phaseRef.current = "mail";
-        setStatus("Chargement de la messagerie...");
-        console.log("[nōto] ENT login done, navigating to webmail...");
-
-        // Navigate to the webmail — SSO will auto-authenticate
-        setTimeout(() => {
-          webViewRef.current?.injectJavaScript(`
-            window.location.href = 'https://web-mail.monlycee.net/main.html#inbox';
-            true;
-          `);
-        }, 1000);
-      }
-    } else if (phaseRef.current === "mail") {
-      // Phase 2: On webmail, intercept the token from /me?tok= request
-      if (url.includes("web-mail.monlycee.net/main.html") && !doneRef.current) {
-        doneRef.current = true;
-        setStatus("Récupération des messages...");
-        console.log("[nōto] On webmail, intercepting API calls...");
-
-        // Wait for the webmail to load and make its API calls,
-        // then monkey-patch XHR to capture the mail data
-        setTimeout(() => {
-          webViewRef.current?.injectJavaScript(`
-            (async function() {
-              try {
-                // The webmail app stores mail data after loading
-                // Wait a bit for XHR calls to complete
-                await new Promise(r => setTimeout(r, 3000));
-
-                // Try to read mail list from the DOM
-                const mailItems = document.querySelectorAll('.mail-item, .mail-row, [class*="mail"], tr[class*="unread"], tr[class*="read"]');
-
-                // Also try to intercept via the webmail's internal state
-                // Look for the getMailHeaderList response in the page
-                let messages = [];
-
-                // Parse mail rows: td.from (col 2), td.subject (col 5), td.received (col 9)
-                const rows = document.querySelectorAll('table tbody tr');
-                rows.forEach((row, i) => {
-                  const fromCell = row.querySelector('td.from');
-                  const subjectCell = row.querySelector('td.subject');
-                  const dateCell = row.querySelector('td.received');
-                  if (fromCell && subjectCell) {
-                    messages.push({
-                      id: 'msg-' + i,
-                      from: fromCell.textContent.trim(),
-                      subject: subjectCell.textContent.trim(),
-                      date: dateCell ? dateCell.textContent.trim() : '',
-                      unread: row.classList.contains('new'),
-                      hasAttachment: !!row.querySelector('td.attachment .icon-attachment'),
-                    });
-                  }
-                });
-
-                const titleMatch = document.title.match(/\\((\\d+)/);
-                const unreadCount = titleMatch ? parseInt(titleMatch[1]) : 0;
-
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'mail_data',
-                  messages: JSON.stringify(messages),
-                  unreadCount: unreadCount,
-                  messageCount: messages.length,
-                  title: document.title,
-                }));
-              } catch(e) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'mail_error',
-                  error: e.message
-                }));
-              }
-            })();
-            true;
-          `);
-        }, 2000);
-      }
+  async function handleLogin() {
+    if (!email || !password) {
+      setError("Tous les champs sont requis.");
+      return;
     }
-  }
 
-  async function handleMessage(event: { nativeEvent: { data: string } }) {
+    setLoading(true);
+    setError(null);
+
     try {
-      const data = JSON.parse(event.nativeEvent.data);
+      // Test credentials by fetching unread count via IMAP proxy
+      const result = await fetchUnreadCount({ email: email.trim(), password });
+      console.log("[nōto] IMAP login success! Unread:", result.unseen, "Total:", result.total);
 
-      if (data.type === "mail_data") {
-        console.log("[nōto] Got mail data! Count:", data.messageCount, "Unread:", data.unreadCount);
-        console.log("[nōto] Title:", data.title);
-        console.log("[nōto] Messages:", String(data.messages).substring(0, 200));
+      // Save credentials (encrypted in SecureStore)
+      await saveMailCredentials({ email: email.trim(), password });
 
-        await saveEntSession({
-          providerId: entProvider.id,
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-          apiBaseUrl: entProvider.apiBaseUrl,
-          useCookieJar: true,
-          cachedMessages: data.messages,
-          cachedUnreadCount: String(data.unreadCount),
-        });
+      // Save ENT session
+      await saveEntSession({
+        providerId: entProvider.id,
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // IMAP doesn't expire
+        apiBaseUrl: entProvider.apiBaseUrl,
+        useCookieJar: false,
+      });
 
-        console.log("[nōto] ENT session + messages saved");
-        // Use router.dismissAll() to close the modal stack, then navigate
-        if (router.canDismiss()) {
-          router.dismissAll();
-        }
-        router.replace("/");
-      } else if (data.type === "mail_error") {
-        console.warn("[nōto] Mail fetch error:", data.error);
-        // Save session anyway
-        await saveEntSession({
-          providerId: entProvider.id,
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-          apiBaseUrl: entProvider.apiBaseUrl,
-          useCookieJar: true,
-        });
-        router.replace("/");
-      }
-    } catch (e) {
-      console.warn("[nōto] Message parse error:", e);
+      router.replace("/");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      setError(message);
+      console.warn("[nōto] IMAP login failed:", e);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.statusBar, { backgroundColor: theme.surface }]}>
-        <ActivityIndicator color={theme.accent} size="small" />
-        <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-          {status}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.title, { color: theme.text }]}>
+          {entProvider.icon} {entProvider.name}
         </Text>
-      </View>
-      <WebView
-        ref={webViewRef}
-        source={{ uri: entProvider.apiBaseUrl }}
-        onNavigationStateChange={handleNavigationChange}
-        onMessage={handleMessage}
-        javaScriptEnabled
-        domStorageEnabled
-        thirdPartyCookiesEnabled
-        sharedCookiesEnabled
-        style={styles.webview}
-      />
-    </View>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          Connectez votre messagerie {entProvider.name} avec votre adresse e-mail.
+        </Text>
+
+        <View style={styles.form}>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Adresse e-mail</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+              placeholder="prenom.nom@monlycee.net"
+              placeholderTextColor={theme.textTertiary}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Mot de passe</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+              placeholder="Votre mot de passe"
+              placeholderTextColor={theme.textTertiary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+
+          {error && <Text style={[styles.error, { color: theme.crimson }]}>{error}</Text>}
+
+          <Pressable
+            style={({ pressed }) => [styles.button, { backgroundColor: entProvider.color, opacity: pressed || loading ? 0.7 : 1 }]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Se connecter</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <Text style={[styles.hint, { color: theme.textTertiary }]}>
+          Utilisez la même adresse e-mail que celle affichée dans votre messagerie {entProvider.name}.
+          C'est l'adresse de type prenom.nom@monlycee.net.
+        </Text>
+
+        <Text style={[styles.privacy, { color: theme.textTertiary }]}>
+          🔒 Vos identifiants sont stockés de manière chiffrée sur votre appareil
+          et ne transitent que vers le serveur mail de {entProvider.name}.
+        </Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  statusBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
+  content: { padding: Spacing.lg, paddingTop: Spacing.xl },
+  title: { fontSize: FontSize.xxl, fontFamily: Fonts.bold },
+  subtitle: { fontSize: FontSize.md, fontFamily: Fonts.regular, marginTop: Spacing.sm, lineHeight: 22 },
+  form: { marginTop: Spacing.xl, gap: Spacing.md },
+  field: { gap: Spacing.xs },
+  label: { fontSize: FontSize.sm, fontFamily: Fonts.medium },
+  input: {
+    borderWidth: 1, borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 14,
+    fontSize: FontSize.md, fontFamily: Fonts.regular,
   },
-  statusText: { fontSize: FontSize.sm, fontFamily: Fonts.medium },
-  webview: { flex: 1 },
+  error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 18 },
+  button: {
+    borderRadius: BorderRadius.md, paddingVertical: 16,
+    alignItems: "center", marginTop: Spacing.sm,
+  },
+  buttonText: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  hint: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xl, lineHeight: 16 },
+  privacy: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.lg, textAlign: "center", lineHeight: 16 },
 });

@@ -1,67 +1,52 @@
 import { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { getStoredSession, isEntConnected, type EntSession } from "@/lib/ent/auth";
-
-interface EntMessage {
-  id: string;
-  subject: string;
-  from: string;
-  date: string;
-  unread: boolean;
-  hasAttachment: boolean;
-}
-
-function parseMessages(raw: string | undefined): EntMessage[] {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.map((msg: Record<string, unknown>, i: number) => ({
-      id: String(msg.id ?? `msg-${i}`),
-      subject: String(msg.subject ?? "(sans objet)"),
-      from: String(msg.from ?? "Inconnu"),
-      date: String(msg.date ?? ""),
-      unread: Boolean(msg.unread),
-      hasAttachment: Boolean(msg.hasAttachment),
-    }));
-  } catch {
-    return [];
-  }
-}
+import { getMailCredentials, fetchInbox, type MailMessage } from "@/lib/ent/mail";
 
 export default function MessagesScreen() {
   const theme = useTheme();
   const [connected, setConnected] = useState<boolean | null>(null);
-  const [messages, setMessages] = useState<EntMessage[]>([]);
+  const [messages, setMessages] = useState<MailMessage[]>([]);
+  const [unseen, setUnseen] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const checkConnection = useCallback(async () => {
-    const session = await getStoredSession();
-    const ok = isEntConnected(session);
-    setConnected(ok);
-    if (ok && session?.cachedMessages) {
-      const msgs = parseMessages(session.cachedMessages);
-      setMessages(msgs);
-      console.log("[nōto] Loaded", msgs.length, "cached messages");
+  const loadMessages = useCallback(async () => {
+    const creds = await getMailCredentials();
+    if (!creds) {
+      setConnected(false);
+      return;
+    }
+    setConnected(true);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await fetchInbox(creds, 0);
+      setMessages(result.messages);
+      setUnseen(result.unseen);
+      console.log("[nōto] Loaded", result.messages.length, "messages,", result.unseen, "unread");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erreur";
+      setError(msg);
+      console.warn("[nōto] Messages error:", e);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    checkConnection();
-  }, [checkConnection]);
+    loadMessages();
+  }, [loadMessages]);
 
-  // Not connected
   if (connected === false) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
-        <Text style={[styles.emptyTitle, { color: theme.text }]}>
-          Messagerie
-        </Text>
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>Messagerie</Text>
         <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-          Connectez votre compte ENT pour accéder à la messagerie.
+          Connectez votre messagerie ENT pour voir vos messages.
         </Text>
         <Pressable
           style={[styles.connectBtn, { backgroundColor: "#1B3A6B" }]}
@@ -85,15 +70,25 @@ export default function MessagesScreen() {
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={loadMessages} tintColor={theme.accent} />}
     >
+      {unseen > 0 && (
+        <View style={[styles.badge, { backgroundColor: theme.accent }]}>
+          <Text style={styles.badgeText}>{unseen} non lu{unseen > 1 ? "s" : ""}</Text>
+        </View>
+      )}
+
+      {error && <Text style={[styles.error, { color: theme.crimson }]}>{error}</Text>}
+
       {messages.length === 0 && !loading && (
-        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          Aucun message.
-        </Text>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Aucun message.</Text>
       )}
 
       {messages.map((msg) => {
-        const dateStr = msg.date || "";
+        const date = msg.date ? new Date(msg.date) : null;
+        const dateStr = date
+          ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+          : "";
 
         return (
           <View
@@ -107,43 +102,25 @@ export default function MessagesScreen() {
               },
             ]}
           >
-            {msg.unread && (
-              <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />
-            )}
+            {msg.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
             <View style={styles.messageContent}>
               <View style={styles.messageHeader}>
                 <Text
-                  style={[
-                    styles.messageFrom,
-                    {
-                      color: theme.text,
-                      fontFamily: msg.unread ? Fonts.semiBold : Fonts.regular,
-                    },
-                  ]}
+                  style={[styles.messageFrom, { color: theme.text, fontFamily: msg.unread ? Fonts.semiBold : Fonts.regular }]}
                   numberOfLines={1}
                 >
                   {msg.from}
                 </Text>
-                <Text style={[styles.messageDate, { color: theme.textTertiary }]}>
-                  {dateStr}
-                </Text>
+                <Text style={[styles.messageDate, { color: theme.textTertiary }]}>{dateStr}</Text>
               </View>
               <Text
-                style={[
-                  styles.messageSubject,
-                  {
-                    color: msg.unread ? theme.text : theme.textSecondary,
-                    fontFamily: msg.unread ? Fonts.medium : Fonts.regular,
-                  },
-                ]}
+                style={[styles.messageSubject, { color: msg.unread ? theme.text : theme.textSecondary, fontFamily: msg.unread ? Fonts.medium : Fonts.regular }]}
                 numberOfLines={1}
               >
                 {msg.subject}
               </Text>
               {msg.hasAttachment && (
-                <Text style={[styles.attachment, { color: theme.textTertiary }]}>
-                  📎 Pièce jointe
-                </Text>
+                <Text style={[styles.attachment, { color: theme.textTertiary }]}>📎 Pièce jointe</Text>
               )}
             </View>
           </View>
@@ -156,31 +133,15 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.xl,
-    gap: Spacing.md,
-  },
+  empty: { flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing.xl, gap: Spacing.md },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: Fonts.bold },
   emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center", lineHeight: 22 },
-  connectBtn: {
-    borderRadius: BorderRadius.md,
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.sm,
-  },
+  connectBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, paddingHorizontal: Spacing.xl, marginTop: Spacing.sm },
   connectBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  messageRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 14,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    marginBottom: 4,
-    gap: Spacing.sm,
-  },
+  badge: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: Spacing.md },
+  badgeText: { fontSize: FontSize.sm, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, marginBottom: Spacing.md },
+  messageRow: { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: 4, gap: Spacing.sm },
   unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
   messageContent: { flex: 1, gap: 3 },
   messageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
