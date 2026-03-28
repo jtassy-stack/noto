@@ -212,17 +212,29 @@ export async function fetchGrades(
   session: pronote.SessionHandle,
   period?: pronote.Period
 ): Promise<Grade[]> {
-  // Find period — prefer Gradebook (13), then Grades (198)
-  const gradebookTab = session.userResource.tabs.get(pronote.TabLocation.Gradebook);
+  // Find period — prefer the most recent semester
   const gradesTab = session.userResource.tabs.get(pronote.TabLocation.Grades);
+  const gradebookTab = session.userResource.tabs.get(pronote.TabLocation.Gradebook);
 
-  let p = period ?? gradebookTab?.defaultPeriod ?? gradesTab?.defaultPeriod;
+  let p = period;
 
-  // Fallback: any period from any tab
   if (!p) {
+    // Collect all periods, pick the latest one (Semestre 2 > Semestre 1)
+    const allPeriods: pronote.Period[] = [];
     for (const [, t] of session.userResource.tabs) {
-      if (t.defaultPeriod) { p = t.defaultPeriod; break; }
+      if (t.defaultPeriod) allPeriods.push(t.defaultPeriod);
+      allPeriods.push(...t.periods);
     }
+    // Deduplicate by name, prefer "Semestre 2" or "Trimestre 3" etc.
+    const unique = new Map<string, pronote.Period>();
+    for (const per of allPeriods) {
+      if (per.name) unique.set(per.name, per);
+    }
+    // Sort descending so "Semestre 2" comes before "Semestre 1"
+    const sorted = Array.from(unique.values()).sort((a, b) =>
+      (b.name ?? "").localeCompare(a.name ?? "")
+    );
+    p = sorted[0];
   }
 
   if (!p) {
@@ -232,33 +244,10 @@ export async function fetchGrades(
 
   console.log("[nōto] Fetching grades for period:", p.name ?? "unknown");
 
-  // Try gradesOverview first, fall back to gradebook
-  try {
-    const overview = await pronote.gradesOverview(session, p);
-    console.log("[nōto] gradesOverview returned", overview.grades.length, "grades");
-
-    return overview.grades.map((g) => ({
-      id: g.id,
-      childId: session.userResource.id,
-      subject: g.subject.name,
-      value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
-      outOf: g.outOf.points,
-      coefficient: g.coefficient,
-      date: g.date.toISOString().split("T")[0]!,
-      comment: g.comment,
-      classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
-      classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
-      classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
-    }));
-  } catch (e) {
-    console.log("[nōto] gradesOverview failed, trying gradebook...", e instanceof Error ? e.constructor.name : e);
-  }
-
-  // Fallback: gradebook gives subject averages (no individual grades)
+  // Use gradebook directly — it works for parent accounts and is a single API call
   const gb = await pronote.gradebook(session, p);
   console.log("[nōto] gradebook returned", gb.subjects.length, "subjects");
 
-  // Build grades from subject averages (less granular but better than nothing)
   return gb.subjects.map((s, i) => ({
     id: `gb-${s.subject.name}-${i}`,
     childId: session.userResource.id,
