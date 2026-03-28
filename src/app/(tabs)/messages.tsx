@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Refre
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { getStoredTokens, getStoredProviderId, isEntConnected } from "@/lib/ent/auth";
+import { getStoredSession, isEntConnected } from "@/lib/ent/auth";
 import { listMessages, type EntMessage } from "@/lib/ent/zimbra";
 import { getEntProvider, type EntProvider } from "@/lib/ent/providers";
 
@@ -16,11 +16,11 @@ export default function MessagesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const checkConnection = useCallback(async () => {
-    const tokens = await getStoredTokens();
-    const ok = isEntConnected(tokens);
+    const session = await getStoredSession();
+    const ok = isEntConnected(session);
     setConnected(ok);
-    if (ok && tokens) {
-      const prov = getEntProvider(tokens.providerId);
+    if (ok && session) {
+      const prov = getEntProvider(session.providerId);
       setProvider(prov ?? null);
       if (prov) loadMessages(prov);
     }

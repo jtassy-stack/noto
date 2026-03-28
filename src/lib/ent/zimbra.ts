@@ -1,4 +1,4 @@
-import { getValidAccessToken } from "./auth";
+import { entFetch } from "./auth";
 import type { EntProvider } from "./providers";
 
 export interface EntMessage {
@@ -9,24 +9,6 @@ export interface EntMessage {
   body: string;
   isRead: boolean;
   hasAttachment: boolean;
-}
-
-async function entFetch(provider: EntProvider, path: string): Promise<Response> {
-  const token = await getValidAccessToken(provider);
-  if (!token) throw new Error("Not authenticated to ENT");
-
-  const response = await fetch(`${provider.apiBaseUrl}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`ENT API error: ${response.status} ${response.statusText}`);
-  }
-
-  return response;
 }
 
 /**
@@ -77,7 +59,7 @@ export async function getMessage(provider: EntProvider, id: string): Promise<Ent
 
   const res = await entFetch(provider, endpoint);
   const msg = await res.json();
-  return mapMessage(msg);
+  return mapMessage(msg as Record<string, unknown>);
 }
 
 function mapMessage(msg: Record<string, unknown>): EntMessage {

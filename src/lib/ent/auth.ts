@@ -1,192 +1,142 @@
-import * as AuthSession from "expo-auth-session";
-import * as WebBrowser from "expo-web-browser";
 import * as SecureStore from "expo-secure-store";
-import * as Crypto from "expo-crypto";
 import type { EntProvider } from "./providers";
 
-WebBrowser.maybeCompleteAuthSession();
-
-const ENT_TOKEN_KEY = "noto_ent_tokens";
+const ENT_SESSION_KEY = "noto_ent_session";
 const ENT_PROVIDER_KEY = "noto_ent_provider_id";
 
-export interface EntTokens {
-  accessToken: string;
-  refreshToken: string;
-  idToken: string;
-  expiresAt: number;
+export interface EntSession {
+  cookies: string;
   providerId: string;
-}
-
-function getDiscovery(provider: EntProvider): AuthSession.DiscoveryDocument {
-  const base = `${provider.authBaseUrl}/realms/${provider.realm}/protocol/openid-connect`;
-  return {
-    authorizationEndpoint: `${base}/auth`,
-    tokenEndpoint: `${base}/token`,
-    revocationEndpoint: `${base}/logout`,
-    userInfoEndpoint: `${base}/userinfo`,
-  };
+  expiresAt: number;
+  userName?: string;
 }
 
 /**
- * Full OAuth login flow using WebBrowser.
- * Opens the system browser, user logs in, we intercept the redirect.
+ * Login to ENT using username/password.
+ * This mirrors the Python monlycee library approach:
+ * POST /auth/login with email + password, capture session cookies.
  */
-export async function loginWithEnt(provider: EntProvider): Promise<EntTokens> {
-  // Generate PKCE challenge
-  const codeVerifier = generateCodeVerifier();
-  const codeChallenge = await generateCodeChallenge(codeVerifier);
+export async function loginWithCredentials(
+  provider: EntProvider,
+  username: string,
+  password: string
+): Promise<EntSession> {
+  console.log("[nōto] ENT login to", provider.apiBaseUrl);
 
-  // Use the ENT's own redirect URI — this is what Keycloak accepts
-  // We'll use Expo's auth session to intercept it
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: "noto" });
-  console.log("[nōto] Using redirect_uri:", redirectUri);
+  // Step 1: POST /auth/login to get session cookies
+  const loginUrl = `${provider.apiBaseUrl}/auth/login`;
 
-  const discovery = getDiscovery(provider);
+  const formBody = new URLSearchParams();
+  formBody.append("email", username);
+  formBody.append("password", password);
 
-  const authUrl = new URL(discovery.authorizationEndpoint!);
-  authUrl.searchParams.set("client_id", provider.clientId);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "openid");
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("code_challenge", codeChallenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
-  authUrl.searchParams.set("approval_prompt", "force");
-
-  console.log("[nōto] Opening auth URL:", authUrl.toString().substring(0, 100) + "...");
-
-  // Open browser for login
-  const result = await WebBrowser.openAuthSessionAsync(
-    authUrl.toString(),
-    redirectUri
-  );
-
-  if (result.type !== "success") {
-    throw new Error(`Auth cancelled (${result.type})`);
-  }
-
-  // Extract code from redirect URL
-  const resultUrl = new URL(result.url);
-  const code = resultUrl.searchParams.get("code");
-  if (!code) {
-    const error = resultUrl.searchParams.get("error_description") || resultUrl.searchParams.get("error");
-    throw new Error(`No auth code received: ${error ?? "unknown error"}`);
-  }
-
-  console.log("[nōto] Got auth code, exchanging for tokens...");
-
-  // Exchange code for tokens
-  const tokenResponse = await AuthSession.exchangeCodeAsync(
-    {
-      clientId: provider.clientId,
-      code,
-      redirectUri,
-      extraParams: { code_verifier: codeVerifier },
+  const response = await fetch(loginUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    discovery
-  );
+    body: formBody.toString(),
+    redirect: "manual", // Don't follow redirects — we want the cookies
+    credentials: "include",
+  });
 
-  const tokens: EntTokens = {
-    accessToken: tokenResponse.accessToken,
-    refreshToken: tokenResponse.refreshToken ?? "",
-    idToken: tokenResponse.idToken ?? "",
-    expiresAt: Date.now() + (tokenResponse.expiresIn ?? 300) * 1000,
+  console.log("[nōto] ENT login response status:", response.status);
+
+  // Accept 200, 301, 302 as success (login redirects are normal)
+  if (response.status !== 200 && response.status !== 301 && response.status !== 302) {
+    if (response.status === 401) {
+      throw new Error("Identifiants incorrects");
+    }
+    throw new Error(`Erreur de connexion (${response.status})`);
+  }
+
+  // Extract cookies from response
+  const setCookies = response.headers.get("set-cookie") ?? "";
+  console.log("[nōto] Got cookies:", setCookies.substring(0, 100));
+
+  if (!setCookies) {
+    // In React Native, cookies might be handled automatically
+    // Try to fetch userinfo to verify the session works
+    console.log("[nōto] No set-cookie header, trying session validation...");
+  }
+
+  // Step 2: Validate session by fetching user info
+  const userInfoUrl = `${provider.apiBaseUrl}/auth/oauth2/userinfo`;
+  const userResponse = await fetch(userInfoUrl, {
+    headers: setCookies ? { Cookie: setCookies } : {},
+    credentials: "include",
+  });
+
+  let userName: string | undefined;
+  if (userResponse.ok) {
+    try {
+      const userInfo = await userResponse.json() as Record<string, unknown>;
+      userName = String(userInfo.username ?? userInfo.login ?? "");
+      console.log("[nōto] ENT user:", userName);
+    } catch { /* ignore parse errors */ }
+  }
+
+  const session: EntSession = {
+    cookies: setCookies,
     providerId: provider.id,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24h
+    userName,
   };
 
-  await saveTokens(tokens);
+  await saveSession(session);
   await SecureStore.setItemAsync(ENT_PROVIDER_KEY, provider.id);
 
-  console.log("[nōto] ENT tokens saved, expires:", new Date(tokens.expiresAt).toISOString());
-  return tokens;
+  console.log("[nōto] ENT session saved");
+  return session;
 }
 
-// --- PKCE helpers ---
+/**
+ * Make an authenticated request to the ENT API.
+ */
+export async function entFetch(provider: EntProvider, path: string): Promise<Response> {
+  const session = await getStoredSession();
+  if (!session) throw new Error("Not authenticated to ENT");
 
-function generateCodeVerifier(): string {
-  const bytes = Crypto.getRandomBytes(32);
-  return base64UrlEncode(bytes);
-}
+  const response = await fetch(`${provider.apiBaseUrl}${path}`, {
+    headers: {
+      Cookie: session.cookies,
+      Accept: "application/json",
+    },
+    credentials: "include",
+  });
 
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    verifier,
-    { encoding: Crypto.CryptoEncoding.BASE64 }
-  );
-  // Convert standard base64 to base64url
-  return digest.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-  let result = "";
-  for (let i = 0; i < bytes.length; i++) {
-    result += chars[bytes[i]! % chars.length];
-  }
-  return result;
-}
-
-// --- Token management ---
-
-export async function refreshEntTokens(provider: EntProvider): Promise<EntTokens | null> {
-  const stored = await getStoredTokens();
-  if (!stored?.refreshToken) return null;
-
-  const discovery = getDiscovery(provider);
-
-  try {
-    const response = await AuthSession.refreshAsync(
-      { clientId: provider.clientId, refreshToken: stored.refreshToken },
-      discovery
-    );
-
-    const tokens: EntTokens = {
-      accessToken: response.accessToken,
-      refreshToken: response.refreshToken ?? stored.refreshToken,
-      idToken: response.idToken ?? stored.idToken,
-      expiresAt: Date.now() + (response.expiresIn ?? 300) * 1000,
-      providerId: provider.id,
-    };
-
-    await saveTokens(tokens);
-    return tokens;
-  } catch (e) {
-    console.warn("[nōto] ENT token refresh failed:", e);
-    return null;
-  }
-}
-
-export async function getValidAccessToken(provider: EntProvider): Promise<string | null> {
-  let tokens = await getStoredTokens();
-  if (!tokens) return null;
-
-  if (Date.now() > tokens.expiresAt - 60000) {
-    tokens = await refreshEntTokens(provider);
-    if (!tokens) return null;
+  if (response.status === 401 || response.status === 302) {
+    throw new Error("ENT session expired");
   }
 
-  return tokens.accessToken;
+  if (!response.ok) {
+    throw new Error(`ENT API error: ${response.status}`);
+  }
+
+  return response;
 }
 
-async function saveTokens(tokens: EntTokens): Promise<void> {
-  await SecureStore.setItemAsync(ENT_TOKEN_KEY, JSON.stringify(tokens));
+// --- Session storage ---
+
+async function saveSession(session: EntSession): Promise<void> {
+  await SecureStore.setItemAsync(ENT_SESSION_KEY, JSON.stringify(session));
 }
 
-export async function getStoredTokens(): Promise<EntTokens | null> {
-  const raw = await SecureStore.getItemAsync(ENT_TOKEN_KEY);
+export async function getStoredSession(): Promise<EntSession | null> {
+  const raw = await SecureStore.getItemAsync(ENT_SESSION_KEY);
   if (!raw) return null;
-  return JSON.parse(raw) as EntTokens;
+  return JSON.parse(raw) as EntSession;
 }
 
 export async function getStoredProviderId(): Promise<string | null> {
   return SecureStore.getItemAsync(ENT_PROVIDER_KEY);
 }
 
-export async function clearEntTokens(): Promise<void> {
-  await SecureStore.deleteItemAsync(ENT_TOKEN_KEY);
+export async function clearEntSession(): Promise<void> {
+  await SecureStore.deleteItemAsync(ENT_SESSION_KEY);
   await SecureStore.deleteItemAsync(ENT_PROVIDER_KEY);
 }
 
-export function isEntConnected(tokens: EntTokens | null): boolean {
-  return !!tokens && Date.now() < tokens.expiresAt;
+export function isEntConnected(session: EntSession | null): boolean {
+  return !!session && Date.now() < session.expiresAt;
 }
