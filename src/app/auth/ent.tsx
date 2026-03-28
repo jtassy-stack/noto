@@ -30,12 +30,16 @@ export default function EntLoginScreen() {
     setError(null);
 
     try {
-      // Test credentials via IMAP (same password as Mon Lycée)
-      const result = await fetchUnreadCount({ email: email.trim(), password });
+      // Build full email: add @monlycee.net if not present
+      const fullEmail = email.trim().includes("@")
+        ? email.trim()
+        : `${email.trim()}@monlycee.net`;
+
+      const result = await fetchUnreadCount({ email: fullEmail, password });
       console.log("[nōto] Login OK! Unread:", result.unseen, "Total:", result.total);
 
       // Save mail credentials
-      await saveMailCredentials({ email: email.trim(), password });
+      await saveMailCredentials({ email: fullEmail, password });
 
       // Save ENT session
       await saveEntSession({
@@ -74,17 +78,16 @@ export default function EntLoginScreen() {
         <View style={styles.form}>
           <View style={styles.field}>
             <Text style={[styles.label, { color: theme.textSecondary }]}>
-              Adresse e-mail Mon Lycée
+              Identifiant Mon Lycée
             </Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
-              placeholder="prenom.nom@monlycee.net"
+              placeholder="prenom.nom"
               placeholderTextColor={theme.textTertiary}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               autoCorrect={false}
-              keyboardType="email-address"
             />
           </View>
 
