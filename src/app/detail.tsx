@@ -15,6 +15,14 @@ interface BlogPost {
   date: string;
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function DetailScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
@@ -80,11 +88,37 @@ export default function DetailScreen() {
             }
           }
         } else if (type === "blogpost" && blogId && postId) {
-          // Navigate WebView directly to blog post page on ENT
-          // This way the WebView has session cookies and images load
-          console.log("[nōto] Blog post: navigating to ENT page");
-          setApiBaseUrl(`${creds.apiBaseUrl}/blog#/view/${blogId}/${postId}`);
-          setHtmlContent("__NAVIGATE__"); // signal to use URL mode
+          // Fetch blog post content
+          console.log("[nōto] Fetching blog post:", blogId, postId);
+          const postRes = await fetch(`${creds.apiBaseUrl}/blog/post/${blogId}/${postId}`, {
+            headers: { Accept: "application/json" },
+          });
+
+          if (postRes.ok) {
+            const post = await postRes.json() as Record<string, unknown>;
+            let content = String(post.content ?? "");
+
+            // Convert image URLs to base64 data URIs (images need auth cookies)
+            const imgRegex = /src="(\/workspace\/document\/[^"]+)"/g;
+            const matches = [...content.matchAll(imgRegex)];
+
+            for (const match of matches) {
+              try {
+                const imgUrl = match[1]!;
+                const imgRes = await fetch(`${creds.apiBaseUrl}${imgUrl}`);
+                if (imgRes.ok) {
+                  const blob = await imgRes.blob();
+                  const base64 = await blobToBase64(blob);
+                  content = content.replace(match[0], `src="${base64}"`);
+                }
+              } catch {
+                // Skip failed images
+              }
+            }
+
+            console.log("[nōto] Post content with", matches.length, "images inlined");
+            setHtmlContent(content);
+          }
         }
       } catch (e) {
         console.warn("[nōto] Detail fetch error:", e);
@@ -145,24 +179,7 @@ export default function DetailScreen() {
     );
   }
 
-  // Blog post: navigate to ENT page directly (images need auth cookies)
-  if (htmlContent === "__NAVIGATE__" && apiBaseUrl) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <WebView
-          source={{ uri: apiBaseUrl }}
-          style={styles.webview}
-          scrollEnabled
-          javaScriptEnabled
-          domStorageEnabled
-          thirdPartyCookiesEnabled
-          sharedCookiesEnabled
-        />
-      </View>
-    );
-  }
-
-  // Rich HTML content: WebView
+  // Rich HTML content (blog post with inline images, formatted messages): WebView
   if (htmlContent) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
