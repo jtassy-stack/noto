@@ -90,10 +90,7 @@ export default function QRCodeLoginScreen() {
     try {
       const { session } = await authenticateWithQRCode(pin, qrData);
 
-      // Sync data IMMEDIATELY — session expires fast
-      await syncWithSession(session);
-
-      // Then save account/children to DB (local, doesn't need session)
+      // Save account + children FIRST (sync needs them for foreign keys)
       const children = mapChildren(session);
       await saveAccount({
         id: session.information.id.toString(),
@@ -103,6 +100,9 @@ export default function QRCodeLoginScreen() {
         createdAt: Date.now(),
       });
       await saveChildren(children);
+
+      // Then sync data while session is still alive
+      await syncWithSession(session);
 
       router.replace("/");
     } catch (e: unknown) {
