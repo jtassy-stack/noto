@@ -212,20 +212,16 @@ export async function fetchGrades(
   session: pronote.SessionHandle,
   period?: pronote.Period
 ): Promise<Grade[]> {
-  // Try multiple tab locations — parent accounts vary
-  const tab =
-    session.userResource.tabs.get(pronote.TabLocation.Grades) ??
-    session.userResource.tabs.get(pronote.TabLocation.Gradebook);
+  // Find period — prefer Gradebook (13), then Grades (198)
+  const gradebookTab = session.userResource.tabs.get(pronote.TabLocation.Gradebook);
+  const gradesTab = session.userResource.tabs.get(pronote.TabLocation.Grades);
 
-  let p = period ?? tab?.defaultPeriod;
+  let p = period ?? gradebookTab?.defaultPeriod ?? gradesTab?.defaultPeriod;
 
-  // Fallback: find any period from any available tab
+  // Fallback: any period from any tab
   if (!p) {
     for (const [, t] of session.userResource.tabs) {
-      if (t.defaultPeriod) {
-        p = t.defaultPeriod;
-        break;
-      }
+      if (t.defaultPeriod) { p = t.defaultPeriod; break; }
     }
   }
 
@@ -235,20 +231,45 @@ export async function fetchGrades(
   }
 
   console.log("[nōto] Fetching grades for period:", p.name ?? "unknown");
-  const overview = await pronote.gradesOverview(session, p);
 
-  return overview.grades.map((g) => ({
-    id: g.id,
+  // Try gradesOverview first, fall back to gradebook
+  try {
+    const overview = await pronote.gradesOverview(session, p);
+    console.log("[nōto] gradesOverview returned", overview.grades.length, "grades");
+
+    return overview.grades.map((g) => ({
+      id: g.id,
+      childId: session.userResource.id,
+      subject: g.subject.name,
+      value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
+      outOf: g.outOf.points,
+      coefficient: g.coefficient,
+      date: g.date.toISOString().split("T")[0]!,
+      comment: g.comment,
+      classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
+      classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
+      classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
+    }));
+  } catch (e) {
+    console.log("[nōto] gradesOverview failed, trying gradebook...", e instanceof Error ? e.constructor.name : e);
+  }
+
+  // Fallback: gradebook gives subject averages (no individual grades)
+  const gb = await pronote.gradebook(session, p);
+  console.log("[nōto] gradebook returned", gb.subjects.length, "subjects");
+
+  // Build grades from subject averages (less granular but better than nothing)
+  return gb.subjects.map((s, i) => ({
+    id: `gb-${s.subject.name}-${i}`,
     childId: session.userResource.id,
-    subject: g.subject.name,
-    value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
-    outOf: g.outOf.points,
-    coefficient: g.coefficient,
-    date: g.date.toISOString().split("T")[0]!,
-    comment: g.comment,
-    classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
-    classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
-    classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
+    subject: s.subject.name,
+    value: s.averages.student,
+    outOf: 20,
+    coefficient: s.coef,
+    date: new Date().toISOString().split("T")[0]!,
+    classAverage: s.averages.classOverall,
+    classMin: s.averages.min,
+    classMax: s.averages.max,
   }));
 }
 
