@@ -1,4 +1,4 @@
-import * as pronote from "pawnote";
+import * as pronote from "@niicojs/pawnote";
 import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import type { Account, Child, Grade, ScheduleEntry, Homework } from "@/types";

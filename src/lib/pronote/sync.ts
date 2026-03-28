@@ -1,4 +1,4 @@
-import * as pronote from "pawnote";
+import * as pronote from "@niicojs/pawnote";
 import {
   fetchGrades,
   fetchSchedule,
