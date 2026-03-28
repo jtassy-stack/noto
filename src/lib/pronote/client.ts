@@ -179,6 +179,10 @@ export function mapChildren(session: pronote.SessionHandle): Child[] {
   console.log("[nōto] resources:", session.user.resources.map(r => ({
     id: r.id, name: r.name, className: r.className, kind: r.kind,
   })));
+  console.log("[nōto] authorizations:", {
+    tabs: session.user.authorizations.tabs,
+    canReadDiscussions: session.user.authorizations.canReadDiscussions,
+  });
 
   return session.user.resources.map((r) => {
     // Pronote parent accounts: r.name can be "LASTNAME Firstname" or just "LASTNAME"
@@ -212,65 +216,55 @@ export async function fetchGrades(
   session: pronote.SessionHandle,
   period?: pronote.Period
 ): Promise<Grade[]> {
-  // Find period — prefer the most recent semester
-  const gradesTab = session.userResource.tabs.get(pronote.TabLocation.Grades);
-  const gradebookTab = session.userResource.tabs.get(pronote.TabLocation.Gradebook);
+  // Check if Grades tab (198) is authorized — like Papillon does
+  const authorizedTabs = session.user.authorizations.tabs;
+  const hasGradesTab = authorizedTabs.includes(pronote.TabLocation.Grades);
+  console.log("[nōto] Grades tab authorized:", hasGradesTab, "authorized tabs:", authorizedTabs);
 
-  let p = period;
-
-  if (!p) {
-    // Collect all periods, pick the latest one (Semestre 2 > Semestre 1)
-    const allPeriods: pronote.Period[] = [];
-    for (const [, t] of session.userResource.tabs) {
-      if (t.defaultPeriod) allPeriods.push(t.defaultPeriod);
-      allPeriods.push(...t.periods);
-    }
-    // Deduplicate by name, prefer "Semestre 2" or "Trimestre 3" etc.
-    const unique = new Map<string, pronote.Period>();
-    for (const per of allPeriods) {
-      if (per.name) unique.set(per.name, per);
-    }
-    // Sort descending so "Semestre 2" comes before "Semestre 1"
-    const sorted = Array.from(unique.values()).sort((a, b) =>
-      (b.name ?? "").localeCompare(a.name ?? "")
-    );
-    p = sorted[0];
-  }
-
-  if (!p) {
-    console.log("[nōto] No period found for grades");
+  if (!hasGradesTab) {
+    console.log("[nōto] Grades tab not in authorized tabs, skipping");
     return [];
   }
 
-  console.log("[nōto] Fetching grades for period:", p.name ?? "unknown");
-
-  // Try gradesOverview with Tab 198's period (matches what the web UI shows)
-  const gradesTabPeriod = gradesTab?.defaultPeriod;
-  const periodToUse = gradesTabPeriod ?? p;
-  console.log("[nōto] Using period from tab:", periodToUse.name ?? "unknown");
-
-  try {
-    const overview = await pronote.gradesOverview(session, periodToUse);
-    console.log("[nōto] gradesOverview returned", overview.grades.length, "grades");
-
-    return overview.grades.map((g) => ({
-      id: g.id,
-      childId: session.userResource.id,
-      subject: g.subject.name,
-      value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
-      outOf: g.outOf.points,
-      coefficient: g.coefficient,
-      date: g.date.toISOString().split("T")[0]!,
-      comment: g.comment,
-      classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
-      classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
-      classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
-    }));
-  } catch (e) {
-    const name = e instanceof Error ? e.constructor.name : "Unknown";
-    console.warn("[nōto] gradesOverview failed:", name);
-    throw e; // re-throw so sync handles it
+  // Get period from the Grades tab (198) — like Papillon: resources[0].tabs.get(TabLocation.Grades)
+  const gradesTab = session.userResource.tabs.get(pronote.TabLocation.Grades);
+  if (!gradesTab) {
+    console.log("[nōto] Grades tab not found in userResource.tabs");
+    return [];
   }
+
+  const p = period ?? gradesTab.defaultPeriod;
+  if (!p) {
+    // Try latest period from the tab's period list
+    const periods = gradesTab.periods;
+    if (periods.length === 0) {
+      console.log("[nōto] No periods in Grades tab");
+      return [];
+    }
+    console.log("[nōto] Grades tab periods:", periods.map(pp => pp.name));
+  }
+
+  const periodToUse = p ?? gradesTab.periods[gradesTab.periods.length - 1];
+  if (!periodToUse) return [];
+
+  console.log("[nōto] Calling gradesOverview for period:", periodToUse.name);
+
+  const overview = await pronote.gradesOverview(session, periodToUse);
+  console.log("[nōto] gradesOverview returned", overview.grades.length, "grades");
+
+  return overview.grades.map((g) => ({
+    id: g.id,
+    childId: session.userResource.id,
+    subject: g.subject.name,
+    value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
+    outOf: g.outOf.points,
+    coefficient: g.coefficient,
+    date: g.date.toISOString().split("T")[0]!,
+    comment: g.comment,
+    classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
+    classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
+    classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
+  }));
 }
 
 export async function fetchSchedule(
