@@ -1,33 +1,37 @@
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import * as SecureStore from "expo-secure-store";
+import type { EntProvider } from "./providers";
 
 WebBrowser.maybeCompleteAuthSession();
 
-const KEYCLOAK_BASE = "https://auth.monlycee.net/realms/IDF/protocol/openid-connect";
-const CLIENT_ID = "psn-web-een";
 const ENT_TOKEN_KEY = "noto_ent_tokens";
-
-// Discovery document for Keycloak
-const discovery: AuthSession.DiscoveryDocument = {
-  authorizationEndpoint: `${KEYCLOAK_BASE}/auth`,
-  tokenEndpoint: `${KEYCLOAK_BASE}/token`,
-  revocationEndpoint: `${KEYCLOAK_BASE}/logout`,
-  userInfoEndpoint: `${KEYCLOAK_BASE}/userinfo`,
-};
+const ENT_PROVIDER_KEY = "noto_ent_provider_id";
 
 export interface EntTokens {
   accessToken: string;
   refreshToken: string;
   idToken: string;
-  expiresAt: number; // unix ms
+  expiresAt: number;
+  providerId: string;
+}
+
+function getDiscovery(provider: EntProvider): AuthSession.DiscoveryDocument {
+  const base = `${provider.authBaseUrl}/realms/${provider.realm}/protocol/openid-connect`;
+  return {
+    authorizationEndpoint: `${base}/auth`,
+    tokenEndpoint: `${base}/token`,
+    revocationEndpoint: `${base}/logout`,
+    userInfoEndpoint: `${base}/userinfo`,
+  };
 }
 
 /**
- * Create an OAuth2 auth request with PKCE.
- * Must be called from a React component (uses hooks internally via AuthSession).
+ * Create an OAuth2 auth request with PKCE for a specific ENT provider.
  */
-export function useEntAuth() {
+export function useEntAuth(provider: EntProvider) {
+  const discovery = getDiscovery(provider);
+
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: "noto",
     path: "auth/ent-callback",
@@ -35,7 +39,7 @@ export function useEntAuth() {
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
-      clientId: CLIENT_ID,
+      clientId: provider.clientId,
       scopes: ["openid"],
       redirectUri,
       responseType: AuthSession.ResponseType.Code,
@@ -45,20 +49,23 @@ export function useEntAuth() {
     discovery
   );
 
-  return { request, response, promptAsync, redirectUri };
+  return { request, response, promptAsync, redirectUri, discovery };
 }
 
 /**
  * Exchange authorization code for tokens.
  */
 export async function exchangeCodeForTokens(
+  provider: EntProvider,
   code: string,
   codeVerifier: string,
   redirectUri: string
 ): Promise<EntTokens> {
+  const discovery = getDiscovery(provider);
+
   const response = await AuthSession.exchangeCodeAsync(
     {
-      clientId: CLIENT_ID,
+      clientId: provider.clientId,
       code,
       redirectUri,
       extraParams: {
@@ -73,23 +80,27 @@ export async function exchangeCodeForTokens(
     refreshToken: response.refreshToken ?? "",
     idToken: response.idToken ?? "",
     expiresAt: Date.now() + (response.expiresIn ?? 300) * 1000,
+    providerId: provider.id,
   };
 
   await saveTokens(tokens);
+  await SecureStore.setItemAsync(ENT_PROVIDER_KEY, provider.id);
   return tokens;
 }
 
 /**
- * Refresh the access token using the refresh token.
+ * Refresh the access token.
  */
-export async function refreshEntTokens(): Promise<EntTokens | null> {
+export async function refreshEntTokens(provider: EntProvider): Promise<EntTokens | null> {
   const stored = await getStoredTokens();
   if (!stored?.refreshToken) return null;
+
+  const discovery = getDiscovery(provider);
 
   try {
     const response = await AuthSession.refreshAsync(
       {
-        clientId: CLIENT_ID,
+        clientId: provider.clientId,
         refreshToken: stored.refreshToken,
       },
       discovery
@@ -100,6 +111,7 @@ export async function refreshEntTokens(): Promise<EntTokens | null> {
       refreshToken: response.refreshToken ?? stored.refreshToken,
       idToken: response.idToken ?? stored.idToken,
       expiresAt: Date.now() + (response.expiresIn ?? 300) * 1000,
+      providerId: provider.id,
     };
 
     await saveTokens(tokens);
@@ -113,13 +125,12 @@ export async function refreshEntTokens(): Promise<EntTokens | null> {
 /**
  * Get a valid access token, refreshing if needed.
  */
-export async function getValidAccessToken(): Promise<string | null> {
+export async function getValidAccessToken(provider: EntProvider): Promise<string | null> {
   let tokens = await getStoredTokens();
   if (!tokens) return null;
 
-  // Refresh if expired (with 60s buffer)
   if (Date.now() > tokens.expiresAt - 60000) {
-    tokens = await refreshEntTokens();
+    tokens = await refreshEntTokens(provider);
     if (!tokens) return null;
   }
 
@@ -136,8 +147,13 @@ export async function getStoredTokens(): Promise<EntTokens | null> {
   return JSON.parse(raw) as EntTokens;
 }
 
+export async function getStoredProviderId(): Promise<string | null> {
+  return SecureStore.getItemAsync(ENT_PROVIDER_KEY);
+}
+
 export async function clearEntTokens(): Promise<void> {
   await SecureStore.deleteItemAsync(ENT_TOKEN_KEY);
+  await SecureStore.deleteItemAsync(ENT_PROVIDER_KEY);
 }
 
 export function isEntConnected(tokens: EntTokens | null): boolean {

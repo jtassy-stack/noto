@@ -2,90 +2,94 @@ import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { ENT_PROVIDERS } from "@/lib/ent/providers";
 import type { Provider } from "@/types";
-
-const PROVIDERS: { key: Provider; label: string; description: string; icon: string }[] = [
-  { key: "pronote", label: "Pronote", description: "Collèges et lycées publics", icon: "P" },
-  { key: "ecoledirecte", label: "ÉcoleDirecte", description: "Établissements privés", icon: "E" },
-  { key: "skolengo", label: "Skolengo", description: "Régions Grand Est, Île-de-France...", icon: "S" },
-];
 
 export default function AuthScreen() {
   const theme = useTheme();
-
-  const handleSelect = (provider: Provider) => {
-    if (provider === "pronote") {
-      // Show choice: QR code (recommended) or manual credentials
-      Alert.alert("Pronote", "Comment souhaitez-vous vous connecter ?", [
-        {
-          text: "QR code (recommandé)",
-          onPress: () => router.push("/auth/qrcode"),
-        },
-        {
-          text: "Identifiants",
-          onPress: () => router.push("/auth/pronote"),
-        },
-        { text: "Annuler", style: "cancel" },
-      ]);
-    } else {
-      Alert.alert(
-        "Bientôt disponible",
-        `Le support ${provider === "ecoledirecte" ? "ÉcoleDirecte" : "Skolengo"} arrive dans une prochaine version.`
-      );
-    }
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>
         Connecter un compte
       </Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Choisissez le service utilisé par l'établissement de votre enfant.
-      </Text>
 
+      {/* ENT section */}
+      <Text style={[styles.sectionLabel, { color: theme.textTertiary }]}>
+        VIA VOTRE ENT
+      </Text>
       <View style={styles.providers}>
-        {PROVIDERS.map((p) => (
+        {ENT_PROVIDERS.map((ent) => (
           <Pressable
-            key={p.key}
+            key={ent.id}
             style={({ pressed }) => [
               styles.providerCard,
               {
                 backgroundColor: theme.surface,
-                borderColor: pressed ? theme.accent : theme.border,
+                borderColor: pressed ? ent.color : theme.border,
               },
             ]}
-            onPress={() => handleSelect(p.key)}
+            onPress={() => router.push(`/auth/ent?provider=${ent.id}`)}
           >
-            <View
-              style={[
-                styles.iconBox,
-                { backgroundColor: theme.surfaceElevated },
-              ]}
-            >
-              <Text
-                style={[styles.iconText, { color: theme.accent }]}
-              >
-                {p.icon}
-              </Text>
+            <View style={[styles.iconBox, { backgroundColor: ent.color }]}>
+              <Text style={styles.iconEmoji}>{ent.icon}</Text>
             </View>
             <View style={styles.textBlock}>
               <Text style={[styles.providerLabel, { color: theme.text }]}>
-                {p.label}
+                {ent.name}
               </Text>
-              <Text
-                style={[styles.providerDesc, { color: theme.textSecondary }]}
-              >
-                {p.description}
+              <Text style={[styles.providerDesc, { color: theme.textSecondary }]}>
+                {ent.description} · Pronote + Messagerie
               </Text>
             </View>
           </Pressable>
         ))}
       </View>
 
+      {/* Direct Pronote section */}
+      <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
+        CONNEXION DIRECTE
+      </Text>
+      <View style={styles.providers}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.providerCard,
+            {
+              backgroundColor: theme.surface,
+              borderColor: pressed ? theme.accent : theme.border,
+            },
+          ]}
+          onPress={() => {
+            Alert.alert("Pronote", "Comment souhaitez-vous vous connecter ?", [
+              {
+                text: "QR code (recommandé)",
+                onPress: () => router.push("/auth/qrcode"),
+              },
+              {
+                text: "Identifiants",
+                onPress: () => router.push("/auth/pronote"),
+              },
+              { text: "Annuler", style: "cancel" },
+            ]);
+          }}
+        >
+          <View style={[styles.iconBox, { backgroundColor: theme.surfaceElevated }]}>
+            <Text style={[styles.iconText, { color: theme.accent }]}>P</Text>
+          </View>
+          <View style={styles.textBlock}>
+            <Text style={[styles.providerLabel, { color: theme.text }]}>
+              Pronote direct
+            </Text>
+            <Text style={[styles.providerDesc, { color: theme.textSecondary }]}>
+              QR code ou identifiants (sans ENT)
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+
       <Text style={[styles.privacy, { color: theme.textTertiary }]}>
-        🔒 Vos identifiants sont stockés uniquement sur votre téléphone.
-        Aucune donnée scolaire ne quitte l'appareil.
+        🔒 Connexion sécurisée. Vos identifiants ne sont jamais stockés
+        par nōto. — seuls des tokens chiffrés restent sur votre appareil.
       </Text>
     </View>
   );
@@ -100,22 +104,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize.xxl,
     fontFamily: Fonts.bold,
+    marginBottom: Spacing.lg,
   },
-  subtitle: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.regular,
-    marginTop: Spacing.sm,
-    lineHeight: 22,
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: Fonts.medium,
+    letterSpacing: 1.5,
+    marginBottom: Spacing.sm,
   },
   providers: {
-    marginTop: Spacing.xl,
     gap: Spacing.sm,
   },
   providerCard: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: BorderRadius.lg,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
     gap: Spacing.md,
   },
@@ -126,13 +130,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  iconEmoji: {
+    fontSize: 20,
+  },
   iconText: {
     fontSize: 18,
     fontFamily: Fonts.monoBold,
   },
   textBlock: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   providerLabel: {
     fontSize: FontSize.lg - 1,
@@ -143,10 +150,10 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
   },
   privacy: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: Fonts.regular,
     marginTop: Spacing.xxl,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 16,
   },
 });

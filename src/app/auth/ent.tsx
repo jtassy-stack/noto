@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useEntAuth, exchangeCodeForTokens } from "@/lib/ent/auth";
+import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
-  const { request, response, promptAsync, redirectUri } = useEntAuth();
+  const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
+
+  const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
+  const { request, response, promptAsync, redirectUri } = useEntAuth(entProvider);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,6 +20,8 @@ export default function EntLoginScreen() {
       handleCodeExchange(response.params.code);
     } else if (response?.type === "error") {
       setError("Connexion annulée ou échouée.");
+      setLoading(false);
+    } else if (response?.type === "dismiss") {
       setLoading(false);
     }
   }, [response]);
@@ -29,8 +35,17 @@ export default function EntLoginScreen() {
         throw new Error("Code verifier missing");
       }
 
-      await exchangeCodeForTokens(code, request.codeVerifier, redirectUri);
-      console.log("[nōto] ENT auth successful");
+      const tokens = await exchangeCodeForTokens(
+        entProvider,
+        code,
+        request.codeVerifier,
+        redirectUri
+      );
+      console.log("[nōto] ENT auth successful for", entProvider.name);
+      console.log("[nōto] Token expires at:", new Date(tokens.expiresAt).toISOString());
+
+      // TODO: use CAS SSO to also connect to Pronote automatically
+
       router.replace("/");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";
@@ -44,11 +59,11 @@ export default function EntLoginScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>
-        Mon Lycée
+        {entProvider.icon} {entProvider.name}
       </Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Connectez-vous à votre espace Mon Lycée (ENT Île-de-France) pour
-        accéder à la messagerie.
+        Connectez-vous à votre espace {entProvider.name} pour accéder à
+        Pronote et à la messagerie.
       </Text>
 
       {error && (
@@ -59,7 +74,7 @@ export default function EntLoginScreen() {
         style={({ pressed }) => [
           styles.button,
           {
-            backgroundColor: "#1B3A6B",
+            backgroundColor: entProvider.color,
             opacity: pressed || loading || !request ? 0.7 : 1,
           },
         ]}
@@ -73,7 +88,9 @@ export default function EntLoginScreen() {
         {loading ? (
           <ActivityIndicator color="#FFFFFF" size="small" />
         ) : (
-          <Text style={styles.buttonText}>Se connecter via Mon Lycée</Text>
+          <Text style={styles.buttonText}>
+            Se connecter via {entProvider.name}
+          </Text>
         )}
       </Pressable>
 
@@ -83,12 +100,17 @@ export default function EntLoginScreen() {
         </Text>
         <Text style={[styles.infoBody, { color: theme.textSecondary }]}>
           Un navigateur s'ouvrira pour vous connecter sur le site officiel
-          Mon Lycée. Vos identifiants ne sont jamais partagés avec nōto.
+          de {entProvider.name}. Vos identifiants ne sont jamais partagés
+          avec nōto.{"\n\n"}
+          Une fois connecté, vous aurez accès à :{"\n"}
+          • Notes, emploi du temps et devoirs (Pronote){"\n"}
+          • Messagerie de l'établissement
         </Text>
       </View>
 
       <Text style={[styles.hint, { color: theme.textTertiary }]}>
-        🔒 Connexion sécurisée via le protocole OAuth2 officiel de la Région Île-de-France.
+        🔒 Connexion sécurisée via le protocole OAuth2 officiel
+        ({entProvider.region}).
       </Text>
     </View>
   );

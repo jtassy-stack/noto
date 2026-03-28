@@ -3,12 +3,14 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Refre
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { getStoredTokens, isEntConnected } from "@/lib/ent/auth";
+import { getStoredTokens, getStoredProviderId, isEntConnected } from "@/lib/ent/auth";
 import { listMessages, type EntMessage } from "@/lib/ent/zimbra";
+import { getEntProvider, type EntProvider } from "@/lib/ent/providers";
 
 export default function MessagesScreen() {
   const theme = useTheme();
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [provider, setProvider] = useState<EntProvider | null>(null);
   const [messages, setMessages] = useState<EntMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,18 +19,24 @@ export default function MessagesScreen() {
     const tokens = await getStoredTokens();
     const ok = isEntConnected(tokens);
     setConnected(ok);
-    if (ok) loadMessages();
+    if (ok && tokens) {
+      const prov = getEntProvider(tokens.providerId);
+      setProvider(prov ?? null);
+      if (prov) loadMessages(prov);
+    }
   }, []);
 
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
 
-  async function loadMessages() {
+  async function loadMessages(prov?: EntProvider) {
+    const p = prov ?? provider;
+    if (!p) return;
     setLoading(true);
     setError(null);
     try {
-      const msgs = await listMessages("INBOX", 0);
+      const msgs = await listMessages(p, "INBOX", 0);
       setMessages(msgs);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur inconnue";
@@ -73,7 +81,7 @@ export default function MessagesScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={loadMessages} tintColor={theme.accent} />
+        <RefreshControl refreshing={loading} onRefresh={() => loadMessages()} tintColor={theme.accent} />
       }
     >
       {error && (
