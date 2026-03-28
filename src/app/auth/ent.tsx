@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { useState, useRef } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { WebView } from "react-native-webview";
+import type { WebViewNavigation } from "react-native-webview";
+import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { loginWithBrowser } from "@/lib/ent/auth";
+import { saveEntSession } from "@/lib/ent/auth";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 
 export default function EntLoginScreen() {
@@ -11,96 +13,110 @@ export default function EntLoginScreen() {
   const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const webViewRef = useRef<WebView>(null);
 
-  async function handleLogin() {
-    setLoading(true);
-    setError(null);
+  function handleNavigationChange(event: WebViewNavigation) {
+    const url = event.url;
+    console.log("[nōto] WebView navigated to:", url.substring(0, 100));
 
+    // After Keycloak login, user is redirected back to the ENT homepage
+    // When the URL is on the ENT domain (not auth.monlycee.net), login is done
+    if (
+      !loggedIn &&
+      url.startsWith(entProvider.apiBaseUrl) &&
+      !url.includes("/auth/login") &&
+      !url.includes("/oauth2/callback") &&
+      !url.includes("auth.monlycee.net")
+    ) {
+      console.log("[nōto] ENT login detected, extracting cookies...");
+      setLoggedIn(true);
+
+      // Inject JS to extract cookies from the WebView
+      webViewRef.current?.injectJavaScript(`
+        (function() {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'cookies',
+            cookies: document.cookie,
+            url: window.location.href
+          }));
+        })();
+        true;
+      `);
+    }
+  }
+
+  async function handleMessage(event: { nativeEvent: { data: string } }) {
     try {
-      await loginWithBrowser(entProvider);
-      router.replace("/");
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Erreur inconnue";
-      setError(message);
-      console.warn("[nōto] ENT login failed:", e);
-    } finally {
-      setLoading(false);
+      const data = JSON.parse(event.nativeEvent.data) as {
+        type: string;
+        cookies: string;
+        url: string;
+      };
+
+      if (data.type === "cookies") {
+        console.log("[nōto] Got cookies from WebView:", data.cookies.substring(0, 100));
+        console.log("[nōto] Current URL:", data.url);
+
+        await saveEntSession({
+          providerId: entProvider.id,
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          apiBaseUrl: entProvider.apiBaseUrl,
+          cookies: data.cookies,
+        });
+
+        console.log("[nōto] ENT session saved with cookies");
+        router.replace("/");
+      }
+    } catch (e) {
+      console.warn("[nōto] WebView message parse error:", e);
     }
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>
-        {entProvider.icon} {entProvider.name}
-      </Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Connectez-vous à votre espace {entProvider.name} pour accéder
-        à la messagerie.
-      </Text>
-
-      {error && (
-        <Text style={[styles.error, { color: theme.crimson }]}>{error}</Text>
-      )}
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: entProvider.color, opacity: pressed || loading ? 0.7 : 1 },
-        ]}
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" size="small" />
-        ) : (
-          <Text style={styles.buttonText}>
-            Se connecter via {entProvider.name}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator color={theme.accent} size="large" />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+            Chargement de {entProvider.name}...
           </Text>
-        )}
-      </Pressable>
-
-      <View style={[styles.infoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Text style={[styles.infoTitle, { color: theme.text }]}>
-          Comment ça marche ?
-        </Text>
-        <Text style={[styles.infoBody, { color: theme.textSecondary }]}>
-          Un navigateur s'ouvrira pour vous connecter sur le site officiel
-          {entProvider.name}. Connectez-vous normalement, puis fermez
-          le navigateur.{"\n\n"}
-          nōto. récupérera automatiquement votre session.
-        </Text>
-      </View>
-
-      <Text style={[styles.hint, { color: theme.textTertiary }]}>
-        🔒 Vos identifiants sont saisis directement sur le site officiel
-        de {entProvider.name}. nōto. n'y a jamais accès.
-      </Text>
+        </View>
+      )}
+      <WebView
+        ref={webViewRef}
+        source={{ uri: entProvider.apiBaseUrl }}
+        onLoadEnd={() => setLoading(false)}
+        onNavigationStateChange={handleNavigationChange}
+        onMessage={handleMessage}
+        javaScriptEnabled
+        domStorageEnabled
+        thirdPartyCookiesEnabled
+        sharedCookiesEnabled
+        style={loading ? styles.hidden : styles.webview}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: Spacing.lg, paddingTop: Spacing.xl },
-  title: { fontSize: FontSize.xxl, fontFamily: Fonts.bold },
-  subtitle: { fontSize: FontSize.md, fontFamily: Fonts.regular, marginTop: Spacing.sm, lineHeight: 22 },
-  error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, marginTop: Spacing.md, lineHeight: 18 },
-  button: {
-    borderRadius: BorderRadius.md,
-    paddingVertical: 16,
+  container: { flex: 1 },
+  webview: { flex: 1 },
+  hidden: { height: 0, opacity: 0 },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: Spacing.xl,
+    zIndex: 10,
+    gap: Spacing.md,
   },
-  buttonText: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  infoCard: {
-    marginTop: Spacing.xl,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    gap: Spacing.xs,
+  loadingText: {
+    fontSize: FontSize.md,
+    fontFamily: Fonts.regular,
   },
-  infoTitle: { fontSize: FontSize.md, fontFamily: Fonts.semiBold },
-  infoBody: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 20 },
-  hint: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xl, textAlign: "center", lineHeight: 16 },
 });
