@@ -37,6 +37,8 @@ export default function DetailScreen() {
 
   useEffect(() => {
     async function load() {
+      console.log("[nōto] Detail screen:", { id, type, blogId, postId, hasBody: !!passedBody, title });
+
       // Timeline — plain text
       if (type === "timeline" && passedBody) {
         setPlainText(stripHtml(passedBody));
