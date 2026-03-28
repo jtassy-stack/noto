@@ -13,6 +13,7 @@ import type { Grade } from "@/types";
 
 function EntPhotoGallery() {
   const theme = useTheme();
+  const { activeChild } = useChildren();
   const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +53,27 @@ function EntPhotoGallery() {
           })
         );
 
-        setBlogs(blogsWithCount);
+        // Filter blogs by child's class
+        const className = activeChild?.className ?? "";
+        // Extract class short name: "MS" from "MS - Mme Céline DESBATS", "CM1 - CM2 A" from "CM1 - CM2 A - M. Lucas TOLOTTA"
+        const classParts = className.split(" - ");
+        const classShort = classParts.length > 2
+          ? classParts.slice(0, -1).join(" - ").trim() // "CM1 - CM2 A"
+          : classParts[0]?.trim() ?? ""; // "MS"
+
+        const filtered = className
+          ? blogsWithCount.filter((b) => {
+              const titleUpper = b.title.toUpperCase();
+              // Match class short name in blog title
+              if (classShort && titleUpper.includes(classShort.toUpperCase())) return true;
+              // Also check individual parts (e.g., "CM1", "CM2", "MS")
+              const words = classShort.split(/[\s-]+/).filter(w => w.length >= 2);
+              return words.some(w => titleUpper.includes(w.toUpperCase()));
+            })
+          : blogsWithCount;
+
+        console.log("[nōto] Blogs:", blogsWithCount.length, "total →", filtered.length, "for", activeChild?.firstName, "(class:", classShort, ")");
+        setBlogs(filtered);
       } catch (e) {
         console.warn("[nōto] Blog list error:", e);
       } finally {
