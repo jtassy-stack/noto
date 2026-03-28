@@ -16,7 +16,6 @@
     "@expo-google-fonts/space-mono": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
     "@niicojs/pawnote": "^1.6.2",
-    "@react-native-cookies/cookies": "^6.2.1",
     "expo": "55.0.10-canary-20260327-0789fbc",
     "expo-auth-session": "^55.0.11-canary-20260328-2049187",
     "expo-background-fetch": "55.0.11-canary-20260327-0789fbc",

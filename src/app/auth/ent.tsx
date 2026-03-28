@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 import type { WebViewNavigation } from "react-native-webview";
-import CookieManager from "@react-native-cookies/cookies";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { saveEntSession } from "@/lib/ent/auth";
@@ -17,19 +16,18 @@ export default function EntLoginScreen() {
   const [loading, setLoading] = useState(true);
   const sawCallbackRef = useRef(false);
   const doneRef = useRef(false);
-  const webViewRef = useRef<WebView>(null);
 
   function handleNavigationChange(event: WebViewNavigation) {
     const url = event.url;
     console.log("[nōto] WebView:", url.substring(0, 80));
 
-    // Track: have we seen the OAuth callback? This means Keycloak login succeeded.
     if (url.includes("/oauth2/callback")) {
       sawCallbackRef.current = true;
       console.log("[nōto] Saw OAuth callback — login succeeded");
     }
 
-    // After seeing the callback, wait for final landing on the ENT homepage
+    // After callback, when we land on ENT homepage, session cookies are set
+    // sharedCookiesEnabled means fetch() will have them too
     if (
       sawCallbackRef.current &&
       !doneRef.current &&
@@ -39,39 +37,47 @@ export default function EntLoginScreen() {
       !url.includes("auth.monlycee.net")
     ) {
       doneRef.current = true;
-      console.log("[nōto] On ENT homepage after login, extracting cookies...");
+      console.log("[nōto] On ENT homepage after login, testing session...");
 
-      // Use CookieManager to get ALL cookies including HttpOnly
+      // Wait for cookies to settle, then test the session via fetch()
       setTimeout(async () => {
         try {
-          const cookies = await CookieManager.get(entProvider.apiBaseUrl);
-          console.log("[nōto] CookieManager cookies:", Object.keys(cookies));
+          // Test if fetch() now has the session cookies (shared from WebView)
+          const testUrl = entProvider.messagingType === "zimbra"
+            ? `${entProvider.apiBaseUrl}/zimbra/count/INBOX?unread=true`
+            : `${entProvider.apiBaseUrl}/conversation/count/INBOX?unread=true`;
 
-          // Build cookie header string from all cookies
-          const cookieString = Object.entries(cookies)
-            .map(([name, cookie]) => `${name}=${cookie.value}`)
-            .join("; ");
+          const res = await fetch(testUrl, {
+            headers: { Accept: "application/json" },
+            credentials: "include",
+          });
 
-          console.log("[nōto] Cookie string:", cookieString.substring(0, 150));
+          const text = await res.text();
+          console.log("[nōto] Session test:", res.status, text.substring(0, 80));
 
-          if (!cookieString) {
-            console.warn("[nōto] No cookies found!");
-            return;
-          }
+          const sessionWorks = res.ok && !text.includes("<!DOCTYPE");
 
           await saveEntSession({
             providerId: entProvider.id,
             expiresAt: Date.now() + 24 * 60 * 60 * 1000,
             apiBaseUrl: entProvider.apiBaseUrl,
-            cookies: cookieString,
+            useCookieJar: true, // Use RN's shared cookie jar, no manual cookies
           });
 
-          console.log("[nōto] ENT session saved, navigating home...");
+          console.log("[nōto] ENT session saved (cookie jar mode), API works:", sessionWorks);
           router.replace("/");
         } catch (e) {
-          console.warn("[nōto] Cookie extraction error:", e);
+          console.warn("[nōto] Session test error:", e);
+          // Save session anyway — cookies might work for other endpoints
+          await saveEntSession({
+            providerId: entProvider.id,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+            apiBaseUrl: entProvider.apiBaseUrl,
+            useCookieJar: true,
+          });
+          router.replace("/");
         }
-      }, 1500);
+      }, 2000);
     }
   }
 
@@ -86,7 +92,6 @@ export default function EntLoginScreen() {
         </View>
       )}
       <WebView
-        ref={webViewRef}
         source={{ uri: entProvider.apiBaseUrl }}
         onLoadEnd={() => setLoading(false)}
         onNavigationStateChange={handleNavigationChange}

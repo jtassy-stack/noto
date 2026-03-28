@@ -7,9 +7,8 @@ const ENT_PROVIDER_KEY = "noto_ent_provider_id";
 export interface EntSession {
   providerId: string;
   expiresAt: number;
-  userName?: string;
   apiBaseUrl: string;
-  cookies: string;
+  useCookieJar: boolean;
 }
 
 /**
@@ -21,20 +20,16 @@ export async function saveEntSession(session: EntSession): Promise<void> {
 }
 
 /**
- * Make an authenticated request to the ENT API using stored cookies.
+ * Make an authenticated request to the ENT API.
+ * Uses React Native's shared cookie jar (sharedCookiesEnabled in WebView).
  */
 export async function entFetch(provider: EntProvider, path: string): Promise<Response> {
-  const session = await getStoredSession();
-  if (!session?.cookies) throw new Error("Not authenticated to ENT");
-
   const response = await fetch(`${provider.apiBaseUrl}${path}`, {
-    headers: {
-      Accept: "application/json",
-      Cookie: session.cookies,
-    },
+    headers: { Accept: "application/json" },
+    credentials: "include",
   });
 
-  if (response.status === 401 || response.status === 302) {
+  if (response.status === 401) {
     throw new Error("ENT session expired");
   }
 
@@ -63,5 +58,5 @@ export async function clearEntSession(): Promise<void> {
 }
 
 export function isEntConnected(session: EntSession | null): boolean {
-  return !!session && !!session.cookies && Date.now() < session.expiresAt;
+  return !!session && Date.now() < session.expiresAt;
 }
