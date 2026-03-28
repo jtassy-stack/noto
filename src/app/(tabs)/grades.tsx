@@ -1,11 +1,106 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
 import { getGradesByChild } from "@/lib/database/repository";
 import { gradeColor } from "@/constants/theme";
+import { getConversationCredentials } from "@/lib/ent/conversation";
 import type { Grade } from "@/types";
+
+// --- Photo gallery for ENT children (replaces Notes tab) ---
+
+function EntPhotoGallery() {
+  const theme = useTheme();
+  const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const creds = await getConversationCredentials();
+      if (!creds) { setLoading(false); return; }
+
+      try {
+        await fetch(`${creds.apiBaseUrl}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+          redirect: "follow",
+        });
+
+        const res = await fetch(`${creds.apiBaseUrl}/blog/list/all`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) { setLoading(false); return; }
+
+        const data = await res.json();
+        if (!Array.isArray(data)) { setLoading(false); return; }
+
+        // Get post count for each blog
+        const blogsWithCount = await Promise.all(
+          data.map(async (b: Record<string, unknown>) => {
+            const postsRes = await fetch(`${creds.apiBaseUrl}/blog/post/list/all/${b._id}`, {
+              headers: { Accept: "application/json" },
+            });
+            const posts = postsRes.ok ? await postsRes.json() : [];
+            return {
+              id: String(b._id),
+              title: String(b.title ?? "").trim(),
+              postCount: Array.isArray(posts) ? posts.length : 0,
+            };
+          })
+        );
+
+        setBlogs(blogsWithCount);
+      } catch (e) {
+        console.warn("[nōto] Blog list error:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  return (
+    <ScrollView
+      style={[galleryStyles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={galleryStyles.content}
+    >
+      <Text style={[galleryStyles.title, { color: theme.text }]}>📸 Photos</Text>
+      <Text style={[galleryStyles.subtitle, { color: theme.textSecondary }]}>
+        Albums de la classe
+      </Text>
+
+      {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
+
+      {blogs.map((blog) => (
+        <Pressable
+          key={blog.id}
+          onPress={() => router.push({ pathname: "/gallery", params: { blogId: blog.id } })}
+          style={[galleryStyles.albumCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
+          <Text style={[galleryStyles.albumTitle, { color: theme.text }]}>{blog.title}</Text>
+          <Text style={[galleryStyles.albumCount, { color: theme.textTertiary }]}>
+            {blog.postCount} article{blog.postCount > 1 ? "s" : ""}
+          </Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
+const galleryStyles = StyleSheet.create({
+  container: { flex: 1 },
+  content: { padding: Spacing.lg, paddingTop: Spacing.md },
+  title: { fontSize: FontSize.xxl, fontFamily: Fonts.bold },
+  subtitle: { fontSize: FontSize.md, fontFamily: Fonts.regular, marginTop: Spacing.xs, marginBottom: Spacing.lg, color: "#888" },
+  albumCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.sm, gap: 4 },
+  albumTitle: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold },
+  albumCount: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
+});
+
+// --- Grades screen ---
 
 interface SubjectAvg {
   subject: string;
@@ -23,12 +118,15 @@ export default function GradesScreen() {
     getGradesByChild(activeChild.id).then(setGrades);
   }, [activeChild]);
 
-  if (!activeChild || (activeChild.source === "ent" && !activeChild.hasGrades)) {
+  // ENT child without grades → show photo gallery
+  if (activeChild?.source === "ent" && !activeChild.hasGrades) {
+    return <EntPhotoGallery />;
+  }
+
+  if (!activeChild) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
-        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          {!activeChild ? "Connectez un compte." : "Les notes ne sont pas disponibles pour cet enfant.\nConnectez Pronote pour accéder aux notes."}
-        </Text>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Connectez un compte.</Text>
       </View>
     );
   }
