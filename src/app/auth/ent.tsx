@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 import type { WebViewNavigation } from "react-native-webview";
+import CookieManager from "@react-native-cookies/cookies";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { saveEntSession } from "@/lib/ent/auth";
@@ -40,50 +41,37 @@ export default function EntLoginScreen() {
       doneRef.current = true;
       console.log("[nōto] On ENT homepage after login, extracting cookies...");
 
-      // Small delay to let the page fully load and set cookies
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(`
-          (function() {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'cookies',
-              cookies: document.cookie,
-              url: window.location.href
-            }));
-          })();
-          true;
-        `);
-      }, 1000);
-    }
-  }
+      // Use CookieManager to get ALL cookies including HttpOnly
+      setTimeout(async () => {
+        try {
+          const cookies = await CookieManager.get(entProvider.apiBaseUrl);
+          console.log("[nōto] CookieManager cookies:", Object.keys(cookies));
 
-  async function handleMessage(event: { nativeEvent: { data: string } }) {
-    try {
-      const data = JSON.parse(event.nativeEvent.data) as {
-        type: string;
-        cookies: string;
-        url: string;
-      };
+          // Build cookie header string from all cookies
+          const cookieString = Object.entries(cookies)
+            .map(([name, cookie]) => `${name}=${cookie.value}`)
+            .join("; ");
 
-      if (data.type === "cookies") {
-        console.log("[nōto] Got cookies from WebView:", data.cookies.substring(0, 100));
-        console.log("[nōto] Current URL:", data.url);
+          console.log("[nōto] Cookie string:", cookieString.substring(0, 150));
 
-        await saveEntSession({
-          providerId: entProvider.id,
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-          apiBaseUrl: entProvider.apiBaseUrl,
-          cookies: data.cookies,
-        });
+          if (!cookieString) {
+            console.warn("[nōto] No cookies found!");
+            return;
+          }
 
-        console.log("[nōto] ENT session saved with cookies, navigating home...");
-        // Use setTimeout to escape the WebView message handler context
-        setTimeout(() => {
-          console.log("[nōto] Calling router.replace...");
+          await saveEntSession({
+            providerId: entProvider.id,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+            apiBaseUrl: entProvider.apiBaseUrl,
+            cookies: cookieString,
+          });
+
+          console.log("[nōto] ENT session saved, navigating home...");
           router.replace("/");
-        }, 100);
-      }
-    } catch (e) {
-      console.warn("[nōto] WebView message parse error:", e);
+        } catch (e) {
+          console.warn("[nōto] Cookie extraction error:", e);
+        }
+      }, 1500);
     }
   }
 
@@ -102,7 +90,6 @@ export default function EntLoginScreen() {
         source={{ uri: entProvider.apiBaseUrl }}
         onLoadEnd={() => setLoading(false)}
         onNavigationStateChange={handleNavigationChange}
-        onMessage={handleMessage}
         javaScriptEnabled
         domStorageEnabled
         thirdPartyCookiesEnabled
