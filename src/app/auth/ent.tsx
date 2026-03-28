@@ -8,6 +8,9 @@ import { useTheme } from "@/hooks/useTheme";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 import { saveMailCredentials } from "@/lib/ent/mail";
 import { saveEntSession } from "@/lib/ent/auth";
+import { authenticateWithCredentials, mapChildren } from "@/lib/pronote/client";
+import { syncWithSession } from "@/lib/pronote/sync";
+import { saveAccount, saveChildren } from "@/lib/database/repository";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
@@ -160,25 +163,60 @@ export default function EntLoginScreen() {
     setStatus("Finalisation...");
 
     const username = usernameRef.current;
-    const password = passwordRef.current;
+    const pwd = passwordRef.current;
     const pronoteIdent = pronoteIdentRef.current;
 
-    console.log("[nōto] Finishing — user:", username, "pronote:", pronoteIdent ? "yes" : "no", "password:", password ? "yes" : "no");
+    console.log("[nōto] Finishing — user:", username, "pronote:", pronoteIdent ? "yes" : "no", "password:", pwd ? "yes" : "no");
 
-    // Build email from username
     const fullEmail = username.includes("@") ? username : `${username}@monlycee.net`;
 
-    // Save IMAP credentials
-    if (username && password) {
+    // 1. Save IMAP credentials
+    if (username && pwd) {
       try {
-        await saveMailCredentials({ email: fullEmail, password });
+        await saveMailCredentials({ email: fullEmail, password: pwd });
         console.log("[nōto] IMAP credentials saved for", fullEmail);
       } catch (e) {
         console.warn("[nōto] IMAP save error:", e);
       }
     }
 
-    // Save ENT session with Pronote identifiant
+    // 2. Try to connect Pronote with captured credentials
+    if (pwd && pronoteIdent) {
+      setStatus("Connexion à Pronote...");
+      const pronoteBase = "https://0752546k.index-education.net/pronote/";
+
+      try {
+        // Try login with ENT username as Pronote username
+        const { session } = await authenticateWithCredentials(
+          pronoteBase,
+          username,
+          pwd
+        );
+        console.log("[nōto] Pronote login success!");
+
+        // Save account + children
+        const children = mapChildren(session);
+        await saveAccount({
+          id: session.information.id.toString(),
+          provider: "pronote",
+          displayName: session.user.name,
+          instanceUrl: pronoteBase,
+          createdAt: Date.now(),
+        });
+        await saveChildren(children);
+
+        // Sync data
+        setStatus("Synchronisation des notes...");
+        await syncWithSession(session);
+        console.log("[nōto] Pronote sync complete!");
+      } catch (e) {
+        console.warn("[nōto] Pronote direct login failed (expected for ENT-only):", e instanceof Error ? e.message : e);
+        // Direct login won't work for ENT-only schools — that's OK
+        // User can still use QR code for Pronote separately
+      }
+    }
+
+    // 3. Save ENT session
     await saveEntSession({
       providerId: entProvider.id,
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
