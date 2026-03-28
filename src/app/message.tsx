@@ -27,18 +27,26 @@ export default function MessageScreen() {
 
       try {
         const isEnt = activeChild?.source === "ent";
+        console.log("[nōto] Opening message:", id, "isEnt:", isEnt, "child:", activeChild?.firstName);
 
         if (isEnt) {
           const creds = await getConversationCredentials();
+          console.log("[nōto] PCN creds:", creds ? "yes" : "no");
           if (creds) {
             const msg = await fetchConversationMessage(creds, id);
+            console.log("[nōto] Message loaded, body length:", msg.body?.length);
             setBody(stripHtml(msg.body ?? ""));
+          } else {
+            setError("Reconnectez votre compte PCN.");
           }
         } else {
           const creds = await getMailCredentials();
+          console.log("[nōto] IMAP creds:", creds ? "yes" : "no");
           if (creds) {
             const msg = await fetchImapMessage(creds, parseInt(id, 10));
             setBody(msg.body ?? "");
+          } else {
+            setError("Reconnectez votre compte messagerie.");
           }
         }
       } catch (e: unknown) {
