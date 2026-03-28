@@ -211,6 +211,36 @@ export async function getHomeworkByChild(
   }));
 }
 
+// --- Favorites ---
+
+export async function addFavorite(id: string, type: string, title: string, childId?: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO favorites (id, type, title, child_id) VALUES (?, ?, ?, ?)",
+    [id, type, title, childId ?? null]
+  );
+}
+
+export async function removeFavorite(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync("DELETE FROM favorites WHERE id = ?", [id]);
+}
+
+export async function isFavorite(id: string): Promise<boolean> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ id: string }>("SELECT id FROM favorites WHERE id = ?", [id]);
+  return rows.length > 0;
+}
+
+export async function getFavoritesByType(type: string, childId?: string): Promise<Array<{ id: string; title: string }>> {
+  const db = await getDatabase();
+  const query = childId
+    ? "SELECT id, title FROM favorites WHERE type = ? AND (child_id = ? OR child_id IS NULL) ORDER BY created_at DESC"
+    : "SELECT id, title FROM favorites WHERE type = ? ORDER BY created_at DESC";
+  const params = childId ? [type, childId] : [type];
+  return db.getAllAsync<{ id: string; title: string }>(query, params);
+}
+
 // --- Sync metadata ---
 
 export async function getLastSyncTime(): Promise<Date | null> {

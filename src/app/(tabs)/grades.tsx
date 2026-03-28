@@ -7,6 +7,7 @@ import { useChildren } from "@/hooks/useChildren";
 import { getGradesByChild } from "@/lib/database/repository";
 import { gradeColor } from "@/constants/theme";
 import { getConversationCredentials } from "@/lib/ent/conversation";
+import { addFavorite, removeFavorite, getFavoritesByType } from "@/lib/database/repository";
 import type { Grade } from "@/types";
 
 // --- Photo gallery for ENT children (replaces Notes tab) ---
@@ -14,7 +15,7 @@ import type { Grade } from "@/types";
 function EntPhotoGallery() {
   const theme = useTheme();
   const { activeChild } = useChildren();
-  const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number }>>([]);
+  const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number; isFav: boolean }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -76,8 +77,22 @@ function EntPhotoGallery() {
             })
           : blogsWithMeta;
 
-        console.log("[nōto] Blogs:", blogsWithMeta.length, "total →", filtered.length, "for", activeChild?.firstName, "(teacher:", teacherLastName, ")");
-        setBlogs(filtered);
+        // Load favorites and merge
+        const favs = await getFavoritesByType("blog", activeChild?.id);
+        const favIds = new Set(favs.map(f => f.id));
+
+        // Add favorited blogs that weren't in filtered list
+        const favBlogs = blogsWithMeta
+          .filter(b => favIds.has(b.id) && !filtered.some(f => f.id === b.id))
+          .map(b => ({ ...b, isFav: true }));
+
+        const allBlogs = [
+          ...filtered.map(b => ({ ...b, isFav: favIds.has(b.id) })),
+          ...favBlogs,
+        ].sort((a, b) => (a.isFav === b.isFav ? 0 : a.isFav ? -1 : 1)); // Favs first
+
+        console.log("[nōto] Blogs:", blogsWithMeta.length, "total →", allBlogs.length, "for", activeChild?.firstName, "(teacher:", teacherLastName, ", favs:", favBlogs.length, ")");
+        setBlogs(allBlogs);
       } catch (e) {
         console.warn("[nōto] Blog list error:", e);
       } finally {
@@ -100,16 +115,31 @@ function EntPhotoGallery() {
       {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
 
       {blogs.map((blog) => (
-        <Pressable
-          key={blog.id}
-          onPress={() => router.push({ pathname: "/gallery", params: { blogId: blog.id } })}
-          style={[galleryStyles.albumCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        >
-          <Text style={[galleryStyles.albumTitle, { color: theme.text }]}>{blog.title}</Text>
-          <Text style={[galleryStyles.albumCount, { color: theme.textTertiary }]}>
-            {blog.postCount} article{blog.postCount > 1 ? "s" : ""}
-          </Text>
-        </Pressable>
+        <View key={blog.id} style={[galleryStyles.albumCard, { backgroundColor: theme.surface, borderColor: blog.isFav ? theme.accent : theme.border }]}>
+          <Pressable
+            onPress={() => router.push({ pathname: "/gallery", params: { blogId: blog.id } })}
+            style={galleryStyles.albumContent}
+          >
+            <Text style={[galleryStyles.albumTitle, { color: theme.text }]}>{blog.title}</Text>
+            <Text style={[galleryStyles.albumCount, { color: theme.textTertiary }]}>
+              {blog.postCount} article{blog.postCount > 1 ? "s" : ""}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              if (blog.isFav) {
+                await removeFavorite(blog.id);
+              } else {
+                await addFavorite(blog.id, "blog", blog.title, activeChild?.id);
+              }
+              setBlogs((prev) => prev.map((b) => b.id === blog.id ? { ...b, isFav: !b.isFav } : b)
+                .sort((a, b) => (a.isFav === b.isFav ? 0 : a.isFav ? -1 : 1)));
+            }}
+            style={galleryStyles.favBtn}
+          >
+            <Text style={{ fontSize: 20 }}>{blog.isFav ? "⭐" : "☆"}</Text>
+          </Pressable>
+        </View>
       ))}
     </ScrollView>
   );
@@ -120,9 +150,11 @@ const galleryStyles = StyleSheet.create({
   content: { padding: Spacing.lg, paddingTop: Spacing.md },
   title: { fontSize: FontSize.xxl, fontFamily: Fonts.bold },
   subtitle: { fontSize: FontSize.md, fontFamily: Fonts.regular, marginTop: Spacing.xs, marginBottom: Spacing.lg, color: "#888" },
-  albumCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.sm, gap: 4 },
+  albumCard: { flexDirection: "row", alignItems: "center", borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.sm, overflow: "hidden" },
+  albumContent: { flex: 1, padding: Spacing.md, gap: 4 },
   albumTitle: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold },
   albumCount: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
+  favBtn: { padding: Spacing.md, justifyContent: "center", alignItems: "center" },
 });
 
 // --- Grades screen ---
