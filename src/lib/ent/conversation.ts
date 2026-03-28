@@ -26,6 +26,8 @@ export interface ConversationMessage {
   body?: string;
   unread: boolean;
   hasAttachment: boolean;
+  /** Group names this message was sent to (for filtering by child) */
+  groupNames: string[];
 }
 
 // --- Credential storage ---
@@ -231,8 +233,16 @@ export async function fetchConversationMessage(
 }
 
 function mapConversationMessage(msg: Record<string, unknown>): ConversationMessage {
-  const displayNames = msg.displayNames as string[][] | undefined;
-  const fromName = displayNames?.[0]?.[1] ?? String(msg.from ?? "Inconnu");
+  const displayNames = msg.displayNames as Array<[string, string, boolean]> | undefined;
+
+  // From: first non-group entry in displayNames
+  const fromEntry = displayNames?.find(dn => dn[2] === false);
+  const fromName = fromEntry?.[1] ?? String(msg.from ?? "Inconnu");
+
+  // Group names: entries where isGroup === true
+  const groupNames = displayNames
+    ?.filter(dn => dn[2] === true)
+    .map(dn => dn[1]) ?? [];
 
   return {
     id: String(msg.id ?? ""),
@@ -243,5 +253,38 @@ function mapConversationMessage(msg: Record<string, unknown>): ConversationMessa
     body: String(msg.body ?? ""),
     unread: Boolean(msg.unread),
     hasAttachment: Boolean(msg.hasAttachment),
+    groupNames,
   };
+}
+
+/**
+ * Filter messages relevant to a specific child based on their className.
+ * A message is relevant if:
+ * - It's sent to a group that contains the child's class name
+ * - OR it's sent to the whole school (contains school name)
+ * - OR it has no group (direct message)
+ */
+export function filterMessagesByChild(
+  messages: ConversationMessage[],
+  childClassName: string
+): ConversationMessage[] {
+  if (!childClassName) return messages;
+
+  // Extract the class part (e.g., "CM1 - CM2 A" from "CM1 - CM2 A - M. Lucas TOLOTTA")
+  const classParts = childClassName.split(" - ").slice(0, -1).join(" - ") || childClassName;
+
+  return messages.filter(msg => {
+    // No groups → direct message → show to all
+    if (msg.groupNames.length === 0) return true;
+
+    return msg.groupNames.some(group => {
+      // School-wide message (contains "POLY", "école", etc.)
+      if (group.includes("POLY") || group.includes("école") || group.includes("DOMBASLE")) return true;
+      // Class-specific: check if group contains the child's class name
+      if (group.includes(classParts)) return true;
+      // Also check individual class parts (e.g. "CM1" or "CM2")
+      const words = classParts.split(/\s+/);
+      return words.some(w => w.length > 2 && group.includes(w));
+    });
+  });
 }

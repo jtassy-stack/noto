@@ -5,7 +5,7 @@ import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
 import { getMailCredentials, fetchInbox, type MailMessage } from "@/lib/ent/mail";
-import { getConversationCredentials, fetchConversationInbox, type ConversationMessage } from "@/lib/ent/conversation";
+import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild, type ConversationMessage } from "@/lib/ent/conversation";
 
 interface DisplayMessage {
   id: string;
@@ -48,9 +48,13 @@ export default function MessagesScreen() {
 
     try {
       if (useConversation && convCreds) {
-        // PCN: ENTCore Conversation API
+        // PCN: ENTCore Conversation API — filtered by child's class
         const result = await fetchConversationInbox(convCreds, 0);
-        setMessages(result.messages.map((m) => ({
+        const filtered = activeChild?.className
+          ? filterMessagesByChild(result.messages, activeChild.className)
+          : result.messages;
+        console.log("[nōto] Messages:", result.messages.length, "total →", filtered.length, "for", activeChild?.firstName);
+        setMessages(filtered.map((m) => ({
           id: m.id,
           subject: m.subject,
           from: m.from,
@@ -58,7 +62,7 @@ export default function MessagesScreen() {
           unread: m.unread,
           hasAttachment: m.hasAttachment,
         })));
-        setUnseen(result.count);
+        setUnseen(filtered.filter(m => m.unread).length);
       } else if (useIMAP && imapCreds) {
         // Mon Lycée: IMAP via proxy
         const result = await fetchInbox(imapCreds, 0);
