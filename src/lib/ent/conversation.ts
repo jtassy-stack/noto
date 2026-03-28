@@ -109,7 +109,7 @@ export async function fetchENTChildren(
   }
 
   const data = await res.json();
-  const results: Array<{ id: string; relatedName: string; type: string[] }> =
+  const results: Array<Record<string, unknown>> =
     Array.isArray(data.result) ? data.result : Array.isArray(data) ? data : [];
 
   // Deduplicate by relatedName (same parent ID appears once per child)
@@ -117,7 +117,7 @@ export async function fetchENTChildren(
   const children: Child[] = [];
 
   for (const entry of results) {
-    const name = entry.relatedName;
+    const name = String(entry.relatedName ?? "");
     if (!name || seen.has(name)) continue;
     seen.add(name);
 
@@ -126,12 +126,20 @@ export async function fetchENTChildren(
     const firstName = match ? match[2]!.trim() : name;
     const lastName = match ? match[1]!.trim() : "";
 
+    // Extract class and school from schools array
+    const schools = entry.schools as Array<{ classes?: string[]; name?: string }> | undefined;
+    const school = schools?.[0];
+    const classes = school?.classes ?? [];
+    // Pick the most relevant class (last one is usually the current year)
+    const className = classes[classes.length - 1] ?? "";
+    const schoolName = school?.name ?? "";
+
     children.push({
       id: `ent-${name.replace(/\s/g, "-").toLowerCase()}`,
       accountId: `ent-${provider.id}`,
       firstName,
       lastName,
-      className: "",
+      className: className || schoolName,
       source: "ent",
       hasGrades: false,
       hasSchedule: false,
