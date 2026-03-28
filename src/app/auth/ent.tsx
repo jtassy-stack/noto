@@ -1,31 +1,25 @@
 import { useState, useRef } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 import type { WebViewNavigation } from "react-native-webview";
-import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { Fonts, FontSize, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
-import { saveMailCredentials, fetchUnreadCount } from "@/lib/ent/mail";
+import { saveMailCredentials } from "@/lib/ent/mail";
 import { saveEntSession } from "@/lib/ent/auth";
-import { authenticateWithCredentials, mapChildren } from "@/lib/pronote/client";
-import { syncWithSession } from "@/lib/pronote/sync";
-import { saveAccount, saveChildren } from "@/lib/database/repository";
 
-type Phase = "webview" | "password" | "connecting";
+// Single phase: WebView handles everything automatically
 
 export default function EntLoginScreen() {
   const theme = useTheme();
   const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
-  const [phase, setPhase] = useState<Phase>("webview");
   const [status, setStatus] = useState("Connexion à " + entProvider.name + "...");
   const [email, setEmail] = useState("");
   const [pronoteUrl, setPronoteUrl] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const sawCallbackRef = useRef(false);
   const doneRef = useRef(false);
@@ -39,6 +33,32 @@ export default function EntLoginScreen() {
 
     if (url.includes("auth.monlycee.net") && url.includes("login-actions")) {
       setStatus("Saisissez vos identifiants...");
+
+      // Inject a listener to capture credentials from the Keycloak form
+      setTimeout(() => {
+        webViewRef.current?.injectJavaScript(`
+          (function() {
+            if (window.__notoInjected) return;
+            window.__notoInjected = true;
+
+            const form = document.querySelector('form');
+            if (form) {
+              form.addEventListener('submit', function() {
+                const user = document.querySelector('input[name="username"]');
+                const pass = document.querySelector('input[name="password"]');
+                if (user && pass) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'credentials',
+                    username: user.value,
+                    password: pass.value,
+                  }));
+                }
+              });
+            }
+          })();
+          true;
+        `);
+      }, 1000);
     }
 
     if (url.includes("/oauth2/callback")) {
@@ -115,12 +135,22 @@ export default function EntLoginScreen() {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
+      if (data.type === "credentials") {
+        console.log("[nōto] Captured credentials — user:", data.username);
+        // Save password for IMAP (same as Keycloak)
+        setPassword(data.password);
+        const fullEmail = data.username.includes("@")
+          ? data.username
+          : `${data.username}@monlycee.net`;
+        setEmail(fullEmail);
+      }
+
       if (data.type === "ent_info") {
         console.log("[nōto] ENT info — email:", data.email, "pronote:", data.pronoteLink);
 
-        if (data.email) setEmail(data.email);
+        if (data.email && !email) setEmail(data.email);
 
-        // If we found a Pronote link, navigate to it to get the SSO identifiant
+        // Navigate to Pronote link to capture SSO identifiant
         if (data.pronoteLink) {
           setStatus("Connexion à Pronote...");
           console.log("[nōto] Navigating to Pronote SSO:", data.pronoteLink);
@@ -129,13 +159,12 @@ export default function EntLoginScreen() {
             true;
           `);
 
-          // Give it time to redirect and capture identifiant, then move to password phase
+          // Wait for Pronote redirect, then finish
           setTimeout(() => {
-            setPhase("password");
+            finishLogin();
           }, 5000);
         } else {
-          // No Pronote link found — go to password phase anyway
-          setPhase("password");
+          finishLogin();
         }
       }
     } catch (e) {
@@ -143,39 +172,18 @@ export default function EntLoginScreen() {
     }
   }
 
-  // --- Phase 2: Password for IMAP + connect Pronote ---
-
-  async function handleConnect() {
-    if (!password) {
-      setError("Le mot de passe est requis.");
-      return;
-    }
-
-    setPhase("connecting");
-    setError(null);
+  async function finishLogin() {
+    setStatus("Finalisation...");
 
     const fullEmail = email.includes("@") ? email : `${email}@monlycee.net`;
 
-    // Connect IMAP
-    try {
-      const result = await fetchUnreadCount({ email: fullEmail, password });
-      console.log("[nōto] IMAP OK! Unread:", result.unseen);
-      await saveMailCredentials({ email: fullEmail, password });
-    } catch (e: unknown) {
-      console.warn("[nōto] IMAP failed (continuing anyway):", e);
-    }
-
-    // Connect Pronote via SSO URL if we captured it
-    if (pronoteUrl) {
+    // Save IMAP credentials if we captured the password
+    if (password && fullEmail) {
       try {
-        // The SSO URL has ?identifiant= which is a one-time token
-        // We need to use it with Pawnote's credential login
-        // Actually, the identifiant is not usable with Pawnote directly
-        // But we can try the QR code approach with saved credentials
-        console.log("[nōto] Pronote SSO URL captured:", pronoteUrl.substring(0, 80));
-        // TODO: integrate Pronote SSO token with Pawnote session
+        await saveMailCredentials({ email: fullEmail, password });
+        console.log("[nōto] IMAP credentials saved for", fullEmail);
       } catch (e) {
-        console.warn("[nōto] Pronote SSO failed:", e);
+        console.warn("[nōto] Failed to save mail credentials:", e);
       }
     }
 
@@ -187,104 +195,33 @@ export default function EntLoginScreen() {
       useCookieJar: false,
     });
 
+    console.log("[nōto] All done! Email:", fullEmail, "Pronote URL:", pronoteUrl ? "captured" : "none");
+
     if (router.canDismiss()) router.dismissAll();
     router.replace("/");
   }
 
-  // --- Render ---
-
-  if (phase === "webview") {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={[styles.statusBar, { backgroundColor: theme.surface }]}>
-          <ActivityIndicator color={theme.accent} size="small" />
-          <Text style={[styles.statusText, { color: theme.textSecondary }]}>{status}</Text>
-        </View>
-        <WebView
-          ref={webViewRef}
-          source={{ uri: entProvider.apiBaseUrl }}
-          onNavigationStateChange={handleNavigationChange}
-          onMessage={handleWebViewMessage}
-          javaScriptEnabled
-          domStorageEnabled
-          thirdPartyCookiesEnabled
-          sharedCookiesEnabled
-          setSupportMultipleWindows={false}
-          style={styles.webview}
-        />
-      </View>
-    );
-  }
+  // --- Render: WebView only (everything is automatic) ---
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.formContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={[styles.title, { color: theme.text }]}>
-          ✅ Connecté à {entProvider.name}
-        </Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Entrez votre mot de passe pour activer la messagerie.
-          {pronoteUrl ? "\nPronote sera aussi connecté automatiquement." : ""}
-        </Text>
-
-        <View style={styles.form}>
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Identifiant</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
-              value={email.replace("@monlycee.net", "")}
-              onChangeText={(t) => setEmail(t.includes("@") ? t : t)}
-              autoCapitalize="none"
-              placeholder="prenom.nom"
-              placeholderTextColor={theme.textTertiary}
-            />
-            <Text style={[styles.emailSuffix, { color: theme.textTertiary }]}>@monlycee.net</Text>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Mot de passe</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoFocus
-              placeholder="Votre mot de passe Mon Lycée"
-              placeholderTextColor={theme.textTertiary}
-            />
-          </View>
-
-          {error && <Text style={[styles.error, { color: theme.crimson }]}>{error}</Text>}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: entProvider.color, opacity: pressed || phase === "connecting" ? 0.7 : 1 },
-            ]}
-            onPress={handleConnect}
-            disabled={phase === "connecting"}
-          >
-            {phase === "connecting" ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.buttonText}>Tout connecter</Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={() => { if (router.canDismiss()) router.dismissAll(); router.replace("/"); }}>
-            <Text style={[styles.skipText, { color: theme.textTertiary }]}>Passer →</Text>
-          </Pressable>
-        </View>
-
-        <Text style={[styles.hint, { color: theme.textTertiary }]}>
-          🔒 Un seul mot de passe pour la messagerie et Pronote.
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.statusBar, { backgroundColor: theme.surface }]}>
+        <ActivityIndicator color={theme.accent} size="small" />
+        <Text style={[styles.statusText, { color: theme.textSecondary }]}>{status}</Text>
+      </View>
+      <WebView
+        ref={webViewRef}
+        source={{ uri: entProvider.apiBaseUrl }}
+        onNavigationStateChange={handleNavigationChange}
+        onMessage={handleWebViewMessage}
+        javaScriptEnabled
+        domStorageEnabled
+        thirdPartyCookiesEnabled
+        sharedCookiesEnabled
+        setSupportMultipleWindows={false}
+        style={styles.webview}
+      />
+    </View>
   );
 }
 
@@ -293,17 +230,4 @@ const styles = StyleSheet.create({
   statusBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm },
   statusText: { fontSize: FontSize.sm, fontFamily: Fonts.medium },
   webview: { flex: 1 },
-  formContent: { padding: Spacing.lg, paddingTop: Spacing.xl },
-  title: { fontSize: FontSize.xxl, fontFamily: Fonts.bold },
-  subtitle: { fontSize: FontSize.md, fontFamily: Fonts.regular, marginTop: Spacing.sm, lineHeight: 22 },
-  form: { marginTop: Spacing.xl, gap: Spacing.md },
-  field: { gap: Spacing.xs },
-  label: { fontSize: FontSize.sm, fontFamily: Fonts.medium },
-  input: { borderWidth: 1, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 14, fontSize: FontSize.md, fontFamily: Fonts.regular },
-  emailSuffix: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: 2 },
-  error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 18 },
-  button: { borderRadius: BorderRadius.md, paddingVertical: 16, alignItems: "center", marginTop: Spacing.sm },
-  buttonText: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  skipText: { fontSize: FontSize.md, fontFamily: Fonts.medium, textAlign: "center", marginTop: Spacing.lg },
-  hint: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xxl, textAlign: "center", lineHeight: 16 },
 });
