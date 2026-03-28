@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo-google-fonts/instrument-serif": "^0.4.1",
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/pixelify-sans": "^0.4.2",
+    "@expo-google-fonts/space-mono": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
     "expo": "55.0.10-canary-20260327-0789fbc",
     "expo-background-fetch": "55.0.11-canary-20260327-0789fbc",

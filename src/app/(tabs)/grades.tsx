@@ -1,10 +1,13 @@
 import { View, Text, StyleSheet } from "react-native";
-import { Colors, FontSize, Spacing } from "@/constants/theme";
+import { Fonts, FontSize, Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function GradesScreen() {
+  const theme = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.placeholder}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.placeholder, { color: theme.textTertiary }]}>
         Connectez un compte pour voir les notes.
       </Text>
     </View>
@@ -14,14 +17,13 @@ export default function GradesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
     justifyContent: "center",
     alignItems: "center",
     padding: Spacing.lg,
   },
   placeholder: {
     fontSize: FontSize.md,
-    color: Colors.textTertiary,
+    fontFamily: Fonts.regular,
     textAlign: "center",
   },
 });

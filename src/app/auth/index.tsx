@@ -1,34 +1,27 @@
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { Colors, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 import type { Provider } from "@/types";
 
-const PROVIDERS: { key: Provider; label: string; description: string }[] = [
-  {
-    key: "pronote",
-    label: "Pronote",
-    description: "Collèges et lycées publics",
-  },
-  {
-    key: "ecoledirecte",
-    label: "ÉcoleDirecte",
-    description: "Établissements privés",
-  },
-  {
-    key: "skolengo",
-    label: "Skolengo",
-    description: "Régions Grand Est, Île-de-France...",
-  },
+const PROVIDERS: { key: Provider; label: string; description: string; icon: string }[] = [
+  { key: "pronote", label: "Pronote", description: "Collèges et lycées publics", icon: "P" },
+  { key: "ecoledirecte", label: "ÉcoleDirecte", description: "Établissements privés", icon: "E" },
+  { key: "skolengo", label: "Skolengo", description: "Régions Grand Est, Île-de-France...", icon: "S" },
 ];
 
 export default function AuthScreen() {
+  const theme = useTheme();
+
   const handleSelect = (_provider: Provider) => {
     // TODO: navigate to provider-specific login form
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Connecter un compte</Text>
-      <Text style={styles.subtitle}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.title, { color: theme.text }]}>
+        Connecter un compte
+      </Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
         Choisissez le service utilisé par l'établissement de votre enfant.
       </Text>
 
@@ -38,17 +31,40 @@ export default function AuthScreen() {
             key={p.key}
             style={({ pressed }) => [
               styles.providerCard,
-              pressed && styles.providerCardPressed,
+              {
+                backgroundColor: theme.surface,
+                borderColor: pressed ? theme.accent : theme.border,
+              },
             ]}
             onPress={() => handleSelect(p.key)}
           >
-            <Text style={styles.providerLabel}>{p.label}</Text>
-            <Text style={styles.providerDesc}>{p.description}</Text>
+            <View
+              style={[
+                styles.iconBox,
+                { backgroundColor: theme.surfaceElevated },
+              ]}
+            >
+              <Text
+                style={[styles.iconText, { color: theme.accent }]}
+              >
+                {p.icon}
+              </Text>
+            </View>
+            <View style={styles.textBlock}>
+              <Text style={[styles.providerLabel, { color: theme.text }]}>
+                {p.label}
+              </Text>
+              <Text
+                style={[styles.providerDesc, { color: theme.textSecondary }]}
+              >
+                {p.description}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </View>
 
-      <Text style={styles.privacy}>
+      <Text style={[styles.privacy, { color: theme.textTertiary }]}>
         🔒 Vos identifiants sont stockés uniquement sur votre téléphone.
         Aucune donnée scolaire ne quitte l'appareil.
       </Text>
@@ -59,49 +75,57 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
     padding: Spacing.lg,
     paddingTop: Spacing.xl,
   },
   title: {
-    fontSize: FontSize.xl,
-    fontWeight: "700",
-    color: Colors.text,
+    fontSize: FontSize.xxl,
+    fontFamily: Fonts.bold,
   },
   subtitle: {
     fontSize: FontSize.md,
-    color: Colors.textSecondary,
+    fontFamily: Fonts.regular,
     marginTop: Spacing.sm,
     lineHeight: 22,
   },
   providers: {
     marginTop: Spacing.xl,
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   providerCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: BorderRadius.lg,
+    padding: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    gap: Spacing.md,
   },
-  providerCardPressed: {
-    backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.accent,
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.lg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconText: {
+    fontSize: 18,
+    fontFamily: Fonts.monoBold,
+  },
+  textBlock: {
+    flex: 1,
+    gap: 3,
   },
   providerLabel: {
-    fontSize: FontSize.lg,
-    fontWeight: "600",
-    color: Colors.text,
+    fontSize: FontSize.lg - 1,
+    fontFamily: Fonts.semiBold,
   },
   providerDesc: {
     fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
+    fontFamily: Fonts.regular,
   },
   privacy: {
-    fontSize: FontSize.xs,
-    color: Colors.textTertiary,
+    fontSize: FontSize.sm,
+    fontFamily: Fonts.regular,
     marginTop: Spacing.xxl,
     textAlign: "center",
     lineHeight: 18,

@@ -1,31 +1,35 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 
 type TabIcon = React.ComponentProps<typeof Ionicons>["name"];
 
-function tabIcon(name: TabIcon, focused: boolean) {
-  return (
-    <Ionicons
-      name={name}
-      size={22}
-      color={focused ? Colors.accent : Colors.textTertiary}
-    />
-  );
-}
-
 export default function TabLayout() {
+  const theme = useTheme();
+
+  function tabIcon(name: TabIcon, focused: boolean) {
+    return (
+      <Ionicons
+        name={name}
+        size={22}
+        color={focused ? theme.accent : theme.textTertiary}
+      />
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
+          backgroundColor: theme.tabBarBg,
+          borderTopColor: theme.tabBarBorder,
         },
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        headerStyle: { backgroundColor: Colors.background },
-        headerTintColor: Colors.text,
+        tabBarActiveTintColor: theme.accent,
+        tabBarInactiveTintColor: theme.textTertiary,
+        tabBarLabelStyle: { fontFamily: "Inter_500Medium", fontSize: 11 },
+        headerStyle: { backgroundColor: theme.background },
+        headerTintColor: theme.text,
+        headerTitleStyle: { fontFamily: "Inter_600SemiBold" },
         headerShadowVisible: false,
       }}
     >
@@ -47,7 +51,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="schedule"
         options={{
-          title: "Emploi du temps",
+          title: "EDT",
           tabBarIcon: ({ focused }) =>
             tabIcon("calendar-outline", focused),
         }}

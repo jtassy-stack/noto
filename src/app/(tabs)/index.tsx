@@ -1,17 +1,35 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { Colors, FontSize, Spacing } from "@/constants/theme";
+import { Fonts, FontSize, Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function DashboardScreen() {
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.brand}>nōto.</Text>
-      <Text style={styles.tagline}>
-        l'essentiel de la scolarité, en un coup d'œil.
-      </Text>
+  const theme = useTheme();
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Bienvenue</Text>
-        <Text style={styles.cardBody}>
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.content}
+    >
+      <View style={styles.header}>
+        <Text style={[styles.brand, { color: theme.text }]}>
+          n<Text style={{ color: theme.accent }}>ō</Text>to
+          <Text style={{ color: theme.accent }}>.</Text>
+        </Text>
+        <Text style={[styles.date, { color: theme.textSecondary }]}>
+          Vendredi 28 mars
+        </Text>
+      </View>
+
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
+      >
+        <Text style={[styles.cardTitle, { color: theme.text }]}>
+          Bienvenue
+        </Text>
+        <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
           Connectez votre compte Pronote, ÉcoleDirecte ou Skolengo pour
           commencer.
         </Text>
@@ -23,41 +41,38 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   content: {
     padding: Spacing.lg,
     paddingTop: Spacing.xxl,
   },
-  brand: {
-    fontSize: FontSize.hero,
-    fontWeight: "700",
-    color: Colors.text,
-    letterSpacing: -1,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  tagline: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
-    fontStyle: "italic",
+  brand: {
+    fontSize: 22,
+    fontFamily: Fonts.pixel,
+  },
+  date: {
+    fontSize: FontSize.sm,
+    fontFamily: Fonts.regular,
   },
   card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: Spacing.lg,
     marginTop: Spacing.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
   },
   cardTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "600",
-    color: Colors.text,
+    fontFamily: Fonts.semiBold,
     marginBottom: Spacing.sm,
   },
   cardBody: {
     fontSize: FontSize.md,
-    color: Colors.textSecondary,
+    fontFamily: Fonts.regular,
     lineHeight: 22,
   },
 });
