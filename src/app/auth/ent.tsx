@@ -1,56 +1,36 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { useEntAuth, exchangeCodeForTokens } from "@/lib/ent/auth";
+import { loginWithEnt } from "@/lib/ent/auth";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
   const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
-
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
-  const { request, response, promptAsync, redirectUri } = useEntAuth(entProvider);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (response?.type === "success" && response.params.code) {
-      handleCodeExchange(response.params.code);
-    } else if (response?.type === "error") {
-      setError("Connexion annulée ou échouée.");
-      setLoading(false);
-    } else if (response?.type === "dismiss") {
-      setLoading(false);
-    }
-  }, [response]);
-
-  async function handleCodeExchange(code: string) {
+  async function handleLogin() {
     setLoading(true);
     setError(null);
 
     try {
-      if (!request?.codeVerifier) {
-        throw new Error("Code verifier missing");
-      }
-
-      const tokens = await exchangeCodeForTokens(
-        entProvider,
-        code,
-        request.codeVerifier,
-        redirectUri
-      );
-      console.log("[nōto] ENT auth successful for", entProvider.name);
-      console.log("[nōto] Token expires at:", new Date(tokens.expiresAt).toISOString());
-
-      // TODO: use CAS SSO to also connect to Pronote automatically
-
+      await loginWithEnt(entProvider);
+      console.log("[nōto] ENT login successful for", entProvider.name);
       router.replace("/");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";
-      setError(`Connexion échouée : ${message}`);
-      console.warn("[nōto] ENT token exchange failed:", e);
+      if (message.includes("cancelled") || message.includes("dismiss")) {
+        // User dismissed the browser
+        setError(null);
+      } else {
+        setError(`Connexion échouée : ${message}`);
+        console.warn("[nōto] ENT login failed:", e);
+      }
     } finally {
       setLoading(false);
     }
@@ -75,15 +55,11 @@ export default function EntLoginScreen() {
           styles.button,
           {
             backgroundColor: entProvider.color,
-            opacity: pressed || loading || !request ? 0.7 : 1,
+            opacity: pressed || loading ? 0.7 : 1,
           },
         ]}
-        onPress={() => {
-          setLoading(true);
-          setError(null);
-          promptAsync();
-        }}
-        disabled={!request || loading}
+        onPress={handleLogin}
+        disabled={loading}
       >
         {loading ? (
           <ActivityIndicator color="#FFFFFF" size="small" />
@@ -109,8 +85,7 @@ export default function EntLoginScreen() {
       </View>
 
       <Text style={[styles.hint, { color: theme.textTertiary }]}>
-        🔒 Connexion sécurisée via le protocole OAuth2 officiel
-        ({entProvider.region}).
+        🔒 Connexion sécurisée via OAuth2 ({entProvider.region}).
       </Text>
     </View>
   );
