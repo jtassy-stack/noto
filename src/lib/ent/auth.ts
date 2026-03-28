@@ -1,3 +1,4 @@
+import * as WebBrowser from "expo-web-browser";
 import * as SecureStore from "expo-secure-store";
 import type { EntProvider } from "./providers";
 
@@ -12,80 +13,44 @@ export interface EntSession {
 }
 
 /**
- * Login to ENT using username/password.
- * React Native handles cookies automatically via its internal cookie jar.
- * After POST /auth/login, subsequent fetch() calls to the same domain
- * will include the session cookies automatically.
+ * Login to ENT via browser.
+ * Opens the ENT login page in a system browser. User logs in manually.
+ * After login, the browser redirects back and RN cookie jar has the session.
+ *
+ * We use the ENT's own OAuth redirect flow — the user logs into Keycloak,
+ * Keycloak redirects to psn.monlycee.net/oauth2/callback which sets cookies,
+ * and we capture that the flow completed.
  */
-export async function loginWithCredentials(
-  provider: EntProvider,
-  username: string,
-  password: string
-): Promise<EntSession> {
-  console.log("[nōto] ENT login to", provider.apiBaseUrl);
+export async function loginWithBrowser(provider: EntProvider): Promise<EntSession> {
+  console.log("[nōto] Opening ENT login in browser:", provider.apiBaseUrl);
 
-  // Step 1: POST /auth/login
-  const loginUrl = `${provider.apiBaseUrl}/auth/login`;
-  const formBody = `email=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  // Open the ENT homepage — it will redirect to Keycloak for login
+  // After login, Keycloak redirects back to psn.monlycee.net with session cookies
+  const result = await WebBrowser.openAuthSessionAsync(
+    `${provider.apiBaseUrl}`,
+    `${provider.apiBaseUrl}` // prefix match — close browser when we're back on the ENT
+  );
 
-  const loginResponse = await fetch(loginUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formBody,
-    redirect: "follow", // Follow redirects — RN cookie jar captures cookies along the way
-  });
+  console.log("[nōto] Browser result:", result.type);
 
-  console.log("[nōto] ENT login status:", loginResponse.status, loginResponse.url);
-
-  // If we ended up on a login page again, credentials were wrong
-  if (loginResponse.url.includes("/auth/login")) {
-    const text = await loginResponse.text();
-    if (text.includes("auth-error") || text.includes("error")) {
-      throw new Error("Identifiants incorrects");
-    }
+  if (result.type !== "success" && result.type !== "cancel") {
+    // On iOS, "cancel" means the user closed the browser manually
+    // which is fine if they already logged in
   }
 
-  // Step 2: Verify session by fetching user info
-  // The cookie jar should now have the session cookie
-  console.log("[nōto] Verifying ENT session...");
-  const userInfoResponse = await fetch(`${provider.apiBaseUrl}/auth/oauth2/userinfo`, {
-    headers: { Accept: "application/json" },
-  });
+  // After the browser closes, check if we have a valid session
+  // by trying to fetch userinfo. RN cookie jar should have the cookies.
+  console.log("[nōto] Checking session after browser...");
 
-  console.log("[nōto] UserInfo status:", userInfoResponse.status);
+  const sessionValid = await testSession(provider);
 
-  let userName: string | undefined;
-  if (userInfoResponse.ok) {
-    try {
-      const info = await userInfoResponse.json() as Record<string, unknown>;
-      userName = String(info.username ?? info.login ?? info.firstName ?? "");
-      console.log("[nōto] ENT user:", userName, JSON.stringify(info).substring(0, 200));
-    } catch {
-      console.log("[nōto] Could not parse userinfo");
-    }
-  } else {
-    console.warn("[nōto] UserInfo failed:", userInfoResponse.status);
-    // Session might still work for other endpoints
-  }
-
-  // Step 3: Test messaging endpoint
-  const msgEndpoint = provider.messagingType === "zimbra"
-    ? "/zimbra/count/INBOX?unread=true"
-    : "/conversation/count/INBOX?unread=true";
-
-  try {
-    const msgResponse = await fetch(`${provider.apiBaseUrl}${msgEndpoint}`, {
-      headers: { Accept: "application/json" },
-    });
-    console.log("[nōto] Messages test:", msgResponse.status, await msgResponse.text().then(t => t.substring(0, 100)));
-  } catch (e) {
-    console.warn("[nōto] Messages test failed:", e);
+  if (!sessionValid) {
+    throw new Error("La connexion n'a pas abouti. Réessayez.");
   }
 
   const session: EntSession = {
     providerId: provider.id,
     expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    userName,
     apiBaseUrl: provider.apiBaseUrl,
   };
 
@@ -97,8 +62,38 @@ export async function loginWithCredentials(
 }
 
 /**
+ * Test if the current cookie jar has a valid ENT session.
+ */
+async function testSession(provider: EntProvider): Promise<boolean> {
+  try {
+    // Try the messages endpoint — if we get JSON, we're in
+    const msgEndpoint = provider.messagingType === "zimbra"
+      ? "/zimbra/count/INBOX?unread=true"
+      : "/conversation/count/INBOX?unread=true";
+
+    const response = await fetch(`${provider.apiBaseUrl}${msgEndpoint}`, {
+      headers: { Accept: "application/json" },
+    });
+
+    console.log("[nōto] Session test status:", response.status);
+    const text = await response.text();
+    console.log("[nōto] Session test body:", text.substring(0, 100));
+
+    // If we get JSON with a count, session is valid
+    if (response.ok && !text.includes("<!DOCTYPE")) {
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    console.warn("[nōto] Session test error:", e);
+    return false;
+  }
+}
+
+/**
  * Make an authenticated request to the ENT API.
- * Relies on React Native's internal cookie jar — no manual cookie header needed.
+ * Relies on React Native's cookie jar.
  */
 export async function entFetch(provider: EntProvider, path: string): Promise<Response> {
   const response = await fetch(`${provider.apiBaseUrl}${path}`, {
