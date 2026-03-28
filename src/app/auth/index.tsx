@@ -15,7 +15,18 @@ export default function AuthScreen() {
 
   const handleSelect = (provider: Provider) => {
     if (provider === "pronote") {
-      router.push("/auth/pronote");
+      // Show choice: QR code (recommended) or manual credentials
+      Alert.alert("Pronote", "Comment souhaitez-vous vous connecter ?", [
+        {
+          text: "QR code (recommandé)",
+          onPress: () => router.push("/auth/qrcode"),
+        },
+        {
+          text: "Identifiants",
+          onPress: () => router.push("/auth/pronote"),
+        },
+        { text: "Annuler", style: "cancel" },
+      ]);
     } else {
       Alert.alert(
         "Bientôt disponible",

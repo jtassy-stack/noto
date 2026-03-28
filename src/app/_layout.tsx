@@ -56,6 +56,12 @@ export default function RootLayout() {
             title: "Pronote",
           }}
         />
+        <Stack.Screen
+          name="auth/qrcode"
+          options={{
+            title: "Scanner QR code",
+          }}
+        />
       </Stack>
     </>
   );
