@@ -17,18 +17,18 @@ export const MOTIF_LABELS: Record<AbsenceMotif, string> = {
 
 export interface AbsenceRequest {
   child: Child;
-  date: string; // "lundi 31 mars 2026"
-  dateEnd?: string; // for multi-day
+  date: string;
+  dateEnd?: string;
   motif: AbsenceMotif;
-  motifDetail?: string; // free text for "autre"
+  motifDetail?: string;
   parentName: string;
 }
 
-function buildAbsenceSubject(child: Child, date: string): string {
+function buildSubject(child: Child, date: string): string {
   return `Absence de ${child.firstName} ${child.lastName} - ${child.className} - ${date}`;
 }
 
-function buildAbsenceBody(req: AbsenceRequest): string {
+function buildBody(req: AbsenceRequest): string {
   const motifText = req.motif === "autre" && req.motifDetail
     ? req.motifDetail
     : MOTIF_LABELS[req.motif];
@@ -48,146 +48,148 @@ function buildAbsenceBody(req: AbsenceRequest): string {
   ].join("\n");
 }
 
-/**
- * Find the teacher and director group IDs for a child's class.
- * Searches visible recipients for matching group names.
- */
-async function findRecipients(
-  creds: ConversationCredentials,
-  child: Child
-): Promise<string[]> {
-  // Re-login
+async function ensureLogin(creds: ConversationCredentials): Promise<void> {
   await fetch(`${creds.apiBaseUrl}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
     redirect: "follow",
   });
+}
 
-  // Search for visible recipients
+async function findRecipients(
+  creds: ConversationCredentials,
+  child: Child
+): Promise<string[]> {
   const res = await fetch(`${creds.apiBaseUrl}/conversation/visible`, {
     headers: { Accept: "application/json" },
   });
 
   if (!res.ok) {
-    console.warn("[nōto] Failed to fetch visible recipients:", res.status);
+    const text = await res.text();
+    console.warn("[nōto] visible failed:", res.status, text.substring(0, 80));
+    // If HTML (session expired), re-login and retry
+    if (text.includes("<!DOCTYPE") || res.status === 302) {
+      await ensureLogin(creds);
+      const retry = await fetch(`${creds.apiBaseUrl}/conversation/visible`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!retry.ok) return [];
+      const data = await retry.json();
+      return extractRecipients(data, child);
+    }
     return [];
   }
 
-  const data = await res.json() as {
-    groups?: Array<{ id: string; name: string }>;
-    users?: Array<{ id: string; displayName: string; profile?: string }>;
-  };
+  const data = await res.json();
+  return extractRecipients(data, child);
+}
 
+function extractRecipients(
+  data: { groups?: Array<{ id: string; name: string }>; users?: Array<{ id: string; displayName: string; profile?: string }> },
+  child: Child
+): string[] {
   const groups = data.groups ?? [];
   const users = data.users ?? [];
   const recipients: string[] = [];
 
-  // Extract class name without teacher (e.g., "CM1 - CM2 A" from "CM1 - CM2 A - M. Lucas TOLOTTA")
   const classParts = child.className.split(" - ");
   const classShort = classParts.length > 2
-    ? classParts.slice(0, -1).join(" - ") // remove teacher name
-    : child.className;
+    ? classParts.slice(0, -1).join(" - ").trim()
+    : classParts[0]?.trim() ?? "";
 
-  // Find teacher group for this class
+  // Teacher group for this class
   for (const g of groups) {
-    if (g.name.includes("Enseignants") && g.name.includes(classShort)) {
+    if (g.name.includes("Enseignants") && classShort && g.name.includes(classShort)) {
       recipients.push(g.id);
       console.log("[nōto] Found teacher group:", g.name);
     }
   }
 
-  // Find individual teachers matching the class
-  const teacherName = classParts[classParts.length - 1]?.replace(/^(M\.|Mme|M)\s*/, "").trim();
+  // Individual teacher
+  const teacherName = classParts[classParts.length - 1]?.replace(/^(M\.|Mme|M)\s*/i, "").trim();
   if (teacherName) {
+    const lastName = teacherName.split(/\s+/).pop()?.toUpperCase() ?? "";
     for (const u of users) {
-      if (u.profile === "Teacher" && u.displayName.toUpperCase().includes(teacherName.toUpperCase())) {
+      if (u.profile === "Teacher" && lastName && u.displayName.toUpperCase().includes(lastName)) {
         recipients.push(u.id);
         console.log("[nōto] Found teacher:", u.displayName);
       }
     }
   }
 
-  // Find director/directrice
+  // Director
   for (const u of users) {
-    if (u.profile === "Teacher" && (
-      u.displayName.toLowerCase().includes("direct") ||
-      u.displayName.toLowerCase().includes("princip")
-    )) {
+    if (u.displayName.toLowerCase().includes("direct") || u.displayName.toLowerCase().includes("princip")) {
       recipients.push(u.id);
       console.log("[nōto] Found director:", u.displayName);
     }
   }
 
-  // Fallback: if no specific recipients found, use the school-wide teacher group
+  // Fallback: school-wide teacher group
   if (recipients.length === 0) {
     for (const g of groups) {
-      if (g.name.includes("Enseignants") && g.name.includes("DOMBASLE")) {
+      if (g.name.includes("Enseignants")) {
         recipients.push(g.id);
-        console.log("[nōto] Fallback to school teacher group:", g.name);
+        console.log("[nōto] Fallback:", g.name);
         break;
       }
     }
   }
 
-  return [...new Set(recipients)]; // deduplicate
+  return [...new Set(recipients)];
 }
 
-/**
- * Send an absence notification via PCN Conversation API.
- */
 export async function sendAbsenceNotification(
   creds: ConversationCredentials,
   req: AbsenceRequest
 ): Promise<void> {
+  // Ensure fresh session
+  await ensureLogin(creds);
+
   // Find recipients
   const recipients = await findRecipients(creds, req.child);
-
   if (recipients.length === 0) {
     throw new Error("Aucun destinataire trouvé. Vérifiez la classe de l'enfant.");
   }
 
-  console.log("[nōto] Sending absence to", recipients.length, "recipients");
+  console.log("[nōto] Sending absence to", recipients.length, "recipients:", recipients);
 
-  const subject = buildAbsenceSubject(req.child, req.date);
-  const body = buildAbsenceBody(req);
+  const subject = buildSubject(req.child, req.date);
+  const body = buildBody(req);
 
-  // Step 1: Create draft
+  // Create draft
   const draftRes = await fetch(`${creds.apiBaseUrl}/conversation/draft`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      subject,
-      body,
-      to: recipients,
-      cc: [],
-      bcc: [],
-    }),
+    body: JSON.stringify({ subject, body, to: recipients, cc: [], bcc: [] }),
   });
 
+  console.log("[nōto] Draft response:", draftRes.status);
+
   if (!draftRes.ok) {
+    const err = await draftRes.text();
+    console.warn("[nōto] Draft error:", err.substring(0, 100));
     throw new Error(`Erreur création brouillon (${draftRes.status})`);
   }
 
   const draft = await draftRes.json() as { id: string };
   console.log("[nōto] Draft created:", draft.id);
 
-  // Step 2: Send the draft
+  // Send
   const sendRes = await fetch(`${creds.apiBaseUrl}/conversation/send?id=${draft.id}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      subject,
-      body,
-      to: recipients,
-      cc: [],
-      bcc: [],
-    }),
+    body: JSON.stringify({ subject, body, to: recipients, cc: [], bcc: [] }),
   });
 
+  console.log("[nōto] Send response:", sendRes.status);
+
   if (!sendRes.ok) {
-    throw new Error(`Erreur envoi message (${sendRes.status})`);
+    const err = await sendRes.text();
+    console.warn("[nōto] Send error:", err.substring(0, 100));
+    throw new Error(`Erreur envoi (${sendRes.status})`);
   }
 
-  console.log("[nōto] Absence notification sent!");
+  console.log("[nōto] Absence sent successfully!");
 }

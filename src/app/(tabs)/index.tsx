@@ -51,14 +51,6 @@ function EntDashboard({ childName }: { childName: string }) {
       style={[entStyles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={entStyles.content}
     >
-      {/* Quick action: absence */}
-      <Pressable
-        onPress={() => entRouter.push("/absence")}
-        style={[entStyles.absenceBtn, { backgroundColor: theme.crimson }]}
-      >
-        <Text style={entStyles.absenceBtnText}>🏥 Signaler une absence</Text>
-      </Pressable>
-
       {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
 
       {/* Timeline / Fil d'actu */}

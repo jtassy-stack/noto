@@ -50,12 +50,17 @@ export default function AbsenceScreen() {
     setSending(true);
 
     try {
+      // Build parent name from child's last name
+      const parentName = activeChild.lastName
+        ? `M./Mme ${activeChild.lastName}`
+        : "Le parent";
+
       const req: AbsenceRequest = {
         child: activeChild,
         date: formatDate(selectedDate),
         motif,
         motifDetail: motif === "autre" ? motifDetail : undefined,
-        parentName: "M./Mme TASSY", // TODO: get from userinfo
+        parentName,
       };
 
       await sendAbsenceNotification(creds, req);

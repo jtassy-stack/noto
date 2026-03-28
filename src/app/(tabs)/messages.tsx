@@ -120,6 +120,16 @@ export default function MessagesScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={loadMessages} tintColor={theme.accent} />}
     >
+      {/* Absence button for ENT children */}
+      {activeChild?.source === "ent" && (
+        <Pressable
+          onPress={() => router.push("/absence")}
+          style={[styles.absenceBtn, { backgroundColor: theme.crimson }]}
+        >
+          <Text style={styles.absenceBtnText}>🏥 Signaler une absence</Text>
+        </Pressable>
+      )}
+
       {unseen > 0 && (
         <View style={[styles.badge, { backgroundColor: theme.accent }]}>
           <Text style={styles.badgeText}>{unseen} non lu{unseen > 1 ? "s" : ""}</Text>
@@ -182,6 +192,8 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center", lineHeight: 22 },
   connectBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, paddingHorizontal: Spacing.xl, marginTop: Spacing.sm },
   connectBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  absenceBtn: { borderRadius: BorderRadius.md, paddingVertical: 12, alignItems: "center", marginBottom: Spacing.md },
+  absenceBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
   badge: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: Spacing.md },
   badgeText: { fontSize: FontSize.sm, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
   error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, marginBottom: Spacing.md },
