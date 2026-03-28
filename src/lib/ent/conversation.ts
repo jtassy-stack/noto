@@ -234,10 +234,17 @@ export async function fetchConversationMessage(
   creds: ConversationCredentials,
   messageId: string
 ): Promise<ConversationMessage> {
+  // Force fresh login for message detail (body needs active session)
+  activeSession = null;
   const msgRes = await pcnFetch(creds, `/conversation/message/${messageId}`);
-  if (!msgRes.ok) throw new Error(`Erreur message (${msgRes.status})`);
 
-  const msg = await msgRes.json();
+  const text = await msgRes.text();
+  if (!msgRes.ok || text.includes("<!DOCTYPE")) {
+    console.warn("[nōto] Message fetch failed:", msgRes.status, text.substring(0, 100));
+    throw new Error(`Erreur message (${msgRes.status})`);
+  }
+
+  const msg = JSON.parse(text);
   return mapConversationMessage(msg as Record<string, unknown>);
 }
 
