@@ -3,10 +3,9 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Refre
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { getStoredSession } from "@/lib/ent/auth";
+import { useChildren } from "@/hooks/useChildren";
 import { getMailCredentials, fetchInbox, type MailMessage } from "@/lib/ent/mail";
 import { getConversationCredentials, fetchConversationInbox, type ConversationMessage } from "@/lib/ent/conversation";
-import { getEntProvider } from "@/lib/ent/providers";
 
 interface DisplayMessage {
   id: string;
@@ -19,6 +18,7 @@ interface DisplayMessage {
 
 export default function MessagesScreen() {
   const theme = useTheme();
+  const { activeChild } = useChildren();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [unseen, setUnseen] = useState(0);
@@ -26,9 +26,6 @@ export default function MessagesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadMessages = useCallback(async () => {
-    // Check which messaging system is configured
-    // Use the most recently connected ENT session to determine which to use
-    const session = await getStoredSession();
     const imapCreds = await getMailCredentials();
     const convCreds = await getConversationCredentials();
 
@@ -37,10 +34,13 @@ export default function MessagesScreen() {
       return;
     }
 
-    // Determine which backend based on the active ENT provider
-    const provider = session ? getEntProvider(session.providerId) : null;
-    const useConversation = convCreds && provider?.messagingType === "conversation";
-    const useIMAP = imapCreds && (!useConversation);
+    // Pick messaging backend based on selected child's source
+    // ENT child → Conversation API (PCN)
+    // Pronote child → IMAP (Mon Lycée) if available
+    // No child selected → use whatever is available
+    const isEntChild = activeChild?.source === "ent";
+    const useConversation = convCreds && (isEntChild || !imapCreds);
+    const useIMAP = imapCreds && !isEntChild;
 
     setConnected(true);
     setLoading(true);
@@ -79,11 +79,11 @@ export default function MessagesScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeChild]);
 
   useEffect(() => {
     loadMessages();
-  }, [loadMessages]);
+  }, [loadMessages, activeChild]);
 
   if (connected === false) {
     return (
