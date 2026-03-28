@@ -30,26 +30,27 @@ export default function EntLoginScreen() {
     setError(null);
 
     try {
-      // Test credentials by fetching unread count via IMAP proxy
+      // Test credentials via IMAP (same password as Mon Lycée)
       const result = await fetchUnreadCount({ email: email.trim(), password });
-      console.log("[nōto] IMAP login success! Unread:", result.unseen, "Total:", result.total);
+      console.log("[nōto] Login OK! Unread:", result.unseen, "Total:", result.total);
 
-      // Save credentials (encrypted in SecureStore)
+      // Save mail credentials
       await saveMailCredentials({ email: email.trim(), password });
 
       // Save ENT session
       await saveEntSession({
         providerId: entProvider.id,
-        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // IMAP doesn't expire
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
         apiBaseUrl: entProvider.apiBaseUrl,
         useCookieJar: false,
       });
 
+      if (router.canDismiss()) router.dismissAll();
       router.replace("/");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";
       setError(message);
-      console.warn("[nōto] IMAP login failed:", e);
+      console.warn("[nōto] Login failed:", e);
     } finally {
       setLoading(false);
     }
@@ -66,12 +67,15 @@ export default function EntLoginScreen() {
           {entProvider.icon} {entProvider.name}
         </Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Connectez votre messagerie {entProvider.name} avec votre adresse e-mail.
+          Connectez-vous avec vos identifiants Mon Lycée.{"\n"}
+          Un seul compte pour la messagerie et Pronote.
         </Text>
 
         <View style={styles.form}>
           <View style={styles.field}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Adresse e-mail</Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Adresse e-mail Mon Lycée
+            </Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
               placeholder="prenom.nom@monlycee.net"
@@ -85,10 +89,12 @@ export default function EntLoginScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={[styles.label, { color: theme.textSecondary }]}>Mot de passe</Text>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Mot de passe
+            </Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
-              placeholder="Votre mot de passe"
+              placeholder="Votre mot de passe Mon Lycée"
               placeholderTextColor={theme.textTertiary}
               value={password}
               onChangeText={setPassword}
@@ -99,7 +105,10 @@ export default function EntLoginScreen() {
           {error && <Text style={[styles.error, { color: theme.crimson }]}>{error}</Text>}
 
           <Pressable
-            style={({ pressed }) => [styles.button, { backgroundColor: entProvider.color, opacity: pressed || loading ? 0.7 : 1 }]}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: entProvider.color, opacity: pressed || loading ? 0.7 : 1 },
+            ]}
             onPress={handleLogin}
             disabled={loading}
           >
@@ -112,13 +121,13 @@ export default function EntLoginScreen() {
         </View>
 
         <Text style={[styles.hint, { color: theme.textTertiary }]}>
-          Utilisez la même adresse e-mail que celle affichée dans votre messagerie {entProvider.name}.
-          C'est l'adresse de type prenom.nom@monlycee.net.
+          Votre adresse e-mail est visible en haut à droite quand vous êtes
+          connecté sur monlycee.net — elle se termine par @monlycee.net.
         </Text>
 
         <Text style={[styles.privacy, { color: theme.textTertiary }]}>
-          🔒 Vos identifiants sont stockés de manière chiffrée sur votre appareil
-          et ne transitent que vers le serveur mail de {entProvider.name}.
+          🔒 Vos identifiants sont stockés de manière chiffrée sur votre
+          appareil et ne sont envoyés qu'au serveur mail officiel de Mon Lycée.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -144,6 +153,6 @@ const styles = StyleSheet.create({
     alignItems: "center", marginTop: Spacing.sm,
   },
   buttonText: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  hint: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xl, lineHeight: 16 },
+  hint: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xxl, lineHeight: 16 },
   privacy: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.lg, textAlign: "center", lineHeight: 16 },
 });
