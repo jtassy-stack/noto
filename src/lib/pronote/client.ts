@@ -1,6 +1,6 @@
 import * as pronote from "pawnote";
 import * as SecureStore from "expo-secure-store";
-import { getDatabase } from "@/lib/database/client";
+import * as Crypto from "expo-crypto";
 import type { Account, Child, Grade, ScheduleEntry, Homework } from "@/types";
 
 const DEVICE_UUID_KEY = "noto_device_uuid";
@@ -8,7 +8,7 @@ const DEVICE_UUID_KEY = "noto_device_uuid";
 async function getDeviceUUID(): Promise<string> {
   let uuid = await SecureStore.getItemAsync(DEVICE_UUID_KEY);
   if (!uuid) {
-    uuid = crypto.randomUUID();
+    uuid = Crypto.randomUUID();
     await SecureStore.setItemAsync(DEVICE_UUID_KEY, uuid);
   }
   return uuid;
