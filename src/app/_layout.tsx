@@ -1,0 +1,29 @@
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { Colors } from "@/constants/theme";
+
+export default function RootLayout() {
+  return (
+    <>
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: Colors.background },
+          headerTintColor: Colors.text,
+          headerTitleStyle: { fontWeight: "600" },
+          contentStyle: { backgroundColor: Colors.background },
+          headerShadowVisible: false,
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="auth/index"
+          options={{
+            title: "Connexion",
+            presentation: "modal",
+          }}
+        />
+      </Stack>
+    </>
+  );
+}
