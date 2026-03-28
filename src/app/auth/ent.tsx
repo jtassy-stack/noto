@@ -5,8 +5,9 @@ import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 import { saveMailCredentials, fetchUnreadCount } from "@/lib/ent/mail";
-import { loginToENT, saveConversationCredentials } from "@/lib/ent/conversation";
+import { loginToENT, saveConversationCredentials, fetchENTChildren } from "@/lib/ent/conversation";
 import { saveEntSession } from "@/lib/ent/auth";
+import { saveAccount, saveChildren } from "@/lib/database/repository";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
@@ -50,6 +51,20 @@ export default function EntLoginScreen() {
           apiBaseUrl: entProvider.apiBaseUrl,
           sessionCookie,
         });
+
+        // Fetch and save children
+        const children = await fetchENTChildren(entProvider, sessionCookie);
+        if (children.length > 0) {
+          await saveAccount({
+            id: `ent-${entProvider.id}`,
+            provider: "skolengo", // reuse provider type for ENT accounts
+            displayName: username.trim(),
+            instanceUrl: entProvider.apiBaseUrl,
+            createdAt: Date.now(),
+          });
+          await saveChildren(children);
+          console.log("[nōto] Saved", children.length, "children from ENT");
+        }
       }
 
       await saveEntSession({

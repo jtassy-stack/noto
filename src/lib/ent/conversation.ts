@@ -6,6 +6,7 @@
 
 import * as SecureStore from "expo-secure-store";
 import type { EntProvider } from "./providers";
+import type { Child } from "@/types";
 
 const ENT_CONV_CREDS_KEY = "noto_ent_conv_creds";
 
@@ -87,6 +88,55 @@ export async function loginToENT(
   }
 
   return { sessionCookie: setCookie };
+}
+
+// --- Children ---
+
+export async function fetchENTChildren(
+  provider: EntProvider,
+  sessionCookie: string
+): Promise<Child[]> {
+  const res = await fetch(`${provider.apiBaseUrl}/userbook/api/person`, {
+    headers: {
+      Accept: "application/json",
+      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    console.warn("[nōto] Failed to fetch ENT children:", res.status);
+    return [];
+  }
+
+  const data = await res.json();
+  const results: Array<{ id: string; relatedName: string; type: string[] }> =
+    Array.isArray(data.result) ? data.result : Array.isArray(data) ? data : [];
+
+  // Deduplicate by relatedName (same parent ID appears once per child)
+  const seen = new Set<string>();
+  const children: Child[] = [];
+
+  for (const entry of results) {
+    const name = entry.relatedName;
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+
+    // Parse "TASSY Suzanne" → firstName: Suzanne, lastName: TASSY
+    const match = name.match(/^([A-ZÀ-ÖÙ-Ý\s]+)\s+(.+)$/);
+    const firstName = match ? match[2]!.trim() : name;
+    const lastName = match ? match[1]!.trim() : "";
+
+    children.push({
+      id: `ent-${name.replace(/\s/g, "-").toLowerCase()}`,
+      accountId: `ent-${provider.id}`,
+      firstName,
+      lastName,
+      className: "", // PCN doesn't provide class in this endpoint
+    });
+  }
+
+  console.log("[nōto] ENT children:", children.map(c => c.firstName));
+  return children;
 }
 
 // --- API calls ---
