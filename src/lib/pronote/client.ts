@@ -119,14 +119,38 @@ export async function authenticateWithQRCode(
 // --- Data Mapping ---
 
 export function mapChildren(session: pronote.SessionHandle): Child[] {
-  return session.user.resources.map((r, i) => ({
-    id: r.id,
-    accountId: session.information.id.toString(),
-    firstName: r.name.split(" ")[0] ?? r.name,
-    lastName: r.name.split(" ").slice(1).join(" "),
-    className: r.className ?? "",
-    avatarUri: r.profilePicture?.url,
-  }));
+  // Debug: log what Pronote returns so we can see the data shape
+  console.log("[nōto] user.name:", session.user.name);
+  console.log("[nōto] resources:", session.user.resources.map(r => ({
+    id: r.id, name: r.name, className: r.className, kind: r.kind,
+  })));
+
+  return session.user.resources.map((r) => {
+    // Pronote parent accounts: r.name can be "LASTNAME Firstname" or just "LASTNAME"
+    // Try to split on the case boundary (uppercase block = last name, rest = first name)
+    const match = r.name.match(/^([A-ZÀ-ÖÙ-Ý\s]+)\s+(.+)$/);
+    let firstName: string;
+    let lastName: string;
+
+    if (match) {
+      // "TASSY Julien" → lastName="TASSY", firstName="Julien"
+      lastName = match[1]!.trim();
+      firstName = match[2]!.trim();
+    } else {
+      // Fallback: just use the full name as firstName
+      firstName = r.name;
+      lastName = "";
+    }
+
+    return {
+      id: r.id,
+      accountId: session.information.id.toString(),
+      firstName,
+      lastName,
+      className: r.className ?? "",
+      avatarUri: r.profilePicture?.url,
+    };
+  });
 }
 
 export async function fetchGrades(
