@@ -234,21 +234,27 @@ export async function fetchConversationMessage(
   creds: ConversationCredentials,
   messageId: string
 ): Promise<ConversationMessage> {
-  // Force fresh login
-  activeSession = null;
-  await doLogin(creds);
+  console.log("[nōto] fetchConversationMessage:", messageId);
 
-  console.log("[nōto] Fetching message:", messageId);
+  // Login + fetch in one chain to ensure cookie persists
+  const loginRes = await fetch(`${creds.apiBaseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+    redirect: "follow",
+  });
+  console.log("[nōto] Message login:", loginRes.status);
+
   const msgRes = await fetch(`${creds.apiBaseUrl}/conversation/message/${messageId}`, {
     headers: { Accept: "application/json" },
   });
 
-  console.log("[nōto] Message response:", msgRes.status, msgRes.headers.get("content-type"));
+  console.log("[nōto] Message response:", msgRes.status);
   const text = await msgRes.text();
-  console.log("[nōto] Message body preview:", text.substring(0, 150));
+  console.log("[nōto] Message preview:", text.substring(0, 150));
 
-  if (!msgRes.ok || text.includes("<!DOCTYPE")) {
-    throw new Error(`Erreur message (${msgRes.status})`);
+  if (text.includes("<!DOCTYPE") || !msgRes.ok) {
+    throw new Error(`Impossible de charger le message`);
   }
 
   const msg = JSON.parse(text);
