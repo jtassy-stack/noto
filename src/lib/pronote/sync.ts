@@ -42,41 +42,31 @@ export async function syncWithSession(session: pronote.SessionHandle): Promise<v
     const nextWeekDate = new Date(today.getTime() + 7 * 86400000);
     const twoWeeksDate = new Date(today.getTime() + 14 * 86400000);
 
-    // Fetch grades first (highest priority)
-    try {
-      gradesData = await fetchGrades(session);
-      console.log(`[nōto] fetched ${gradesData.length} grades`);
-    } catch (err: unknown) {
-      const name = err instanceof Error ? err.constructor.name : "Unknown";
-      if (name === "AccessDeniedError") {
-        console.log("[nōto] grades: access denied (normal for some parent accounts)");
-      } else if (name === "SessionExpiredError") {
-        console.warn("[nōto] grades: session expired — skipping schedule/homework");
-      } else {
-        console.warn(`[nōto] grades error (${name}):`, err instanceof Error ? err.message : err);
-      }
-    }
-
-    // Fetch schedule (if session still alive)
+    // Fetch schedule FIRST — most likely to work for parent accounts
     try {
       scheduleData = await fetchSchedule(session, today, nextWeekDate);
       console.log(`[nōto] fetched ${scheduleData.length} schedule entries`);
     } catch (err: unknown) {
       const name = err instanceof Error ? err.constructor.name : "Unknown";
-      if (name !== "AccessDeniedError") {
-        console.warn(`[nōto] schedule error (${name})`);
-      }
+      console.warn(`[nōto] schedule error (${name}):`, err instanceof Error ? err.message : err);
     }
 
-    // Fetch homework (if session still alive)
+    // Fetch homework
     try {
       homeworkData = await fetchHomework(session, today, twoWeeksDate);
       console.log(`[nōto] fetched ${homeworkData.length} homework items`);
     } catch (err: unknown) {
       const name = err instanceof Error ? err.constructor.name : "Unknown";
-      if (name !== "AccessDeniedError") {
-        console.warn(`[nōto] homework error (${name})`);
-      }
+      console.warn(`[nōto] homework error (${name}):`, err instanceof Error ? err.message : err);
+    }
+
+    // Fetch grades last — known to fail with AccessDenied for some parent accounts
+    try {
+      gradesData = await fetchGrades(session);
+      console.log(`[nōto] fetched ${gradesData.length} grades`);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.constructor.name : "Unknown";
+      console.warn(`[nōto] grades error (${name}):`, err instanceof Error ? err.message : err);
     }
 
     // NOW save everything to DB (local, doesn't need session)
