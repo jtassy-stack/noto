@@ -22,6 +22,60 @@ export function getSession(): pronote.SessionHandle | null {
   return currentSession;
 }
 
+/**
+ * Re-authenticate using the stored refresh token.
+ * Call this when the session expires (SessionExpiredError).
+ */
+export async function reconnect(accountId: string): Promise<pronote.SessionHandle | null> {
+  // Find stored refresh tokens
+  const keys = [`noto_refresh_`];
+  // Try all stored credentials
+  const allAccounts = await SecureStore.getItemAsync(`noto_refresh_list`);
+  if (!allAccounts) {
+    // Try legacy format: iterate known usernames from the account
+    // For now, scan SecureStore isn't possible, so we store a list
+    return null;
+  }
+
+  const usernames: string[] = JSON.parse(allAccounts);
+  for (const username of usernames) {
+    const raw = await SecureStore.getItemAsync(`noto_refresh_${username}`);
+    if (!raw) continue;
+
+    const stored = JSON.parse(raw) as {
+      token: string;
+      username: string;
+      url: string;
+      kind: number;
+    };
+
+    try {
+      const { session } = await authenticateWithToken(
+        stored.url,
+        stored.username,
+        stored.token
+      );
+      return session;
+    } catch (e) {
+      console.warn("[nōto] Reconnect failed for", username, e);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Track usernames for reconnection.
+ */
+async function trackUsername(username: string): Promise<void> {
+  const raw = await SecureStore.getItemAsync("noto_refresh_list");
+  const list: string[] = raw ? JSON.parse(raw) : [];
+  if (!list.includes(username)) {
+    list.push(username);
+    await SecureStore.setItemAsync("noto_refresh_list", JSON.stringify(list));
+  }
+}
+
 // --- Authentication ---
 
 export async function authenticateWithCredentials(
@@ -52,6 +106,7 @@ export async function authenticateWithCredentials(
       kind: refresh.kind,
     })
   );
+  await trackUsername(refresh.username);
 
   return { session, refresh };
 }
