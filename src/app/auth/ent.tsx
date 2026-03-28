@@ -14,6 +14,7 @@ export default function EntLoginScreen() {
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
   const [status, setStatus] = useState("Connexion à " + entProvider.name + "...");
+  const phaseRef = useRef<"login" | "mail">("login");
   const sawCallbackRef = useRef(false);
   const doneRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
@@ -22,85 +23,99 @@ export default function EntLoginScreen() {
     const url = event.url;
     console.log("[nōto] WebView:", url.substring(0, 80));
 
-    // Detect Keycloak login page
-    if (url.includes("auth.monlycee.net") && url.includes("login-actions")) {
-      setStatus("Saisissez vos identifiants...");
-    }
+    if (phaseRef.current === "login") {
+      // Phase 1: Login on psn.monlycee.net via Keycloak
+      if (url.includes("auth.monlycee.net") && url.includes("login-actions")) {
+        setStatus("Saisissez vos identifiants...");
+      }
 
-    // Detect OAuth callback = login succeeded
-    if (url.includes("/oauth2/callback")) {
-      sawCallbackRef.current = true;
-      setStatus("Connexion réussie, chargement...");
-      console.log("[nōto] Saw OAuth callback — login succeeded");
-    }
+      if (url.includes("/oauth2/callback")) {
+        sawCallbackRef.current = true;
+        setStatus("Connexion réussie !");
+        console.log("[nōto] OAuth callback — login done");
+      }
 
-    // After callback, landed on ENT homepage → fetch messages
-    if (
-      sawCallbackRef.current &&
-      !doneRef.current &&
-      url.startsWith(entProvider.apiBaseUrl) &&
-      !url.includes("/oauth2/callback") &&
-      !url.includes("/cas/init") &&
-      !url.includes("auth.monlycee.net")
-    ) {
-      doneRef.current = true;
-      setStatus("Récupération des messages...");
-      console.log("[nōto] On ENT homepage, fetching messages...");
+      // After login, when back on ENT homepage, navigate to webmail
+      if (
+        sawCallbackRef.current &&
+        url.startsWith(entProvider.apiBaseUrl) &&
+        !url.includes("/oauth2/callback") &&
+        !url.includes("/cas/init") &&
+        !url.includes("auth.monlycee.net")
+      ) {
+        phaseRef.current = "mail";
+        setStatus("Chargement de la messagerie...");
+        console.log("[nōto] ENT login done, navigating to webmail...");
 
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(`
-          (async function() {
-            try {
-              let messages = '[]';
-              let unreadCount = '0';
-              let userName = '';
+        // Navigate to the webmail — SSO will auto-authenticate
+        setTimeout(() => {
+          webViewRef.current?.injectJavaScript(`
+            window.location.href = 'https://web-mail.monlycee.net/main.html#inbox';
+            true;
+          `);
+        }, 1000);
+      }
+    } else if (phaseRef.current === "mail") {
+      // Phase 2: On webmail, intercept the token from /me?tok= request
+      if (url.includes("web-mail.monlycee.net/main.html") && !doneRef.current) {
+        doneRef.current = true;
+        setStatus("Récupération des messages...");
+        console.log("[nōto] On webmail, intercepting API calls...");
 
-              // Try user info
+        // Wait for the webmail to load and make its API calls,
+        // then monkey-patch XHR to capture the mail data
+        setTimeout(() => {
+          webViewRef.current?.injectJavaScript(`
+            (async function() {
               try {
-                const uRes = await fetch('/auth/oauth2/userinfo', {
-                  credentials: 'include',
-                  headers: { 'Accept': 'application/json' }
-                });
-                if (uRes.ok) {
-                  const u = await uRes.json();
-                  userName = u.username || u.login || u.firstName || '';
+                // The webmail app stores mail data after loading
+                // Wait a bit for XHR calls to complete
+                await new Promise(r => setTimeout(r, 3000));
+
+                // Try to read mail list from the DOM
+                const mailItems = document.querySelectorAll('.mail-item, .mail-row, [class*="mail"], tr[class*="unread"], tr[class*="read"]');
+
+                // Also try to intercept via the webmail's internal state
+                // Look for the getMailHeaderList response in the page
+                let messages = [];
+
+                // Parse visible mail items from DOM
+                const rows = document.querySelectorAll('table tbody tr, .mailList tr, [data-mail-id]');
+                if (rows.length > 0) {
+                  rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 3) {
+                      messages.push({
+                        from: cells[1] ? cells[1].textContent.trim() : '',
+                        subject: cells[2] ? cells[2].textContent.trim() : '',
+                        date: cells[cells.length-1] ? cells[cells.length-1].textContent.trim() : '',
+                      });
+                    }
+                  });
                 }
-              } catch(e) {}
 
-              // Fetch messages
-              try {
-                const mRes = await fetch('/zimbra/list?folder=%2FInbox&page=0&unread=false', {
-                  credentials: 'include',
-                  headers: { 'Accept': 'application/json' }
-                });
-                if (mRes.ok) messages = await mRes.text();
-              } catch(e) {}
+                // Get unread count from the page title or sidebar
+                const titleMatch = document.title.match(/\\((\\d+)/);
+                const unreadCount = titleMatch ? parseInt(titleMatch[1]) : 0;
 
-              // Fetch unread count
-              try {
-                const cRes = await fetch('/zimbra/count/INBOX?unread=true', {
-                  credentials: 'include',
-                  headers: { 'Accept': 'application/json' }
-                });
-                if (cRes.ok) unreadCount = await cRes.text();
-              } catch(e) {}
-
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'success',
-                userName: userName,
-                messages: messages,
-                unreadCount: unreadCount,
-              }));
-            } catch(e) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'error',
-                error: e.message
-              }));
-            }
-          })();
-          true;
-        `);
-      }, 2000);
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'mail_data',
+                  messages: JSON.stringify(messages),
+                  unreadCount: unreadCount,
+                  messageCount: messages.length,
+                  title: document.title,
+                }));
+              } catch(e) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'mail_error',
+                  error: e.message
+                }));
+              }
+            })();
+            true;
+          `);
+        }, 2000);
+      }
     }
   }
 
@@ -108,10 +123,10 @@ export default function EntLoginScreen() {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
-      if (data.type === "success") {
-        console.log("[nōto] ENT success! User:", data.userName);
-        console.log("[nōto] Messages:", String(data.messages).substring(0, 150));
-        console.log("[nōto] Unread:", data.unreadCount);
+      if (data.type === "mail_data") {
+        console.log("[nōto] Got mail data! Count:", data.messageCount, "Unread:", data.unreadCount);
+        console.log("[nōto] Title:", data.title);
+        console.log("[nōto] Messages:", String(data.messages).substring(0, 200));
 
         await saveEntSession({
           providerId: entProvider.id,
@@ -119,13 +134,14 @@ export default function EntLoginScreen() {
           apiBaseUrl: entProvider.apiBaseUrl,
           useCookieJar: true,
           cachedMessages: data.messages,
-          cachedUnreadCount: data.unreadCount,
+          cachedUnreadCount: String(data.unreadCount),
         });
 
+        console.log("[nōto] ENT session + messages saved");
         router.replace("/");
-      } else if (data.type === "error") {
-        console.warn("[nōto] ENT fetch error:", data.error);
-        // Save session anyway, navigate home
+      } else if (data.type === "mail_error") {
+        console.warn("[nōto] Mail fetch error:", data.error);
+        // Save session anyway
         await saveEntSession({
           providerId: entProvider.id,
           expiresAt: Date.now() + 24 * 60 * 60 * 1000,
