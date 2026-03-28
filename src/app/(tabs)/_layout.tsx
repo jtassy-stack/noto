@@ -53,16 +53,14 @@ export default function TabLayout() {
             n<Text style={{ color: theme.accent }}>ō</Text>to
             <Text style={{ color: theme.accent }}>.</Text>
           </Text>
-          {children.length === 0 && !loading && (
-            <Pressable
-              onPress={() => router.push("/auth/")}
-              style={[styles.addButton, { borderColor: theme.accent }]}
-            >
-              <Text style={[styles.addButtonText, { color: theme.accent }]}>
-                + Compte
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => router.push("/auth/")}
+            style={[styles.addButton, { borderColor: theme.accent }]}
+          >
+            <Text style={[styles.addButtonText, { color: theme.accent }]}>
+              +
+            </Text>
+          </Pressable>
         </View>
         {children.length > 0 && <ChildSwitcher />}
       </View>
