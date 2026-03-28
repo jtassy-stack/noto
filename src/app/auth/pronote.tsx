@@ -18,6 +18,7 @@ import {
   authenticateWithCredentials,
   mapChildren,
 } from "@/lib/pronote/client";
+import { saveAccount, saveChildren } from "@/lib/database/repository";
 
 export default function PronoteLoginScreen() {
   const theme = useTheme();
@@ -46,14 +47,19 @@ export default function PronoteLoginScreen() {
 
       const children = mapChildren(session);
 
-      // TODO: save account + children to SQLite
-      // TODO: navigate to dashboard with real data
+      // Save account to SQLite
+      await saveAccount({
+        id: session.information.id.toString(),
+        provider: "pronote",
+        displayName: session.user.name,
+        instanceUrl: instanceUrl.trim(),
+        createdAt: Date.now(),
+      });
 
-      Alert.alert(
-        "Connexion réussie",
-        `${children.length} enfant(s) trouvé(s) : ${children.map((c) => c.firstName).join(", ")}`,
-        [{ text: "OK", onPress: () => router.replace("/") }]
-      );
+      // Save children to SQLite
+      await saveChildren(children);
+
+      router.replace("/");
     } catch (e: unknown) {
       const message =
         e instanceof Error ? e.message : "Erreur de connexion inconnue";

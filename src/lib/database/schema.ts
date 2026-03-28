@@ -78,6 +78,11 @@ export const CREATE_TABLES = `
     is_read INTEGER NOT NULL DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS sync_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
   );

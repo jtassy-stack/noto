@@ -1,32 +1,38 @@
-import { useState, useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { Tabs } from "expo-router";
+import { useState, useMemo, useCallback } from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { Tabs, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useTheme } from "@/hooks/useTheme";
 import { ChildrenContext } from "@/hooks/useChildren";
 import { ChildSwitcher } from "@/components/ui/ChildSwitcher";
-import { Fonts, Spacing } from "@/constants/theme";
-import type { Child } from "@/types";
+import { useAccountData } from "@/hooks/useAccountData";
+import { Fonts, FontSize, Spacing } from "@/constants/theme";
 
 type TabIcon = React.ComponentProps<typeof Ionicons>["name"];
 
-// Mock data — will be replaced by database query
-const MOCK_CHILDREN: Child[] = [
-  { id: "1", accountId: "a1", firstName: "Emma", lastName: "Dupont", className: "3ème B" },
-  { id: "2", accountId: "a1", firstName: "Lucas", lastName: "Dupont", className: "5ème A" },
-];
-
 export default function TabLayout() {
   const theme = useTheme();
-  const [activeChildId, setActiveChildId] = useState(MOCK_CHILDREN[0]?.id ?? "");
+  const { children, loading, reload } = useAccountData();
+  const [activeChildId, setActiveChildId] = useState("");
+
+  // Reload data when tab gains focus (after login)
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload])
+  );
+
+  // Auto-select first child when data loads
+  const effectiveChildId = activeChildId || children[0]?.id || "";
 
   const childrenCtx = useMemo(
     () => ({
-      children: MOCK_CHILDREN,
-      activeChild: MOCK_CHILDREN.find((c) => c.id === activeChildId) ?? null,
+      children,
+      activeChild: children.find((c) => c.id === effectiveChildId) ?? null,
       setActiveChildId,
     }),
-    [activeChildId]
+    [children, effectiveChildId]
   );
 
   function tabIcon(name: TabIcon, focused: boolean) {
@@ -47,8 +53,18 @@ export default function TabLayout() {
             n<Text style={{ color: theme.accent }}>ō</Text>to
             <Text style={{ color: theme.accent }}>.</Text>
           </Text>
+          {children.length === 0 && !loading && (
+            <Pressable
+              onPress={() => router.push("/auth/")}
+              style={[styles.addButton, { borderColor: theme.accent }]}
+            >
+              <Text style={[styles.addButtonText, { color: theme.accent }]}>
+                + Compte
+              </Text>
+            </Pressable>
+          )}
         </View>
-        <ChildSwitcher />
+        {children.length > 0 && <ChildSwitcher />}
       </View>
     );
   }
@@ -112,11 +128,24 @@ const styles = StyleSheet.create({
     paddingTop: 54,
   },
   headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xs,
   },
   logo: {
     fontSize: 22,
     fontFamily: Fonts.pixel,
+  },
+  addButton: {
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  addButtonText: {
+    fontSize: FontSize.sm,
+    fontFamily: Fonts.medium,
   },
 });
