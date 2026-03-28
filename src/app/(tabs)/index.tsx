@@ -12,7 +12,7 @@ import {
 } from "@/lib/database/repository";
 import { gradeColor } from "@/constants/theme";
 import { getConversationCredentials } from "@/lib/ent/conversation";
-import { fetchBlogs, fetchTimeline, type BlogPost, type TimelineNotification } from "@/lib/ent/pcn-data";
+import { fetchTimeline, type TimelineNotification } from "@/lib/ent/pcn-data";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
 
 // --- ENT Dashboard (blog + timeline for PCN children) ---
@@ -20,7 +20,6 @@ import type { Grade, ScheduleEntry, Homework } from "@/types";
 function EntDashboard({ childName }: { childName: string }) {
   const theme = useTheme();
   const entRouter = router;
-  const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [timeline, setTimeline] = useState<TimelineNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,11 +29,7 @@ function EntDashboard({ childName }: { childName: string }) {
       if (!creds) { setLoading(false); return; }
 
       try {
-        const [b, t] = await Promise.all([
-          fetchBlogs(creds),
-          fetchTimeline(creds),
-        ]);
-        setBlogs(b);
+        const t = await fetchTimeline(creds);
         setTimeline(t);
       } catch (e) {
         console.warn("[nōto] ENT data error:", e);
@@ -65,40 +60,6 @@ function EntDashboard({ childName }: { childName: string }) {
       </Pressable>
 
       {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
-
-      {/* Blog section */}
-      {blogs.length > 0 && (
-        <>
-          <Text style={[entStyles.sectionLabel, { color: theme.textTertiary }]}>
-            BLOG DE LA CLASSE
-          </Text>
-          {blogs.slice(0, 5).map((b) => {
-            const date = b.modified ? new Date(b.modified) : null;
-            const dateStr = date
-              ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-              : "";
-            return (
-              <Pressable
-                key={b.id}
-                onPress={() => entRouter.push({
-                  pathname: "/detail",
-                  params: { id: b.id, title: b.title, date: dateStr, type: "blog" },
-                })}
-                style={[entStyles.blogCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              >
-                <View style={entStyles.blogContent}>
-                  <Text style={[entStyles.blogTitle, { color: theme.text }]} numberOfLines={2}>
-                    {b.title}
-                  </Text>
-                  <Text style={[entStyles.blogDate, { color: theme.textTertiary }]}>
-                    {dateStr}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </>
-      )}
 
       {/* Timeline / Fil d'actu */}
       {timeline.length > 0 && (
@@ -137,7 +98,7 @@ function EntDashboard({ childName }: { childName: string }) {
         </>
       )}
 
-      {!loading && blogs.length === 0 && timeline.length === 0 && (
+      {!loading && timeline.length === 0 && (
         <View style={entStyles.emptyState}>
           <Text style={[entStyles.emptyText, { color: theme.textTertiary }]}>
             Aucune actualité pour le moment.
