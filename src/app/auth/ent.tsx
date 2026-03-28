@@ -75,8 +75,12 @@ export default function EntLoginScreen() {
           cookies: data.cookies,
         });
 
-        console.log("[nōto] ENT session saved with cookies");
-        router.replace("/");
+        console.log("[nōto] ENT session saved with cookies, navigating home...");
+        // Use setTimeout to escape the WebView message handler context
+        setTimeout(() => {
+          console.log("[nōto] Calling router.replace...");
+          router.replace("/");
+        }, 100);
       }
     } catch (e) {
       console.warn("[nōto] WebView message parse error:", e);
