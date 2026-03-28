@@ -11,7 +11,150 @@ import {
   getHomeworkByChild,
 } from "@/lib/database/repository";
 import { gradeColor } from "@/constants/theme";
+import { getConversationCredentials } from "@/lib/ent/conversation";
+import { fetchBlogs, fetchTimeline, type BlogPost, type TimelineNotification } from "@/lib/ent/pcn-data";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
+
+// --- ENT Dashboard (blog + timeline for PCN children) ---
+
+function EntDashboard({ childName }: { childName: string }) {
+  const theme = useTheme();
+  const [blogs, setBlogs] = useState<BlogPost[]>([]);
+  const [timeline, setTimeline] = useState<TimelineNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const creds = await getConversationCredentials();
+      if (!creds) { setLoading(false); return; }
+
+      try {
+        const [b, t] = await Promise.all([
+          fetchBlogs(creds),
+          fetchTimeline(creds),
+        ]);
+        setBlogs(b);
+        setTimeline(t);
+      } catch (e) {
+        console.warn("[nōto] ENT data error:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [childName]);
+
+  const notifIcon: Record<string, string> = {
+    MESSAGERIE: "✉️",
+    BLOG: "📝",
+    SCHOOLBOOK: "📒",
+  };
+
+  return (
+    <ScrollView
+      style={[entStyles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={entStyles.content}
+    >
+      {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
+
+      {/* Blog section */}
+      {blogs.length > 0 && (
+        <>
+          <Text style={[entStyles.sectionLabel, { color: theme.textTertiary }]}>
+            BLOG DE LA CLASSE
+          </Text>
+          {blogs.slice(0, 5).map((b) => {
+            const date = b.modified ? new Date(b.modified) : null;
+            const dateStr = date
+              ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+              : "";
+            return (
+              <View
+                key={b.id}
+                style={[entStyles.blogCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <View style={entStyles.blogContent}>
+                  <Text style={[entStyles.blogTitle, { color: theme.text }]} numberOfLines={2}>
+                    {b.title}
+                  </Text>
+                  <Text style={[entStyles.blogDate, { color: theme.textTertiary }]}>
+                    {dateStr}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      {/* Timeline / Fil d'actu */}
+      {timeline.length > 0 && (
+        <>
+          <Text style={[entStyles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
+            FIL D'ACTUALITÉ
+          </Text>
+          {timeline.map((n) => {
+            const date = n.date ? new Date(n.date) : null;
+            const dateStr = date
+              ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+              : "";
+            const icon = notifIcon[n.type] || "📌";
+
+            return (
+              <View
+                key={n.id}
+                style={[entStyles.timelineRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Text style={entStyles.timelineIcon}>{icon}</Text>
+                <View style={entStyles.timelineContent}>
+                  <Text style={[entStyles.timelineMsg, { color: theme.text }]} numberOfLines={2}>
+                    {n.message}
+                  </Text>
+                  <Text style={[entStyles.timelineDate, { color: theme.textTertiary }]}>
+                    {dateStr}{n.sender ? ` · ${n.sender}` : ""}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      {!loading && blogs.length === 0 && timeline.length === 0 && (
+        <View style={entStyles.emptyState}>
+          <Text style={[entStyles.emptyText, { color: theme.textTertiary }]}>
+            Aucune actualité pour le moment.
+          </Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const entStyles = StyleSheet.create({
+  container: { flex: 1 },
+  content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
+  sectionLabel: { fontSize: 11, fontFamily: Fonts.medium, letterSpacing: 1.5, marginBottom: Spacing.sm },
+  blogCard: {
+    flexDirection: "row", padding: 14, borderRadius: BorderRadius.md,
+    borderWidth: 1, marginBottom: 6, gap: Spacing.sm,
+  },
+  blogContent: { flex: 1, gap: 4 },
+  blogTitle: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, lineHeight: 20 },
+  blogDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
+  timelineRow: {
+    flexDirection: "row", alignItems: "flex-start", padding: 12,
+    borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: 4, gap: Spacing.sm,
+  },
+  timelineIcon: { fontSize: 18, marginTop: 2 },
+  timelineContent: { flex: 1, gap: 3 },
+  timelineMsg: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 18 },
+  timelineDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
+  emptyState: { justifyContent: "center", alignItems: "center", paddingTop: Spacing.xxl },
+  emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center" },
+});
+
+// --- Pronote Dashboard ---
 
 export default function DashboardScreen() {
   const theme = useTheme();
@@ -82,33 +225,9 @@ export default function DashboardScreen() {
     );
   }
 
-  // ENT-only child (no Pronote data)
+  // ENT-only child — show blog + timeline from PCN
   if (activeChild.source === "ent" && !activeChild.hasGrades) {
-    return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.content}
-      >
-        <Text style={[styles.className, { color: theme.textSecondary }]}>
-          {activeChild.className || "ENT"}
-        </Text>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>
-            {activeChild.firstName}
-          </Text>
-          <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
-            Les notes et l'emploi du temps ne sont pas disponibles pour cet enfant.
-            Consultez l'onglet Messages pour la messagerie ENT.
-          </Text>
-        </View>
-        <Pressable
-          style={[styles.connectBtn, { backgroundColor: theme.accent, marginTop: Spacing.lg }]}
-          onPress={() => router.push("/auth/")}
-        >
-          <Text style={styles.connectBtnText}>Connecter Pronote</Text>
-        </Pressable>
-      </ScrollView>
-    );
+    return <EntDashboard childName={activeChild.firstName} />;
   }
 
   const recentGrades = grades.slice(0, 5);
