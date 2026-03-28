@@ -9,6 +9,8 @@ export interface EntSession {
   expiresAt: number;
   apiBaseUrl: string;
   useCookieJar: boolean;
+  cachedMessages?: string;
+  cachedUnreadCount?: string;
 }
 
 /**

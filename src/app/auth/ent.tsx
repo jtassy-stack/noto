@@ -16,6 +16,7 @@ export default function EntLoginScreen() {
   const [loading, setLoading] = useState(true);
   const sawCallbackRef = useRef(false);
   const doneRef = useRef(false);
+  const webViewRef = useRef<WebView>(null);
 
   function handleNavigationChange(event: WebViewNavigation) {
     const url = event.url;
@@ -26,8 +27,6 @@ export default function EntLoginScreen() {
       console.log("[nōto] Saw OAuth callback — login succeeded");
     }
 
-    // After callback, when we land on ENT homepage, session cookies are set
-    // sharedCookiesEnabled means fetch() will have them too
     if (
       sawCallbackRef.current &&
       !doneRef.current &&
@@ -37,47 +36,86 @@ export default function EntLoginScreen() {
       !url.includes("auth.monlycee.net")
     ) {
       doneRef.current = true;
-      console.log("[nōto] On ENT homepage after login, testing session...");
+      console.log("[nōto] On ENT homepage, fetching messages from WebView...");
 
-      // Wait for cookies to settle, then test the session via fetch()
-      setTimeout(async () => {
-        try {
-          // Test if fetch() now has the session cookies (shared from WebView)
-          const testUrl = entProvider.messagingType === "zimbra"
-            ? `${entProvider.apiBaseUrl}/zimbra/count/INBOX?unread=true`
-            : `${entProvider.apiBaseUrl}/conversation/count/INBOX?unread=true`;
+      // Fetch messages from INSIDE the WebView (it has the cookies)
+      setTimeout(() => {
+        const endpoint = entProvider.messagingType === "zimbra"
+          ? "/zimbra/list?folder=INBOX&page=0"
+          : "/conversation/api/folders/INBOX/messages?page=0&page_size=20";
 
-          const res = await fetch(testUrl, {
-            headers: { Accept: "application/json" },
-            credentials: "include",
-          });
+        webViewRef.current?.injectJavaScript(`
+          (async function() {
+            try {
+              // Get messages
+              const msgRes = await fetch('${entProvider.apiBaseUrl}${endpoint}', {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include'
+              });
+              const msgText = await msgRes.text();
 
-          const text = await res.text();
-          console.log("[nōto] Session test:", res.status, text.substring(0, 80));
+              // Get unread count
+              const countEndpoint = '${entProvider.messagingType === "zimbra" ? "/zimbra/count/INBOX?unread=true" : "/conversation/count/INBOX?unread=true"}';
+              const countRes = await fetch('${entProvider.apiBaseUrl}' + countEndpoint, {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'include'
+              });
+              const countText = await countRes.text();
 
-          const sessionWorks = res.ok && !text.includes("<!DOCTYPE");
-
-          await saveEntSession({
-            providerId: entProvider.id,
-            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-            apiBaseUrl: entProvider.apiBaseUrl,
-            useCookieJar: true, // Use RN's shared cookie jar, no manual cookies
-          });
-
-          console.log("[nōto] ENT session saved (cookie jar mode), API works:", sessionWorks);
-          router.replace("/");
-        } catch (e) {
-          console.warn("[nōto] Session test error:", e);
-          // Save session anyway — cookies might work for other endpoints
-          await saveEntSession({
-            providerId: entProvider.id,
-            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-            apiBaseUrl: entProvider.apiBaseUrl,
-            useCookieJar: true,
-          });
-          router.replace("/");
-        }
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'ent_data',
+                messages: msgText,
+                messagesStatus: msgRes.status,
+                unreadCount: countText,
+                countStatus: countRes.status,
+              }));
+            } catch(e) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'ent_error',
+                error: e.message
+              }));
+            }
+          })();
+          true;
+        `);
       }, 2000);
+    }
+  }
+
+  async function handleMessage(event: { nativeEvent: { data: string } }) {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+
+      if (data.type === "ent_data") {
+        console.log("[nōto] Messages status:", data.messagesStatus);
+        console.log("[nōto] Messages preview:", String(data.messages).substring(0, 150));
+        console.log("[nōto] Unread count:", data.unreadCount);
+
+        // Save the fetched messages to the session for the Messages tab
+        await saveEntSession({
+          providerId: entProvider.id,
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          apiBaseUrl: entProvider.apiBaseUrl,
+          useCookieJar: true,
+          cachedMessages: data.messages,
+          cachedUnreadCount: data.unreadCount,
+        });
+
+        console.log("[nōto] ENT session + messages saved");
+        router.replace("/");
+      } else if (data.type === "ent_error") {
+        console.warn("[nōto] ENT data fetch error:", data.error);
+        // Save session anyway
+        await saveEntSession({
+          providerId: entProvider.id,
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          apiBaseUrl: entProvider.apiBaseUrl,
+          useCookieJar: true,
+        });
+        router.replace("/");
+      }
+    } catch (e) {
+      console.warn("[nōto] WebView message parse error:", e);
     }
   }
 
@@ -92,9 +130,11 @@ export default function EntLoginScreen() {
         </View>
       )}
       <WebView
+        ref={webViewRef}
         source={{ uri: entProvider.apiBaseUrl }}
         onLoadEnd={() => setLoading(false)}
         onNavigationStateChange={handleNavigationChange}
+        onMessage={handleMessage}
         javaScriptEnabled
         domStorageEnabled
         thirdPartyCookiesEnabled
