@@ -3,31 +3,68 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Refre
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { getStoredSession } from "@/lib/ent/auth";
 import { getMailCredentials, fetchInbox, type MailMessage } from "@/lib/ent/mail";
+import { getConversationCredentials, fetchConversationInbox, type ConversationMessage } from "@/lib/ent/conversation";
+import { getEntProvider } from "@/lib/ent/providers";
+
+interface DisplayMessage {
+  id: string;
+  subject: string;
+  from: string;
+  date: string;
+  unread: boolean;
+  hasAttachment: boolean;
+}
 
 export default function MessagesScreen() {
   const theme = useTheme();
   const [connected, setConnected] = useState<boolean | null>(null);
-  const [messages, setMessages] = useState<MailMessage[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [unseen, setUnseen] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadMessages = useCallback(async () => {
-    const creds = await getMailCredentials();
-    if (!creds) {
+    // Check which messaging system is configured
+    const imapCreds = await getMailCredentials();
+    const convCreds = await getConversationCredentials();
+
+    if (!imapCreds && !convCreds) {
       setConnected(false);
       return;
     }
+
     setConnected(true);
     setLoading(true);
     setError(null);
 
     try {
-      const result = await fetchInbox(creds, 0);
-      setMessages(result.messages);
-      setUnseen(result.unseen);
-      console.log("[nōto] Loaded", result.messages.length, "messages,", result.unseen, "unread");
+      if (imapCreds) {
+        // Mon Lycée: IMAP via proxy
+        const result = await fetchInbox(imapCreds, 0);
+        setMessages(result.messages.map((m) => ({
+          id: String(m.id),
+          subject: m.subject,
+          from: m.from,
+          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
+          unread: m.unread,
+          hasAttachment: m.hasAttachment,
+        })));
+        setUnseen(result.unseen);
+      } else if (convCreds) {
+        // PCN: ENTCore Conversation API
+        const result = await fetchConversationInbox(convCreds, 0);
+        setMessages(result.messages.map((m) => ({
+          id: m.id,
+          subject: m.subject,
+          from: m.from,
+          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
+          unread: m.unread,
+          hasAttachment: m.hasAttachment,
+        })));
+        setUnseen(result.count);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur";
       setError(msg);
@@ -84,48 +121,37 @@ export default function MessagesScreen() {
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>Aucun message.</Text>
       )}
 
-      {messages.map((msg) => {
-        const date = msg.date ? new Date(msg.date) : null;
-        const dateStr = date
-          ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-          : "";
-
-        return (
-          <View
-            key={msg.id}
-            style={[
-              styles.messageRow,
-              {
-                backgroundColor: theme.surface,
-                borderColor: theme.border,
-                opacity: msg.unread ? 1 : 0.7,
-              },
-            ]}
-          >
-            {msg.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
-            <View style={styles.messageContent}>
-              <View style={styles.messageHeader}>
-                <Text
-                  style={[styles.messageFrom, { color: theme.text, fontFamily: msg.unread ? Fonts.semiBold : Fonts.regular }]}
-                  numberOfLines={1}
-                >
-                  {msg.from}
-                </Text>
-                <Text style={[styles.messageDate, { color: theme.textTertiary }]}>{dateStr}</Text>
-              </View>
+      {messages.map((msg) => (
+        <View
+          key={msg.id}
+          style={[
+            styles.messageRow,
+            { backgroundColor: theme.surface, borderColor: theme.border, opacity: msg.unread ? 1 : 0.7 },
+          ]}
+        >
+          {msg.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
+          <View style={styles.messageContent}>
+            <View style={styles.messageHeader}>
               <Text
-                style={[styles.messageSubject, { color: msg.unread ? theme.text : theme.textSecondary, fontFamily: msg.unread ? Fonts.medium : Fonts.regular }]}
+                style={[styles.messageFrom, { color: theme.text, fontFamily: msg.unread ? Fonts.semiBold : Fonts.regular }]}
                 numberOfLines={1}
               >
-                {msg.subject}
+                {msg.from}
               </Text>
-              {msg.hasAttachment && (
-                <Text style={[styles.attachment, { color: theme.textTertiary }]}>📎 Pièce jointe</Text>
-              )}
+              <Text style={[styles.messageDate, { color: theme.textTertiary }]}>{msg.date}</Text>
             </View>
+            <Text
+              style={[styles.messageSubject, { color: msg.unread ? theme.text : theme.textSecondary, fontFamily: msg.unread ? Fonts.medium : Fonts.regular }]}
+              numberOfLines={1}
+            >
+              {msg.subject}
+            </Text>
+            {msg.hasAttachment && (
+              <Text style={[styles.attachment, { color: theme.textTertiary }]}>📎 Pièce jointe</Text>
+            )}
           </View>
-        );
-      })}
+        </View>
+      ))}
     </ScrollView>
   );
 }

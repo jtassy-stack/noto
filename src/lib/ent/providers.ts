@@ -45,13 +45,12 @@ export const ENT_PROVIDERS: EntProvider[] = [
     description: "Collèges Paris",
     region: "Paris",
     icon: "🗼",
-    // PCN uses the same Edifice/ENTCore platform
-    authBaseUrl: "https://auth.parisclassenumerique.fr",
-    realm: "PCN",
-    clientId: "pcn-web",
-    apiBaseUrl: "https://parisclassenumerique.fr",
+    authBaseUrl: "https://ent.parisclassenumerique.fr",
+    realm: "",
+    clientId: "",
+    apiBaseUrl: "https://ent.parisclassenumerique.fr",
     messagingType: "conversation",
-    casBaseUrl: "https://parisclassenumerique.fr",
+    casBaseUrl: "https://ent.parisclassenumerique.fr",
     color: "#E30613",
   },
 ];
