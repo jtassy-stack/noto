@@ -78,8 +78,12 @@ function EntDashboard({ childName }: { childName: string }) {
               ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
               : "";
             return (
-              <View
+              <Pressable
                 key={b.id}
+                onPress={() => entRouter.push({
+                  pathname: "/detail",
+                  params: { id: b.id, title: b.title, date: dateStr, type: "blog" },
+                })}
                 style={[entStyles.blogCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
                 <View style={entStyles.blogContent}>
@@ -90,7 +94,7 @@ function EntDashboard({ childName }: { childName: string }) {
                     {dateStr}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </>
@@ -110,8 +114,12 @@ function EntDashboard({ childName }: { childName: string }) {
             const icon = notifIcon[n.type] || "📌";
 
             return (
-              <View
+              <Pressable
                 key={n.id}
+                onPress={() => entRouter.push({
+                  pathname: "/detail",
+                  params: { id: n.id, title: n.message, from: n.sender ?? "", date: dateStr, type: "timeline", body: n.message },
+                })}
                 style={[entStyles.timelineRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
                 <Text style={entStyles.timelineIcon}>{icon}</Text>
@@ -123,7 +131,7 @@ function EntDashboard({ childName }: { childName: string }) {
                     {dateStr}{n.sender ? ` · ${n.sender}` : ""}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </>

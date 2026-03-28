@@ -69,6 +69,12 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="detail"
+          options={{
+            title: "Détail",
+          }}
+        />
+        <Stack.Screen
           name="message"
           options={{
             title: "Message",
