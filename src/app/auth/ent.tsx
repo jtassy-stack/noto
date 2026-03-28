@@ -79,22 +79,24 @@ export default function EntLoginScreen() {
                 // Look for the getMailHeaderList response in the page
                 let messages = [];
 
-                // Parse visible mail items from DOM
-                const rows = document.querySelectorAll('table tbody tr, .mailList tr, [data-mail-id]');
-                if (rows.length > 0) {
-                  rows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length >= 3) {
-                      messages.push({
-                        from: cells[1] ? cells[1].textContent.trim() : '',
-                        subject: cells[2] ? cells[2].textContent.trim() : '',
-                        date: cells[cells.length-1] ? cells[cells.length-1].textContent.trim() : '',
-                      });
-                    }
-                  });
-                }
+                // Parse mail rows: td.from (col 2), td.subject (col 5), td.received (col 9)
+                const rows = document.querySelectorAll('table tbody tr');
+                rows.forEach((row, i) => {
+                  const fromCell = row.querySelector('td.from');
+                  const subjectCell = row.querySelector('td.subject');
+                  const dateCell = row.querySelector('td.received');
+                  if (fromCell && subjectCell) {
+                    messages.push({
+                      id: 'msg-' + i,
+                      from: fromCell.textContent.trim(),
+                      subject: subjectCell.textContent.trim(),
+                      date: dateCell ? dateCell.textContent.trim() : '',
+                      unread: row.classList.contains('new'),
+                      hasAttachment: !!row.querySelector('td.attachment .icon-attachment'),
+                    });
+                  }
+                });
 
-                // Get unread count from the page title or sidebar
                 const titleMatch = document.title.match(/\\((\\d+)/);
                 const unreadCount = titleMatch ? parseInt(titleMatch[1]) : 0;
 
@@ -138,6 +140,10 @@ export default function EntLoginScreen() {
         });
 
         console.log("[nōto] ENT session + messages saved");
+        // Use router.dismissAll() to close the modal stack, then navigate
+        if (router.canDismiss()) {
+          router.dismissAll();
+        }
         router.replace("/");
       } else if (data.type === "mail_error") {
         console.warn("[nōto] Mail fetch error:", data.error);

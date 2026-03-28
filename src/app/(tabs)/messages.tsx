@@ -19,11 +19,11 @@ function parseMessages(raw: string | undefined): EntMessage[] {
   try {
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return [];
-    return arr.map((msg: Record<string, unknown>) => ({
-      id: String(msg.id ?? ""),
+    return arr.map((msg: Record<string, unknown>, i: number) => ({
+      id: String(msg.id ?? `msg-${i}`),
       subject: String(msg.subject ?? "(sans objet)"),
-      from: String(msg.from ?? (Array.isArray(msg.displayNames) ? (msg.displayNames as string[][])?.[0]?.[1] : undefined) ?? "Inconnu"),
-      date: new Date(Number(msg.date) || Date.now()).toISOString(),
+      from: String(msg.from ?? "Inconnu"),
+      date: String(msg.date ?? ""),
       unread: Boolean(msg.unread),
       hasAttachment: Boolean(msg.hasAttachment),
     }));
@@ -93,11 +93,7 @@ export default function MessagesScreen() {
       )}
 
       {messages.map((msg) => {
-        const date = new Date(msg.date);
-        const dateStr = date.toLocaleDateString("fr-FR", {
-          day: "numeric",
-          month: "short",
-        });
+        const dateStr = msg.date || "";
 
         return (
           <View
