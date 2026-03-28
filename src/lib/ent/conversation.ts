@@ -234,13 +234,20 @@ export async function fetchConversationMessage(
   creds: ConversationCredentials,
   messageId: string
 ): Promise<ConversationMessage> {
-  // Force fresh login for message detail (body needs active session)
+  // Force fresh login
   activeSession = null;
-  const msgRes = await pcnFetch(creds, `/conversation/message/${messageId}`);
+  await doLogin(creds);
 
+  console.log("[nōto] Fetching message:", messageId);
+  const msgRes = await fetch(`${creds.apiBaseUrl}/conversation/message/${messageId}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  console.log("[nōto] Message response:", msgRes.status, msgRes.headers.get("content-type"));
   const text = await msgRes.text();
+  console.log("[nōto] Message body preview:", text.substring(0, 150));
+
   if (!msgRes.ok || text.includes("<!DOCTYPE")) {
-    console.warn("[nōto] Message fetch failed:", msgRes.status, text.substring(0, 100));
     throw new Error(`Erreur message (${msgRes.status})`);
   }
 
