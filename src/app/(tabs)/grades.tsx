@@ -15,7 +15,7 @@ import type { Grade } from "@/types";
 function EntPhotoGallery() {
   const theme = useTheme();
   const { activeChild } = useChildren();
-  const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number; isFav: boolean }>>([]);
+  const [blogs, setBlogs] = useState<Array<{ id: string; title: string; postCount: number; isFav: boolean; isTeacher: boolean }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,21 +77,34 @@ function EntPhotoGallery() {
             })
           : blogsWithMeta;
 
-        // Load favorites and merge
+        // Load existing favorites
         const favs = await getFavoritesByType("blog", activeChild?.id);
         const favIds = new Set(favs.map(f => f.id));
 
-        // Add favorited blogs that weren't in filtered list
-        const favBlogs = blogsWithMeta
+        // Auto-favorite teacher's blogs (filtered ones)
+        for (const blog of filtered) {
+          if (!favIds.has(blog.id)) {
+            await addFavorite(blog.id, "blog", blog.title, activeChild?.id);
+            favIds.add(blog.id);
+            console.log("[nōto] Auto-favorited teacher blog:", blog.title);
+          }
+        }
+
+        // Add manually favorited blogs that aren't from the teacher
+        const extraFavBlogs = blogsWithMeta
           .filter(b => favIds.has(b.id) && !filtered.some(f => f.id === b.id))
-          .map(b => ({ ...b, isFav: true }));
+          .map(b => ({ ...b, isFav: true, isTeacher: false }));
 
         const allBlogs = [
-          ...filtered.map(b => ({ ...b, isFav: favIds.has(b.id) })),
-          ...favBlogs,
-        ].sort((a, b) => (a.isFav === b.isFav ? 0 : a.isFav ? -1 : 1)); // Favs first
+          ...filtered.map(b => ({ ...b, isFav: true, isTeacher: true })),
+          ...extraFavBlogs,
+          // Also show non-favorited blogs at the bottom for discovery
+          ...blogsWithMeta
+            .filter(b => !filtered.some(f => f.id === b.id) && !favIds.has(b.id))
+            .map(b => ({ ...b, isFav: false, isTeacher: false })),
+        ];
 
-        console.log("[nōto] Blogs:", blogsWithMeta.length, "total →", allBlogs.length, "for", activeChild?.firstName, "(teacher:", teacherLastName, ", favs:", favBlogs.length, ")");
+        console.log("[nōto] Blogs:", blogsWithMeta.length, "total →", filtered.length, "teacher,", extraFavBlogs.length, "extra favs,", "for", activeChild?.firstName);
         setBlogs(allBlogs);
       } catch (e) {
         console.warn("[nōto] Blog list error:", e);
@@ -123,22 +136,28 @@ function EntPhotoGallery() {
             <Text style={[galleryStyles.albumTitle, { color: theme.text }]}>{blog.title}</Text>
             <Text style={[galleryStyles.albumCount, { color: theme.textTertiary }]}>
               {blog.postCount} article{blog.postCount > 1 ? "s" : ""}
+              {blog.isTeacher ? "  ·  Prof de la classe" : ""}
             </Text>
           </Pressable>
-          <Pressable
-            onPress={async () => {
-              if (blog.isFav) {
-                await removeFavorite(blog.id);
-              } else {
-                await addFavorite(blog.id, "blog", blog.title, activeChild?.id);
-              }
-              setBlogs((prev) => prev.map((b) => b.id === blog.id ? { ...b, isFav: !b.isFav } : b)
-                .sort((a, b) => (a.isFav === b.isFav ? 0 : a.isFav ? -1 : 1)));
-            }}
-            style={galleryStyles.favBtn}
-          >
-            <Text style={{ fontSize: 20 }}>{blog.isFav ? "⭐" : "☆"}</Text>
-          </Pressable>
+          {!blog.isTeacher && (
+            <Pressable
+              onPress={async () => {
+                if (blog.isFav) {
+                  await removeFavorite(blog.id);
+                  setBlogs((prev) => prev.map((b) => b.id === blog.id ? { ...b, isFav: false } : b));
+                } else {
+                  await addFavorite(blog.id, "blog", blog.title, activeChild?.id);
+                  setBlogs((prev) => prev.map((b) => b.id === blog.id ? { ...b, isFav: true } : b));
+                }
+              }}
+              style={galleryStyles.favBtn}
+            >
+              <Text style={{ fontSize: 20 }}>{blog.isFav ? "⭐" : "☆"}</Text>
+            </Pressable>
+          )}
+          {blog.isTeacher && (
+            <Text style={galleryStyles.teacherBadge}>⭐</Text>
+          )}
         </View>
       ))}
     </ScrollView>
@@ -155,6 +174,7 @@ const galleryStyles = StyleSheet.create({
   albumTitle: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold },
   albumCount: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
   favBtn: { padding: Spacing.md, justifyContent: "center", alignItems: "center" },
+  teacherBadge: { fontSize: 20, paddingHorizontal: Spacing.md },
 });
 
 // --- Grades screen ---
