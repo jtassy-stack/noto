@@ -50,7 +50,6 @@ export default function AbsenceScreen() {
     setSending(true);
 
     try {
-      // Build parent name from child's last name
       const parentName = activeChild.lastName
         ? `M./Mme ${activeChild.lastName}`
         : "Le parent";
@@ -63,17 +62,25 @@ export default function AbsenceScreen() {
         parentName,
       };
 
-      await sendAbsenceNotification(creds, req);
+      // DEV MODE: dry-run — find recipients but don't send
+      // TODO: remove dry-run when ready for production
+      const { findRecipientsOnly } = await import("@/lib/ent/absence");
+      const recipients = await findRecipientsOnly(creds, activeChild);
+
+      const motifText = motif === "autre" && motifDetail ? motifDetail : MOTIF_LABELS[motif];
 
       Alert.alert(
-        "Absence signalée ✅",
-        `Le message a été envoyé pour ${activeChild.firstName}.`,
+        "🧪 Mode test — Aperçu",
+        `Objet : Absence de ${activeChild.firstName} - ${activeChild.className} - ${formatDate(selectedDate)}\n\n` +
+        `Motif : ${motifText}\n\n` +
+        `Destinataires (${recipients.length}) :\n${recipients.map(r => `• ${r}`).join("\n")}\n\n` +
+        `⚠️ Message NON envoyé (mode dev)`,
         [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur inconnue";
       Alert.alert("Erreur", msg);
-      console.warn("[nōto] Absence send error:", e);
+      console.warn("[nōto] Absence error:", e);
     } finally {
       setSending(false);
     }

@@ -140,6 +140,73 @@ function extractRecipients(
   return [...new Set(recipients)];
 }
 
+/**
+ * Dry-run: find recipients and return their names (for dev/testing).
+ */
+export async function findRecipientsOnly(
+  creds: ConversationCredentials,
+  child: Child
+): Promise<string[]> {
+  await ensureLogin(creds);
+
+  const res = await fetch(`${creds.apiBaseUrl}/conversation/visible`, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!res.ok) return ["(impossible de charger les destinataires)"];
+
+  const data = await res.json() as {
+    groups?: Array<{ id: string; name: string }>;
+    users?: Array<{ id: string; displayName: string; profile?: string }>;
+  };
+
+  const groups = data.groups ?? [];
+  const users = data.users ?? [];
+  const names: string[] = [];
+
+  const classParts = child.className.split(" - ");
+  const classShort = classParts.length > 2
+    ? classParts.slice(0, -1).join(" - ").trim()
+    : classParts[0]?.trim() ?? "";
+
+  // Teacher group
+  for (const g of groups) {
+    if (g.name.includes("Enseignants") && classShort && g.name.includes(classShort)) {
+      names.push(`👥 ${g.name}`);
+    }
+  }
+
+  // Individual teacher
+  const teacherName = classParts[classParts.length - 1]?.replace(/^(M\.|Mme|M)\s*/i, "").trim();
+  if (teacherName) {
+    const lastName = teacherName.split(/\s+/).pop()?.toUpperCase() ?? "";
+    for (const u of users) {
+      if (u.profile === "Teacher" && lastName && u.displayName.toUpperCase().includes(lastName)) {
+        names.push(`👤 ${u.displayName} (enseignant)`);
+      }
+    }
+  }
+
+  // Director
+  for (const u of users) {
+    if (u.displayName.toLowerCase().includes("direct") || u.displayName.toLowerCase().includes("princip")) {
+      names.push(`👤 ${u.displayName} (direction)`);
+    }
+  }
+
+  if (names.length === 0) {
+    // Fallback
+    for (const g of groups) {
+      if (g.name.includes("Enseignants")) {
+        names.push(`👥 ${g.name} (fallback)`);
+        break;
+      }
+    }
+  }
+
+  return names.length > 0 ? names : ["Aucun destinataire trouvé"];
+}
+
 export async function sendAbsenceNotification(
   creds: ConversationCredentials,
   req: AbsenceRequest
