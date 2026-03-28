@@ -205,9 +205,9 @@ export default function DashboardScreen() {
     load();
   }, [activeChild]);
 
-  // Auto-sync on first load if no data
+  // Auto-sync on first load if no data (Pronote children only)
   useEffect(() => {
-    if (loaded && activeChild && grades.length === 0 && schedule.length === 0) {
+    if (loaded && activeChild && activeChild.source !== "ent" && grades.length === 0 && schedule.length === 0) {
       sync(activeChild.id).then(() => {
         // Reload after sync
         const today = new Date().toISOString().split("T")[0]!;
