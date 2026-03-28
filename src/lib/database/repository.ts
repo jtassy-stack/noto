@@ -67,6 +67,12 @@ export async function getChildren(): Promise<Child[]> {
     lastName: r.last_name,
     className: r.class_name,
     avatarUri: r.avatar_uri ?? undefined,
+    // Determine source and capabilities from account ID
+    source: r.account_id.startsWith("ent-") ? "ent" as const : "pronote" as const,
+    hasGrades: !r.account_id.startsWith("ent-"),
+    hasSchedule: !r.account_id.startsWith("ent-"),
+    hasHomework: !r.account_id.startsWith("ent-"),
+    hasMessages: r.account_id.startsWith("ent-"),
   }));
 }
 

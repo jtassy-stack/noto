@@ -14,6 +14,8 @@ export interface Account {
 
 // --- Child / Student ---
 
+export type ChildSource = "pronote" | "ent";
+
 export interface Child {
   id: string;
   accountId: string;
@@ -21,6 +23,11 @@ export interface Child {
   lastName: string;
   className: string;
   avatarUri?: string;
+  source?: ChildSource;
+  hasGrades?: boolean;
+  hasSchedule?: boolean;
+  hasHomework?: boolean;
+  hasMessages?: boolean;
 }
 
 // --- Grades ---

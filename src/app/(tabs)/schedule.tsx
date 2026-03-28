@@ -34,11 +34,11 @@ export default function ScheduleScreen() {
     ).then(setSchedule);
   }, [activeChild, dayOffset]);
 
-  if (!activeChild) {
+  if (!activeChild || (activeChild.source === "ent" && !activeChild.hasSchedule)) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          Connectez un compte.
+          {!activeChild ? "Connectez un compte." : "L'emploi du temps n'est pas disponible pour cet enfant.\nConnectez Pronote pour y accéder."}
         </Text>
       </View>
     );

@@ -70,7 +70,7 @@ export default function DashboardScreen() {
           Bienvenue sur nōto.
         </Text>
         <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-          Connectez votre compte Pronote pour voir les données de votre enfant.
+          Connectez votre compte Pronote ou ENT pour commencer.
         </Text>
         <Pressable
           style={[styles.connectBtn, { backgroundColor: theme.accent }]}
@@ -79,6 +79,35 @@ export default function DashboardScreen() {
           <Text style={styles.connectBtnText}>Connecter un compte</Text>
         </Pressable>
       </View>
+    );
+  }
+
+  // ENT-only child (no Pronote data)
+  if (activeChild.source === "ent" && !activeChild.hasGrades) {
+    return (
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={[styles.className, { color: theme.textSecondary }]}>
+          {activeChild.className || "ENT"}
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>
+            {activeChild.firstName}
+          </Text>
+          <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+            Les notes et l'emploi du temps ne sont pas disponibles pour cet enfant.
+            Consultez l'onglet Messages pour la messagerie ENT.
+          </Text>
+        </View>
+        <Pressable
+          style={[styles.connectBtn, { backgroundColor: theme.accent, marginTop: Spacing.lg }]}
+          onPress={() => router.push("/auth/")}
+        >
+          <Text style={styles.connectBtnText}>Connecter Pronote</Text>
+        </Pressable>
+      </ScrollView>
     );
   }
 
@@ -329,5 +358,20 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontFamily: Fonts.semiBold,
     color: "#FFFFFF",
+  },
+  card: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    borderWidth: 1,
+  },
+  cardTitle: {
+    fontSize: FontSize.lg,
+    fontFamily: Fonts.semiBold,
+    marginBottom: Spacing.sm,
+  },
+  cardBody: {
+    fontSize: FontSize.md,
+    fontFamily: Fonts.regular,
+    lineHeight: 22,
   },
 });

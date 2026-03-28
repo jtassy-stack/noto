@@ -23,11 +23,21 @@ export default function GradesScreen() {
     getGradesByChild(activeChild.id).then(setGrades);
   }, [activeChild]);
 
-  if (!activeChild || grades.length === 0) {
+  if (!activeChild || (activeChild.source === "ent" && !activeChild.hasGrades)) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          {activeChild ? "Aucune note pour le moment. Synchronisez depuis l'accueil." : "Connectez un compte."}
+          {!activeChild ? "Connectez un compte." : "Les notes ne sont pas disponibles pour cet enfant.\nConnectez Pronote pour accéder aux notes."}
+        </Text>
+      </View>
+    );
+  }
+
+  if (grades.length === 0) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          Aucune note pour le moment. Synchronisez depuis l'accueil.
         </Text>
       </View>
     );

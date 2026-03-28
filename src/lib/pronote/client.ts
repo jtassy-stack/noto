@@ -208,6 +208,11 @@ export function mapChildren(session: pronote.SessionHandle): Child[] {
       lastName,
       className: r.className ?? "",
       avatarUri: r.profilePicture?.url,
+      source: "pronote" as const,
+      hasGrades: true,
+      hasSchedule: true,
+      hasHomework: true,
+      hasMessages: false,
     };
   });
 }

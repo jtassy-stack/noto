@@ -131,7 +131,12 @@ export async function fetchENTChildren(
       accountId: `ent-${provider.id}`,
       firstName,
       lastName,
-      className: "", // PCN doesn't provide class in this endpoint
+      className: "",
+      source: "ent",
+      hasGrades: false,
+      hasSchedule: false,
+      hasHomework: false,
+      hasMessages: true,
     });
   }
 

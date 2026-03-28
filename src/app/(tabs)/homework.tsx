@@ -17,11 +17,21 @@ export default function HomeworkScreen() {
     getHomeworkByChild(activeChild.id, today).then(setHomework);
   }, [activeChild]);
 
-  if (!activeChild || homework.length === 0) {
+  if (!activeChild || (activeChild.source === "ent" && !activeChild.hasHomework)) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          {activeChild ? "Aucun devoir à venir." : "Connectez un compte."}
+          {!activeChild ? "Connectez un compte." : "Les devoirs ne sont pas disponibles pour cet enfant.\nConnectez Pronote pour y accéder."}
+        </Text>
+      </View>
+    );
+  }
+
+  if (homework.length === 0) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          Aucun devoir à venir.
         </Text>
       </View>
     );
