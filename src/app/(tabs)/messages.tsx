@@ -123,7 +123,15 @@ export default function MessagesScreen() {
       {/* Absence button for ENT children */}
       {activeChild?.source === "ent" && (
         <Pressable
-          onPress={() => router.push("/absence")}
+          onPress={() => router.push({
+            pathname: "/absence",
+            params: {
+              childId: activeChild.id,
+              childFirstName: activeChild.firstName,
+              childLastName: activeChild.lastName,
+              childClassName: activeChild.className,
+            },
+          })}
           style={[styles.absenceBtn, { backgroundColor: theme.crimson }]}
         >
           <Text style={styles.absenceBtnText}>🏥 Signaler une absence</Text>

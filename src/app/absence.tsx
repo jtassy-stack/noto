@@ -3,17 +3,16 @@ import {
   View, Text, TextInput, Pressable, StyleSheet,
   ActivityIndicator, ScrollView, Alert,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { useChildren } from "@/hooks/useChildren";
 import { getConversationCredentials } from "@/lib/ent/conversation";
 import {
-  sendAbsenceNotification,
   MOTIF_LABELS,
   type AbsenceMotif,
   type AbsenceRequest,
 } from "@/lib/ent/absence";
+import type { Child } from "@/types";
 
 const MOTIFS: AbsenceMotif[] = ["maladie", "rdv_medical", "raison_familiale", "autre"];
 
@@ -28,7 +27,21 @@ function formatDate(d: Date): string {
 
 export default function AbsenceScreen() {
   const theme = useTheme();
-  const { activeChild } = useChildren();
+  const { childId, childFirstName, childLastName, childClassName } = useLocalSearchParams<{
+    childId: string;
+    childFirstName: string;
+    childLastName: string;
+    childClassName: string;
+  }>();
+
+  const activeChild: Child | null = childId ? {
+    id: childId,
+    accountId: "",
+    firstName: childFirstName ?? "",
+    lastName: childLastName ?? "",
+    className: childClassName ?? "",
+    source: "ent",
+  } : null;
 
   const [motif, setMotif] = useState<AbsenceMotif>("maladie");
   const [motifDetail, setMotifDetail] = useState("");
