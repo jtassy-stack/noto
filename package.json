@@ -25,6 +25,7 @@
     "expo-secure-store": "55.0.10-canary-20260327-0789fbc",
     "expo-sqlite": "55.0.12-canary-20260327-0789fbc",
     "expo-status-bar": "55.0.5-canary-20260327-0789fbc",
+    "pawnote": "^1.6.2",
     "react": "19.2.0",
     "react-native": "0.83.4",
     "react-native-gesture-handler": "~2.30.0",

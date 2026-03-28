@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
+import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import type { Provider } from "@/types";
@@ -12,8 +13,15 @@ const PROVIDERS: { key: Provider; label: string; description: string; icon: stri
 export default function AuthScreen() {
   const theme = useTheme();
 
-  const handleSelect = (_provider: Provider) => {
-    // TODO: navigate to provider-specific login form
+  const handleSelect = (provider: Provider) => {
+    if (provider === "pronote") {
+      router.push("/auth/pronote");
+    } else {
+      Alert.alert(
+        "Bientôt disponible",
+        `Le support ${provider === "ecoledirecte" ? "ÉcoleDirecte" : "Skolengo"} arrive dans une prochaine version.`
+      );
+    }
   };
 
   return (
