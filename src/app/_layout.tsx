@@ -68,6 +68,13 @@ export default function RootLayout() {
             title: "Mon Lycée",
           }}
         />
+        <Stack.Screen
+          name="absence"
+          options={{
+            title: "Signaler une absence",
+            presentation: "modal",
+          }}
+        />
       </Stack>
     </>
   );

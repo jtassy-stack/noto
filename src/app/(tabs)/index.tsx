@@ -19,6 +19,7 @@ import type { Grade, ScheduleEntry, Homework } from "@/types";
 
 function EntDashboard({ childName }: { childName: string }) {
   const theme = useTheme();
+  const entRouter = router;
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [timeline, setTimeline] = useState<TimelineNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,14 @@ function EntDashboard({ childName }: { childName: string }) {
       style={[entStyles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={entStyles.content}
     >
+      {/* Quick action: absence */}
+      <Pressable
+        onPress={() => entRouter.push("/absence")}
+        style={[entStyles.absenceBtn, { backgroundColor: theme.crimson }]}
+      >
+        <Text style={entStyles.absenceBtnText}>🏥 Signaler une absence</Text>
+      </Pressable>
+
       {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
 
       {/* Blog section */}
@@ -150,6 +159,8 @@ const entStyles = StyleSheet.create({
   timelineContent: { flex: 1, gap: 3 },
   timelineMsg: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 18 },
   timelineDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
+  absenceBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: "center", marginBottom: Spacing.lg },
+  absenceBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
   emptyState: { justifyContent: "center", alignItems: "center", paddingTop: Spacing.xxl },
   emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center" },
 });
