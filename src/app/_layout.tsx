@@ -69,6 +69,12 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="message"
+          options={{
+            title: "Message",
+          }}
+        />
+        <Stack.Screen
           name="absence"
           options={{
             title: "Signaler une absence",

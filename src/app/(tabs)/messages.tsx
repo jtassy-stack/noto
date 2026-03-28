@@ -133,8 +133,12 @@ export default function MessagesScreen() {
       )}
 
       {messages.map((msg) => (
-        <View
+        <Pressable
           key={msg.id}
+          onPress={() => router.push({
+            pathname: "/message",
+            params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date },
+          })}
           style={[
             styles.messageRow,
             { backgroundColor: theme.surface, borderColor: theme.border, opacity: msg.unread ? 1 : 0.7 },
@@ -161,7 +165,7 @@ export default function MessagesScreen() {
               <Text style={[styles.attachment, { color: theme.textTertiary }]}>📎 Pièce jointe</Text>
             )}
           </View>
-        </View>
+        </Pressable>
       ))}
     </ScrollView>
   );
