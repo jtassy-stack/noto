@@ -14,6 +14,7 @@ import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { authenticateWithQRCode, mapChildren } from "@/lib/pronote/client";
 import { saveAccount, saveChildren } from "@/lib/database/repository";
+import { syncWithSession } from "@/lib/pronote/sync";
 
 type Step = "choose" | "camera" | "pin" | "loading";
 
@@ -99,6 +100,10 @@ export default function QRCodeLoginScreen() {
       });
 
       await saveChildren(children);
+
+      // Sync data NOW while session is alive
+      await syncWithSession(session);
+
       router.replace("/");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";

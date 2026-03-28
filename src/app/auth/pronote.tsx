@@ -19,6 +19,7 @@ import {
   mapChildren,
 } from "@/lib/pronote/client";
 import { saveAccount, saveChildren } from "@/lib/database/repository";
+import { syncWithSession } from "@/lib/pronote/sync";
 
 export default function PronoteLoginScreen() {
   const theme = useTheme();
@@ -58,6 +59,9 @@ export default function PronoteLoginScreen() {
 
       // Save children to SQLite
       await saveChildren(children);
+
+      // Sync data NOW while session is alive
+      await syncWithSession(session);
 
       router.replace("/");
     } catch (e: unknown) {
