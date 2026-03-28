@@ -80,21 +80,11 @@ export default function DetailScreen() {
             }
           }
         } else if (type === "blogpost" && blogId && postId) {
-          // Fetch individual blog post: /blog/post/{blogId}/{postId}
-          console.log("[nōto] Fetching blog post:", blogId, postId);
-          const res = await fetch(`${creds.apiBaseUrl}/blog/post/${blogId}/${postId}`, {
-            headers: { Accept: "application/json" },
-          });
-          console.log("[nōto] Blog post response:", res.status);
-
-          if (res.ok) {
-            const post = await res.json() as Record<string, unknown>;
-            const content = String(post.content ?? "");
-            console.log("[nōto] Post content length:", content.length);
-            if (content) {
-              setHtmlContent(content);
-            }
-          }
+          // Navigate WebView directly to blog post page on ENT
+          // This way the WebView has session cookies and images load
+          console.log("[nōto] Blog post: navigating to ENT page");
+          setApiBaseUrl(`${creds.apiBaseUrl}/blog#/view/${blogId}/${postId}`);
+          setHtmlContent("__NAVIGATE__"); // signal to use URL mode
         }
       } catch (e) {
         console.warn("[nōto] Detail fetch error:", e);
@@ -155,7 +145,24 @@ export default function DetailScreen() {
     );
   }
 
-  // Blog post or rich content: WebView
+  // Blog post: navigate to ENT page directly (images need auth cookies)
+  if (htmlContent === "__NAVIGATE__" && apiBaseUrl) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <WebView
+          source={{ uri: apiBaseUrl }}
+          style={styles.webview}
+          scrollEnabled
+          javaScriptEnabled
+          domStorageEnabled
+          thirdPartyCookiesEnabled
+          sharedCookiesEnabled
+        />
+      </View>
+    );
+  }
+
+  // Rich HTML content: WebView
   if (htmlContent) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
