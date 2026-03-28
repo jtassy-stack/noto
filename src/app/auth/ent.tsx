@@ -14,36 +14,45 @@ export default function EntLoginScreen() {
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
   const [loading, setLoading] = useState(true);
-  const [loggedIn, setLoggedIn] = useState(false);
+  const sawCallbackRef = useRef(false);
+  const doneRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
 
   function handleNavigationChange(event: WebViewNavigation) {
     const url = event.url;
-    console.log("[nōto] WebView navigated to:", url.substring(0, 100));
+    console.log("[nōto] WebView:", url.substring(0, 80));
 
-    // After Keycloak login, user is redirected back to the ENT homepage
-    // When the URL is on the ENT domain (not auth.monlycee.net), login is done
+    // Track: have we seen the OAuth callback? This means Keycloak login succeeded.
+    if (url.includes("/oauth2/callback")) {
+      sawCallbackRef.current = true;
+      console.log("[nōto] Saw OAuth callback — login succeeded");
+    }
+
+    // After seeing the callback, wait for final landing on the ENT homepage
     if (
-      !loggedIn &&
+      sawCallbackRef.current &&
+      !doneRef.current &&
       url.startsWith(entProvider.apiBaseUrl) &&
-      !url.includes("/auth/login") &&
       !url.includes("/oauth2/callback") &&
+      !url.includes("/cas/init") &&
       !url.includes("auth.monlycee.net")
     ) {
-      console.log("[nōto] ENT login detected, extracting cookies...");
-      setLoggedIn(true);
+      doneRef.current = true;
+      console.log("[nōto] On ENT homepage after login, extracting cookies...");
 
-      // Inject JS to extract cookies from the WebView
-      webViewRef.current?.injectJavaScript(`
-        (function() {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'cookies',
-            cookies: document.cookie,
-            url: window.location.href
-          }));
-        })();
-        true;
-      `);
+      // Small delay to let the page fully load and set cookies
+      setTimeout(() => {
+        webViewRef.current?.injectJavaScript(`
+          (function() {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'cookies',
+              cookies: document.cookie,
+              url: window.location.href
+            }));
+          })();
+          true;
+        `);
+      }, 1000);
     }
   }
 
