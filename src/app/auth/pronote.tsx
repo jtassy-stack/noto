@@ -46,9 +46,11 @@ export default function PronoteLoginScreen() {
         password
       );
 
-      const children = mapChildren(session);
+      // Sync data IMMEDIATELY — session expires fast
+      await syncWithSession(session);
 
-      // Save account to SQLite
+      // Then save account/children to DB (local, doesn't need session)
+      const children = mapChildren(session);
       await saveAccount({
         id: session.information.id.toString(),
         provider: "pronote",
@@ -56,12 +58,7 @@ export default function PronoteLoginScreen() {
         instanceUrl: instanceUrl.trim(),
         createdAt: Date.now(),
       });
-
-      // Save children to SQLite
       await saveChildren(children);
-
-      // Sync data NOW while session is alive
-      await syncWithSession(session);
 
       router.replace("/");
     } catch (e: unknown) {

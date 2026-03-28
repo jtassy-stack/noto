@@ -89,8 +89,12 @@ export default function QRCodeLoginScreen() {
 
     try {
       const { session } = await authenticateWithQRCode(pin, qrData);
-      const children = mapChildren(session);
 
+      // Sync data IMMEDIATELY — session expires fast
+      await syncWithSession(session);
+
+      // Then save account/children to DB (local, doesn't need session)
+      const children = mapChildren(session);
       await saveAccount({
         id: session.information.id.toString(),
         provider: "pronote",
@@ -98,11 +102,7 @@ export default function QRCodeLoginScreen() {
         instanceUrl: session.information.url,
         createdAt: Date.now(),
       });
-
       await saveChildren(children);
-
-      // Sync data NOW while session is alive
-      await syncWithSession(session);
 
       router.replace("/");
     } catch (e: unknown) {

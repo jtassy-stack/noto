@@ -244,22 +244,33 @@ export async function fetchGrades(
 
   console.log("[nōto] Fetching grades for period:", p.name ?? "unknown");
 
-  // Use gradebook directly — it works for parent accounts and is a single API call
-  const gb = await pronote.gradebook(session, p);
-  console.log("[nōto] gradebook returned", gb.subjects.length, "subjects");
+  // Try gradesOverview with Tab 198's period (matches what the web UI shows)
+  const gradesTabPeriod = gradesTab?.defaultPeriod;
+  const periodToUse = gradesTabPeriod ?? p;
+  console.log("[nōto] Using period from tab:", periodToUse.name ?? "unknown");
 
-  return gb.subjects.map((s, i) => ({
-    id: `gb-${s.subject.name}-${i}`,
-    childId: session.userResource.id,
-    subject: s.subject.name,
-    value: s.averages.student,
-    outOf: 20,
-    coefficient: s.coef,
-    date: new Date().toISOString().split("T")[0]!,
-    classAverage: s.averages.classOverall,
-    classMin: s.averages.min,
-    classMax: s.averages.max,
-  }));
+  try {
+    const overview = await pronote.gradesOverview(session, periodToUse);
+    console.log("[nōto] gradesOverview returned", overview.grades.length, "grades");
+
+    return overview.grades.map((g) => ({
+      id: g.id,
+      childId: session.userResource.id,
+      subject: g.subject.name,
+      value: g.value.kind === pronote.GradeKind.Grade ? g.value.points : 0,
+      outOf: g.outOf.points,
+      coefficient: g.coefficient,
+      date: g.date.toISOString().split("T")[0]!,
+      comment: g.comment,
+      classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
+      classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
+      classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
+    }));
+  } catch (e) {
+    const name = e instanceof Error ? e.constructor.name : "Unknown";
+    console.warn("[nōto] gradesOverview failed:", name);
+    throw e; // re-throw so sync handles it
+  }
 }
 
 export async function fetchSchedule(

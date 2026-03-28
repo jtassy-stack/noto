@@ -33,52 +33,58 @@ export async function syncWithSession(session: pronote.SessionHandle): Promise<v
     const nextWeek = new Date(today.getTime() + 7 * 86400000);
     const twoWeeks = new Date(today.getTime() + 14 * 86400000);
 
-    // Run sequentially — Pawnote serializes requests via internal queue
-    // Order by priority: grades first (most valuable), then schedule, then homework
-    const tasks: { type: string; fn: () => Promise<number> }[] = [
-      {
-        type: "grades",
-        fn: async () => {
-          const grades = await fetchGrades(session);
-          if (grades.length > 0) await saveGrades(grades);
-          return grades.length;
-        },
-      },
-      {
-        type: "schedule",
-        fn: async () => {
-          const schedule = await fetchSchedule(session, today, nextWeek);
-          if (schedule.length > 0) await saveSchedule(schedule);
-          return schedule.length;
-        },
-      },
-      {
-        type: "homework",
-        fn: async () => {
-          const homework = await fetchHomework(session, today, twoWeeks);
-          if (homework.length > 0) await saveHomework(homework);
-          return homework.length;
-        },
-      },
-    ];
+    // Fetch ALL data as fast as possible — session expires quickly
+    // Collect raw data first, save to DB after (saves are local and fast)
+    let gradesData: Awaited<ReturnType<typeof fetchGrades>> = [];
+    let scheduleData: Awaited<ReturnType<typeof fetchSchedule>> = [];
+    let homeworkData: Awaited<ReturnType<typeof fetchHomework>> = [];
 
-    for (const task of tasks) {
-      try {
-        const count = await task.fn();
-        console.log(`[nōto] ${task.type}: ${count} items saved`);
-      } catch (err: unknown) {
-        const name = err instanceof Error ? err.constructor.name : "Unknown";
-        const msg = err instanceof Error ? err.message : String(err);
-        if (name === "AccessDeniedError" || msg.includes("access")) {
-          console.log(`[nōto] ${task.type}: tab not available for parent account`);
-        } else if (name === "SessionExpiredError" || msg.includes("expired")) {
-          console.warn(`[nōto] ${task.type}: session expired — stopping sync`);
-          break; // No point continuing, session is dead
-        } else {
-          console.warn(`[nōto] ${task.type} error (${name}):`, msg);
-        }
+    const nextWeekDate = new Date(today.getTime() + 7 * 86400000);
+    const twoWeeksDate = new Date(today.getTime() + 14 * 86400000);
+
+    // Fetch grades first (highest priority)
+    try {
+      gradesData = await fetchGrades(session);
+      console.log(`[nōto] fetched ${gradesData.length} grades`);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.constructor.name : "Unknown";
+      if (name === "AccessDeniedError") {
+        console.log("[nōto] grades: access denied (normal for some parent accounts)");
+      } else if (name === "SessionExpiredError") {
+        console.warn("[nōto] grades: session expired — skipping schedule/homework");
+      } else {
+        console.warn(`[nōto] grades error (${name}):`, err instanceof Error ? err.message : err);
       }
     }
+
+    // Fetch schedule (if session still alive)
+    try {
+      scheduleData = await fetchSchedule(session, today, nextWeekDate);
+      console.log(`[nōto] fetched ${scheduleData.length} schedule entries`);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.constructor.name : "Unknown";
+      if (name !== "AccessDeniedError") {
+        console.warn(`[nōto] schedule error (${name})`);
+      }
+    }
+
+    // Fetch homework (if session still alive)
+    try {
+      homeworkData = await fetchHomework(session, today, twoWeeksDate);
+      console.log(`[nōto] fetched ${homeworkData.length} homework items`);
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.constructor.name : "Unknown";
+      if (name !== "AccessDeniedError") {
+        console.warn(`[nōto] homework error (${name})`);
+      }
+    }
+
+    // NOW save everything to DB (local, doesn't need session)
+    if (gradesData.length > 0) await saveGrades(gradesData);
+    if (scheduleData.length > 0) await saveSchedule(scheduleData);
+    if (homeworkData.length > 0) await saveHomework(homeworkData);
+
+    console.log(`[nōto] saved: ${gradesData.length} grades, ${scheduleData.length} schedule, ${homeworkData.length} homework`);
   }
 
   await setLastSyncTime(new Date());
