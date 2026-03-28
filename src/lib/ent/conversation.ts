@@ -114,27 +114,43 @@ export async function fetchENTChildren(
   const results: Array<Record<string, unknown>> =
     Array.isArray(data.result) ? data.result : Array.isArray(data) ? data : [];
 
-  // Deduplicate by relatedName (same parent ID appears once per child)
+  // Deduplicate by relatedName and get per-child class via individual lookup
   const seen = new Set<string>();
   const children: Child[] = [];
 
   for (const entry of results) {
     const name = String(entry.relatedName ?? "");
+    const relatedId = String(entry.relatedId ?? "");
     if (!name || seen.has(name)) continue;
     seen.add(name);
 
-    // Parse "TASSY Suzanne" → firstName: Suzanne, lastName: TASSY
     const match = name.match(/^([A-ZÀ-ÖÙ-Ý\s]+)\s+(.+)$/);
     const firstName = match ? match[2]!.trim() : name;
     const lastName = match ? match[1]!.trim() : "";
 
-    // Extract class and school from schools array
-    const schools = entry.schools as Array<{ classes?: string[]; name?: string }> | undefined;
-    const school = schools?.[0];
-    const classes = school?.classes ?? [];
-    // Pick the most relevant class (last one is usually the current year)
-    const className = classes[classes.length - 1] ?? "";
-    const schoolName = school?.name ?? "";
+    // Fetch the child's own class via /userbook/api/person?id=<childId>
+    let className = "";
+    let schoolName = "";
+    if (relatedId) {
+      try {
+        const childRes = await fetch(`${provider.apiBaseUrl}/userbook/api/person?id=${relatedId}`, {
+          headers: {
+            Accept: "application/json",
+            ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+          },
+        });
+        if (childRes.ok) {
+          const childData = await childRes.json();
+          const childEntry = childData.result?.[0] ?? childData[0] ?? childData;
+          const schools = childEntry.schools as Array<{ classes?: string[]; name?: string }> | undefined;
+          const school = schools?.[0];
+          className = school?.classes?.[0] ?? "";
+          schoolName = school?.name ?? "";
+        }
+      } catch (e) {
+        console.warn("[nōto] Failed to fetch class for", firstName, e);
+      }
+    }
 
     children.push({
       id: `ent-${name.replace(/\s/g, "-").toLowerCase()}`,
