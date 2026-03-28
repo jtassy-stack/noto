@@ -1,29 +1,235 @@
-import { View, Text, StyleSheet } from "react-native";
-import { Fonts, FontSize, Spacing } from "@/constants/theme";
+import { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
+import { useChildren } from "@/hooks/useChildren";
+import { getScheduleByChild } from "@/lib/database/repository";
+import type { ScheduleEntry } from "@/types";
+
+const DAY_LABELS = ["D", "L", "M", "Me", "J", "V", "S"];
+
+function getDateForOffset(offset: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 export default function ScheduleScreen() {
   const theme = useTheme();
+  const { activeChild } = useChildren();
+  const [dayOffset, setDayOffset] = useState(0);
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+
+  useEffect(() => {
+    if (!activeChild) return;
+
+    const day = getDateForOffset(dayOffset);
+    const nextDay = getDateForOffset(dayOffset + 1);
+
+    getScheduleByChild(
+      activeChild.id,
+      day.toISOString(),
+      nextDay.toISOString()
+    ).then(setSchedule);
+  }, [activeChild, dayOffset]);
+
+  if (!activeChild) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          Connectez un compte.
+        </Text>
+      </View>
+    );
+  }
+
+  // Build day tabs: today ± 2 days (5 days visible)
+  const dayTabs = [-2, -1, 0, 1, 2].map((offset) => {
+    const d = getDateForOffset(offset);
+    return {
+      offset,
+      label: DAY_LABELS[d.getDay()]!,
+      date: d.getDate(),
+      isToday: offset === 0,
+    };
+  });
+
+  const selectedDate = getDateForOffset(dayOffset);
+  const dateStr = selectedDate.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.placeholder, { color: theme.textTertiary }]}>
-        Connectez un compte pour voir l'emploi du temps.
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.content}
+    >
+      {/* Day selector */}
+      <View style={styles.dayTabs}>
+        {dayTabs.map((d) => {
+          const active = d.offset === dayOffset;
+          return (
+            <Pressable
+              key={d.offset}
+              onPress={() => setDayOffset(d.offset)}
+              style={[
+                styles.dayTab,
+                {
+                  backgroundColor: active ? theme.accent : theme.surfaceElevated,
+                  borderColor: active ? theme.accent : theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dayLabel,
+                  { color: active ? "#FFFFFF" : theme.textSecondary },
+                ]}
+              >
+                {d.label}
+              </Text>
+              <Text
+                style={[
+                  styles.dayDate,
+                  {
+                    color: active ? "#FFFFFF" : theme.text,
+                    fontFamily: active ? Fonts.bold : Fonts.regular,
+                  },
+                ]}
+              >
+                {d.date}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={[styles.dateLabel, { color: theme.textSecondary }]}>
+        {dateStr}
       </Text>
-    </View>
+
+      {/* Timeline */}
+      {schedule.length === 0 && (
+        <Text style={[styles.emptyText, { color: theme.textTertiary, marginTop: Spacing.xl }]}>
+          Aucun cours ce jour.
+        </Text>
+      )}
+
+      {schedule.map((s, i) => {
+        const startTime = new Date(s.startTime).toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const endTime = new Date(s.endTime).toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        return (
+          <View key={s.id} style={styles.slot}>
+            {/* Time column */}
+            <View style={styles.timeCol}>
+              <Text style={[styles.startTime, { color: s.isCancelled ? theme.crimson : theme.accent }]}>
+                {startTime}
+              </Text>
+              <Text style={[styles.endTime, { color: theme.textTertiary }]}>
+                {endTime}
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View
+              style={[
+                styles.divider,
+                {
+                  backgroundColor: s.isCancelled ? theme.crimson : theme.accent,
+                  opacity: s.isCancelled ? 0.5 : 0.3,
+                },
+              ]}
+            />
+
+            {/* Content */}
+            <View style={styles.slotContent}>
+              <Text
+                style={[
+                  styles.slotSubject,
+                  {
+                    color: s.isCancelled ? theme.crimson : theme.text,
+                    textDecorationLine: s.isCancelled ? "line-through" : "none",
+                  },
+                ]}
+              >
+                {s.subject}
+              </Text>
+              <Text
+                style={[
+                  styles.slotMeta,
+                  { color: s.isCancelled ? theme.crimson : theme.textSecondary, opacity: s.isCancelled ? 0.5 : 1 },
+                ]}
+              >
+                {[s.teacher, s.room].filter(Boolean).join(" · ")}
+              </Text>
+              {s.isCancelled && (
+                <View style={[styles.cancelBadge, { backgroundColor: theme.crimson }]}>
+                  <Text style={styles.cancelText}>ANNULÉ</Text>
+                </View>
+              )}
+              {s.status && !s.isCancelled && (
+                <Text style={[styles.statusText, { color: theme.accent }]}>
+                  {s.status}
+                </Text>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
+  empty: { flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing.lg },
+  emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center" },
+
+  dayTabs: { flexDirection: "row", gap: 4, marginBottom: Spacing.md },
+  dayTab: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    padding: Spacing.lg,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    gap: 2,
   },
-  placeholder: {
-    fontSize: FontSize.md,
+  dayLabel: { fontSize: FontSize.xs, fontFamily: Fonts.medium },
+  dayDate: { fontSize: FontSize.lg, fontFamily: Fonts.regular },
+  dateLabel: {
+    fontSize: FontSize.sm,
     fontFamily: Fonts.regular,
-    textAlign: "center",
+    marginBottom: Spacing.md,
+    textTransform: "capitalize",
   },
+
+  slot: { flexDirection: "row", paddingVertical: 14, gap: 14 },
+  timeCol: { width: 46, gap: 2 },
+  startTime: { fontSize: FontSize.sm, fontFamily: Fonts.mono },
+  endTime: { fontSize: FontSize.xs, fontFamily: Fonts.mono },
+  divider: { width: 2, borderRadius: 1, alignSelf: "stretch" },
+  slotContent: { flex: 1, gap: 3 },
+  slotSubject: { fontSize: FontSize.md, fontFamily: Fonts.semiBold },
+  slotMeta: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
+  cancelBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    opacity: 0.2,
+    marginTop: 2,
+  },
+  cancelText: { fontSize: 10, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  statusText: { fontSize: FontSize.xs, fontFamily: Fonts.medium, marginTop: 2 },
 });
