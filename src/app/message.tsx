@@ -3,18 +3,17 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-nat
 import { useLocalSearchParams } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { useChildren } from "@/hooks/useChildren";
 import { getMailCredentials, fetchMessage as fetchImapMessage } from "@/lib/ent/mail";
 import { getConversationCredentials, fetchConversationMessage } from "@/lib/ent/conversation";
 
 export default function MessageScreen() {
   const theme = useTheme();
-  const { activeChild } = useChildren();
-  const { id, from, subject, date } = useLocalSearchParams<{
+  const { id, from, subject, date, source } = useLocalSearchParams<{
     id: string;
     from: string;
     subject: string;
     date: string;
+    source: string; // "ent" or "imap"
   }>();
 
   const [body, setBody] = useState<string | null>(null);
@@ -25,13 +24,12 @@ export default function MessageScreen() {
     async function load() {
       if (!id) return;
 
-      try {
-        const isEnt = activeChild?.source === "ent";
-        console.log("[nōto] Opening message:", id, "isEnt:", isEnt, "child:", activeChild?.firstName);
+      const isEnt = source === "ent";
+      console.log("[nōto] Opening message:", id, "source:", source);
 
+      try {
         if (isEnt) {
           const creds = await getConversationCredentials();
-          console.log("[nōto] PCN creds:", creds ? "yes" : "no");
           if (creds) {
             const msg = await fetchConversationMessage(creds, id);
             console.log("[nōto] Message loaded, body length:", msg.body?.length);
@@ -41,7 +39,6 @@ export default function MessageScreen() {
           }
         } else {
           const creds = await getMailCredentials();
-          console.log("[nōto] IMAP creds:", creds ? "yes" : "no");
           if (creds) {
             const msg = await fetchImapMessage(creds, parseInt(id, 10));
             setBody(msg.body ?? "");
@@ -58,14 +55,13 @@ export default function MessageScreen() {
       }
     }
     load();
-  }, [id, activeChild]);
+  }, [id, source]);
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
     >
-      {/* Header */}
       <Text style={[styles.subject, { color: theme.text }]}>
         {subject || "(sans objet)"}
       </Text>
@@ -77,7 +73,6 @@ export default function MessageScreen() {
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-      {/* Body */}
       {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
 
       {error && (

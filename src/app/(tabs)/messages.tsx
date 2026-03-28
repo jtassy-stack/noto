@@ -135,10 +135,13 @@ export default function MessagesScreen() {
       {messages.map((msg) => (
         <Pressable
           key={msg.id}
-          onPress={() => router.push({
-            pathname: "/message",
-            params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date },
-          })}
+          onPress={() => {
+            const isEntChild = activeChild?.source === "ent";
+            router.push({
+              pathname: "/message",
+              params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date, source: isEntChild ? "ent" : "imap" },
+            });
+          }}
           style={[
             styles.messageRow,
             { backgroundColor: theme.surface, borderColor: theme.border, opacity: msg.unread ? 1 : 0.7 },
