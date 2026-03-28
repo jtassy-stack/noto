@@ -62,6 +62,12 @@ export default function RootLayout() {
             title: "Scanner QR code",
           }}
         />
+        <Stack.Screen
+          name="auth/ent"
+          options={{
+            title: "Mon Lycée",
+          }}
+        />
       </Stack>
     </>
   );
