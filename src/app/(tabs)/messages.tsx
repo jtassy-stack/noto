@@ -27,6 +27,8 @@ export default function MessagesScreen() {
 
   const loadMessages = useCallback(async () => {
     // Check which messaging system is configured
+    // Use the most recently connected ENT session to determine which to use
+    const session = await getStoredSession();
     const imapCreds = await getMailCredentials();
     const convCreds = await getConversationCredentials();
 
@@ -35,24 +37,17 @@ export default function MessagesScreen() {
       return;
     }
 
+    // Determine which backend based on the active ENT provider
+    const provider = session ? getEntProvider(session.providerId) : null;
+    const useConversation = convCreds && provider?.messagingType === "conversation";
+    const useIMAP = imapCreds && (!useConversation);
+
     setConnected(true);
     setLoading(true);
     setError(null);
 
     try {
-      if (imapCreds) {
-        // Mon Lycée: IMAP via proxy
-        const result = await fetchInbox(imapCreds, 0);
-        setMessages(result.messages.map((m) => ({
-          id: String(m.id),
-          subject: m.subject,
-          from: m.from,
-          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
-          unread: m.unread,
-          hasAttachment: m.hasAttachment,
-        })));
-        setUnseen(result.unseen);
-      } else if (convCreds) {
+      if (useConversation && convCreds) {
         // PCN: ENTCore Conversation API
         const result = await fetchConversationInbox(convCreds, 0);
         setMessages(result.messages.map((m) => ({
@@ -64,6 +59,18 @@ export default function MessagesScreen() {
           hasAttachment: m.hasAttachment,
         })));
         setUnseen(result.count);
+      } else if (useIMAP && imapCreds) {
+        // Mon Lycée: IMAP via proxy
+        const result = await fetchInbox(imapCreds, 0);
+        setMessages(result.messages.map((m) => ({
+          id: String(m.id),
+          subject: m.subject,
+          from: m.from,
+          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
+          unread: m.unread,
+          hasAttachment: m.hasAttachment,
+        })));
+        setUnseen(result.unseen);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur";
