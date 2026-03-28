@@ -5,6 +5,24 @@
 
 import type { ConversationCredentials } from "./conversation";
 
+// Re-use the session management from conversation.ts
+async function pcnFetchJson(creds: ConversationCredentials, path: string): Promise<unknown> {
+  // Login if needed
+  await fetch(`${creds.apiBaseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+    redirect: "follow",
+  });
+
+  const res = await fetch(`${creds.apiBaseUrl}${path}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export interface BlogPost {
   id: string;
   title: string;
@@ -21,25 +39,8 @@ export interface TimelineNotification {
   sender?: string;
 }
 
-async function pcnFetch(creds: ConversationCredentials, path: string): Promise<Response> {
-  // Login first to get fresh session
-  await fetch(`${creds.apiBaseUrl}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
-    redirect: "follow",
-  });
-
-  return fetch(`${creds.apiBaseUrl}${path}`, {
-    headers: { Accept: "application/json" },
-  });
-}
-
 export async function fetchBlogs(creds: ConversationCredentials): Promise<BlogPost[]> {
-  const res = await pcnFetch(creds, "/blog/list/all");
-  if (!res.ok) return [];
-
-  const data = await res.json();
+  const data = await pcnFetchJson(creds, "/blog/list/all");
   if (!Array.isArray(data)) return [];
 
   return data.map((b: Record<string, unknown>) => ({
@@ -53,12 +54,11 @@ export async function fetchBlogs(creds: ConversationCredentials): Promise<BlogPo
 }
 
 export async function fetchTimeline(creds: ConversationCredentials): Promise<TimelineNotification[]> {
-  const res = await pcnFetch(creds, "/timeline/lastNotifications");
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  const results: Record<string, unknown>[] = data.results || data;
-  if (!Array.isArray(results)) return [];
+  const data = await pcnFetchJson(creds, "/timeline/lastNotifications") as Record<string, unknown> | null;
+  if (!data) return [];
+  const raw = (data as Record<string, unknown>).results ?? data;
+  const results = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
+  if (results.length === 0) return [];
 
   return results.map((n) => {
     // Strip HTML tags from message for display

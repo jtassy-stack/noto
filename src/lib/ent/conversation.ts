@@ -46,39 +46,73 @@ export async function clearConversationCredentials(): Promise<void> {
   await SecureStore.deleteItemAsync(ENT_CONV_CREDS_KEY);
 }
 
-// --- Login ---
+// --- Session management ---
+
+let activeSession: { apiBaseUrl: string; lastLogin: number } | null = null;
+
+async function ensureSession(creds: ConversationCredentials): Promise<void> {
+  // Re-use session if less than 10 minutes old
+  if (activeSession && activeSession.apiBaseUrl === creds.apiBaseUrl && Date.now() - activeSession.lastLogin < 10 * 60 * 1000) {
+    return;
+  }
+
+  await doLogin(creds);
+}
+
+async function doLogin(creds: ConversationCredentials): Promise<void> {
+  const response = await fetch(`${creds.apiBaseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+    redirect: "follow",
+  });
+
+  if (response.url.includes("/auth/login")) {
+    throw new Error("Identifiants incorrects");
+  }
+
+  activeSession = { apiBaseUrl: creds.apiBaseUrl, lastLogin: Date.now() };
+  console.log("[nōto] PCN session refreshed");
+}
+
+async function pcnFetch(creds: ConversationCredentials, path: string): Promise<Response> {
+  await ensureSession(creds);
+
+  let res = await fetch(`${creds.apiBaseUrl}${path}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  // If 401 or HTML (session expired), re-login and retry
+  if (res.status === 401 || res.headers.get("content-type")?.includes("text/html")) {
+    console.log("[nōto] PCN session expired, re-login...");
+    activeSession = null;
+    await doLogin(creds);
+    res = await fetch(`${creds.apiBaseUrl}${path}`, {
+      headers: { Accept: "application/json" },
+    });
+  }
+
+  return res;
+}
+
+// --- Login (public, for initial connection test) ---
 
 export async function loginToENT(
   provider: EntProvider,
   username: string,
   password: string
 ): Promise<{ sessionCookie: string }> {
-  const loginUrl = `${provider.apiBaseUrl}/auth/login`;
+  const creds: ConversationCredentials = {
+    email: username,
+    password,
+    apiBaseUrl: provider.apiBaseUrl,
+  };
 
-  const response = await fetch(loginUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `email=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-    redirect: "follow",
-  });
+  await doLogin(creds);
 
-  console.log("[nōto] PCN login status:", response.status, response.url);
-
-  // If redirected back to login page, credentials are wrong
-  if (response.url.includes("/auth/login")) {
-    throw new Error("Identifiants incorrects");
-  }
-
-  // Extract cookies — React Native may handle them automatically
-  const setCookie = response.headers.get("set-cookie") ?? "";
-
-  // Test session by fetching message count
-  const testUrl = `${provider.apiBaseUrl}/conversation/count/INBOX`;
-  const testRes = await fetch(testUrl, {
-    headers: {
-      Accept: "application/json",
-      ...(setCookie ? { Cookie: setCookie } : {}),
-    },
+  // Test session
+  const testRes = await fetch(`${provider.apiBaseUrl}/conversation/count/INBOX`, {
+    headers: { Accept: "application/json" },
   });
 
   console.log("[nōto] PCN session test:", testRes.status);
@@ -89,7 +123,7 @@ export async function loginToENT(
     throw new Error("Session invalide — vérifiez vos identifiants");
   }
 
-  return { sessionCookie: setCookie };
+  return { sessionCookie: "" };
 }
 
 // --- Children ---
@@ -176,26 +210,7 @@ export async function fetchConversationInbox(
   creds: ConversationCredentials,
   page = 0
 ): Promise<{ messages: ConversationMessage[]; count: number }> {
-  // First, login to get fresh session
-  const loginRes = await fetch(`${creds.apiBaseUrl}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
-    redirect: "follow",
-  });
-
-  const setCookie = loginRes.headers.get("set-cookie") ?? "";
-  const cookieHeader = setCookie || (creds.sessionCookie ?? "");
-
-  // Fetch inbox
-  const inboxUrl = `${creds.apiBaseUrl}/conversation/list/INBOX?page=${page}&pageSize=20`;
-  const inboxRes = await fetch(inboxUrl, {
-    headers: {
-      Accept: "application/json",
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-    },
-  });
-
+  const inboxRes = await pcnFetch(creds, `/conversation/list/INBOX?page=${page}&pageSize=20`);
   if (!inboxRes.ok) throw new Error(`Erreur messagerie (${inboxRes.status})`);
 
   const data = await inboxRes.json();
@@ -203,18 +218,12 @@ export async function fetchConversationInbox(
     ? data.map(mapConversationMessage)
     : [];
 
-  // Fetch count
   let count = 0;
   try {
-    const countRes = await fetch(`${creds.apiBaseUrl}/conversation/count/INBOX`, {
-      headers: {
-        Accept: "application/json",
-        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-      },
-    });
+    const countRes = await pcnFetch(creds, "/conversation/count/INBOX");
     if (countRes.ok) {
       const countData = await countRes.json();
-      count = typeof countData.count === "number" ? countData.count : (countData ?? 0);
+      count = typeof countData.count === "number" ? countData.count : 0;
     }
   } catch {}
 
@@ -225,27 +234,11 @@ export async function fetchConversationMessage(
   creds: ConversationCredentials,
   messageId: string
 ): Promise<ConversationMessage> {
-  // Login first
-  const loginRes = await fetch(`${creds.apiBaseUrl}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
-    redirect: "follow",
-  });
-
-  const setCookie = loginRes.headers.get("set-cookie") ?? "";
-
-  const msgRes = await fetch(`${creds.apiBaseUrl}/conversation/message/${messageId}`, {
-    headers: {
-      Accept: "application/json",
-      ...(setCookie ? { Cookie: setCookie } : {}),
-    },
-  });
-
+  const msgRes = await pcnFetch(creds, `/conversation/message/${messageId}`);
   if (!msgRes.ok) throw new Error(`Erreur message (${msgRes.status})`);
 
   const msg = await msgRes.json();
-  return mapConversationMessage(msg);
+  return mapConversationMessage(msg as Record<string, unknown>);
 }
 
 function mapConversationMessage(msg: Record<string, unknown>): ConversationMessage {
