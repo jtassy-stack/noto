@@ -4,6 +4,7 @@
  */
 
 import type { ConversationCredentials } from "./conversation";
+import { stripHtml } from "@/lib/utils/html";
 
 // Re-use the session management from conversation.ts
 async function pcnFetchJson(creds: ConversationCredentials, path: string): Promise<unknown> {
@@ -61,13 +62,8 @@ export async function fetchTimeline(creds: ConversationCredentials): Promise<Tim
   if (results.length === 0) return [];
 
   return results.map((n) => {
-    // Strip HTML tags from message for display
     const rawMessage = String(n.message ?? "");
-    const plainMessage = rawMessage
-      .replace(/<[^>]*>/g, "")
-      .replace(/\n/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const plainMessage = stripHtml(rawMessage).replace(/\n/g, " ").replace(/\s+/g, " ");
 
     return {
       id: String(n._id ?? ""),

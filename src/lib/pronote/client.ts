@@ -2,6 +2,7 @@ import * as pronote from "@niicojs/pawnote";
 import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import type { Account, Child, Grade, ScheduleEntry, Homework } from "@/types";
+import { stripHtml } from "@/lib/utils/html";
 
 const DEVICE_UUID_KEY = "noto_device_uuid";
 
@@ -265,7 +266,7 @@ export async function fetchGrades(
     outOf: g.outOf.points,
     coefficient: g.coefficient,
     date: g.date.toISOString().split("T")[0]!,
-    comment: g.comment,
+    comment: g.comment ? stripHtml(g.comment) : undefined,
     classAverage: g.average?.kind === pronote.GradeKind.Grade ? g.average.points : undefined,
     classMin: g.min?.kind === pronote.GradeKind.Grade ? g.min.points : undefined,
     classMax: g.max?.kind === pronote.GradeKind.Grade ? g.max.points : undefined,
@@ -311,7 +312,7 @@ export async function fetchHomework(
     id: a.id,
     childId: session.userResource.id,
     subject: a.subject.name,
-    description: a.description,
+    description: stripHtml(a.description),
     dueDate: a.deadline.toISOString().split("T")[0]!,
     isDone: a.done,
   }));

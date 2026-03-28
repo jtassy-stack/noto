@@ -5,6 +5,7 @@ import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getMailCredentials, fetchMessage as fetchImapMessage } from "@/lib/ent/mail";
 import { getConversationCredentials, fetchConversationMessage } from "@/lib/ent/conversation";
+import { stripHtml } from "@/lib/utils/html";
 
 export default function MessageScreen() {
   const theme = useTheme();
@@ -86,19 +87,6 @@ export default function MessageScreen() {
   );
 }
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
