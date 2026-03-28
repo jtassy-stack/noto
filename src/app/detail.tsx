@@ -18,14 +18,15 @@ interface BlogPost {
 export default function DetailScreen() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const { id, title, from, date, type, body: passedBody, postContent } = useLocalSearchParams<{
+  const { id, title, from, date, type, body: passedBody, blogId, postId } = useLocalSearchParams<{
     id: string;
     title: string;
     from: string;
     date: string;
     type: string; // "blog" | "blogpost" | "timeline"
     body: string;
-    postContent: string;
+    blogId: string;
+    postId: string;
   }>();
 
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
@@ -36,13 +37,6 @@ export default function DetailScreen() {
 
   useEffect(() => {
     async function load() {
-      // Blog post detail — content passed as param
-      if (type === "blogpost" && postContent) {
-        setHtmlContent(postContent);
-        setLoading(false);
-        return;
-      }
-
       // Timeline — plain text
       if (type === "timeline" && passedBody) {
         setPlainText(stripHtml(passedBody));
@@ -50,7 +44,7 @@ export default function DetailScreen() {
         return;
       }
 
-      if (!id) { setLoading(false); return; }
+      if (!id && !blogId) { setLoading(false); return; }
 
       try {
         const creds = await getConversationCredentials();
@@ -66,7 +60,7 @@ export default function DetailScreen() {
         });
 
         if (type === "blog") {
-          // Fetch blog posts list for this blog
+          // Fetch blog posts list
           const res = await fetch(`${creds.apiBaseUrl}/blog/post/list/all/${id}`, {
             headers: { Accept: "application/json" },
           });
@@ -83,6 +77,20 @@ export default function DetailScreen() {
               })));
             }
           }
+        } else if (type === "blogpost" && blogId && postId) {
+          // Fetch single blog post content
+          const res = await fetch(`${creds.apiBaseUrl}/blog/post/list/all/${blogId}`, {
+            headers: { Accept: "application/json" },
+          });
+          if (res.ok) {
+            const posts = await res.json();
+            if (Array.isArray(posts)) {
+              const post = posts.find((p: Record<string, unknown>) => String(p._id) === postId);
+              if (post) {
+                setHtmlContent(String(post.content ?? ""));
+              }
+            }
+          }
         }
       } catch (e) {
         console.warn("[nōto] Detail fetch error:", e);
@@ -91,7 +99,7 @@ export default function DetailScreen() {
       }
     }
     load();
-  }, [id, type, passedBody, postContent]);
+  }, [id, type, passedBody, blogId, postId]);
 
   // Styled HTML for WebView (blog post content with images)
   const isDark = scheme === "dark";
@@ -126,7 +134,7 @@ export default function DetailScreen() {
             key={post.id}
             onPress={() => router.push({
               pathname: "/detail",
-              params: { id: post.id, title: post.title, date: post.date, type: "blogpost", postContent: post.content },
+              params: { id: post.id, title: post.title, date: post.date, type: "blogpost", blogId: id, postId: post.id },
             })}
             style={[styles.postCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
           >
