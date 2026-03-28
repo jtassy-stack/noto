@@ -11,6 +11,8 @@ export interface EntSession {
   useCookieJar: boolean;
   cachedMessages?: string;
   cachedUnreadCount?: string;
+  pronoteIdentifiant?: string;
+  pronoteBaseUrl?: string;
 }
 
 /**

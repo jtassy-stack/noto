@@ -9,56 +9,101 @@ import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 import { saveMailCredentials } from "@/lib/ent/mail";
 import { saveEntSession } from "@/lib/ent/auth";
 
-// Single phase: WebView handles everything automatically
-
 export default function EntLoginScreen() {
   const theme = useTheme();
   const { provider: providerId } = useLocalSearchParams<{ provider: string }>();
   const entProvider = getEntProvider(providerId ?? "") ?? ENT_PROVIDERS[0]!;
 
   const [status, setStatus] = useState("Connexion à " + entProvider.name + "...");
-  const [email, setEmail] = useState("");
-  const [pronoteUrl, setPronoteUrl] = useState("");
-  const [password, setPassword] = useState("");
 
+  const usernameRef = useRef("");
+  const passwordRef = useRef("");
+  const pronoteIdentRef = useRef("");
   const sawCallbackRef = useRef(false);
   const doneRef = useRef(false);
+  const finishingRef = useRef(false);
   const webViewRef = useRef<WebView>(null);
 
-  // --- Phase 1: WebView → Keycloak login → scrape email + Pronote URL ---
+  // JS to inject on EVERY page load to capture credentials
+  const INJECT_JS = `
+    (function() {
+      // Capture credentials from Keycloak login form
+      const form = document.querySelector('form#kc-form-login, form[action*="authenticate"]');
+      if (form && !form.__notoHooked) {
+        form.__notoHooked = true;
+
+        // Hook the submit button click
+        const btn = form.querySelector('input[type="submit"], button[type="submit"]');
+        if (btn) {
+          btn.addEventListener('click', function() {
+            const user = form.querySelector('input[name="username"], input[name="email"]');
+            const pass = form.querySelector('input[name="password"]');
+            if (user && pass && pass.value) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'creds',
+                u: user.value,
+                p: pass.value,
+              }));
+            }
+          });
+        }
+
+        // Also hook form submit
+        form.addEventListener('submit', function() {
+          const user = form.querySelector('input[name="username"], input[name="email"]');
+          const pass = form.querySelector('input[name="password"]');
+          if (user && pass && pass.value) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'creds',
+              u: user.value,
+              p: pass.value,
+            }));
+          }
+        });
+      }
+
+      // On ENT portal: find email + Pronote link
+      if (window.location.hostname.includes('psn.monlycee.net') && !window.__notoScraped) {
+        window.__notoScraped = true;
+        setTimeout(function() {
+          // Find Pronote link
+          var pronoteLink = '';
+          var links = document.querySelectorAll('a');
+          for (var i = 0; i < links.length; i++) {
+            if (links[i].href && links[i].href.includes('pronote') && links[i].href.includes('parent.html')) {
+              pronoteLink = links[i].href;
+              break;
+            }
+          }
+
+          // Find email
+          var email = '';
+          var allText = document.querySelectorAll('span, div, p, a');
+          for (var j = 0; j < allText.length; j++) {
+            var t = allText[j].textContent.trim();
+            var m = t.match(/[a-zA-Z0-9._%+-]+@monlycee\\.net/);
+            if (m) { email = m[0]; break; }
+          }
+
+          if (pronoteLink || email) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'portal',
+              email: email,
+              pronoteLink: pronoteLink,
+            }));
+          }
+        }, 2000);
+      }
+    })();
+    true;
+  `;
 
   function handleNavigationChange(event: WebViewNavigation) {
     const url = event.url;
     console.log("[nōto] WebView:", url.substring(0, 80));
 
-    if (url.includes("auth.monlycee.net") && url.includes("login-actions")) {
+    if (url.includes("auth.monlycee.net")) {
       setStatus("Saisissez vos identifiants...");
-
-      // Inject a listener to capture credentials from the Keycloak form
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(`
-          (function() {
-            if (window.__notoInjected) return;
-            window.__notoInjected = true;
-
-            const form = document.querySelector('form');
-            if (form) {
-              form.addEventListener('submit', function() {
-                const user = document.querySelector('input[name="username"]');
-                const pass = document.querySelector('input[name="password"]');
-                if (user && pass) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'credentials',
-                    username: user.value,
-                    password: pass.value,
-                  }));
-                }
-              });
-            }
-          })();
-          true;
-        `);
-      }, 1000);
     }
 
     if (url.includes("/oauth2/callback")) {
@@ -66,105 +111,44 @@ export default function EntLoginScreen() {
       setStatus("Connexion réussie !");
     }
 
-    // After login, on ENT homepage → scrape data
-    if (
-      sawCallbackRef.current &&
-      !doneRef.current &&
-      url.startsWith(entProvider.apiBaseUrl) &&
-      !url.includes("/oauth2/callback") &&
-      !url.includes("/cas/init") &&
-      !url.includes("auth.monlycee.net")
-    ) {
-      doneRef.current = true;
-      setStatus("Récupération de vos informations...");
-
-      // Wait for page to load, then extract email + Pronote link
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(`
-          (function() {
-            // Find email (@monlycee.net)
-            let email = '';
-            const allEls = document.querySelectorAll('span, div, p, a');
-            allEls.forEach(el => {
-              const t = el.textContent.trim();
-              if (t.includes('@monlycee.net') && t.length < 60 && !email) {
-                email = t.match(/[a-zA-Z0-9._%+-]+@monlycee\\.net/)?.[0] || '';
-              }
-            });
-
-            // Find Pronote link (with ?page= or direct pronote URL)
-            let pronoteLink = '';
-            const links = document.querySelectorAll('a');
-            links.forEach(l => {
-              if (l.href && l.href.includes('pronote') && l.href.includes('parent.html')) {
-                pronoteLink = l.href;
-              }
-            });
-            // Fallback: service link
-            if (!pronoteLink) {
-              links.forEach(l => {
-                if (l.href && l.href.includes('index-education.net/pronote')) {
-                  pronoteLink = l.href;
-                }
-              });
-            }
-
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'ent_info',
-              email: email,
-              pronoteLink: pronoteLink,
-            }));
-          })();
-          true;
-        `);
-      }, 3000);
-    }
-
-    // Intercept Pronote redirect with ?identifiant=
+    // Capture Pronote SSO identifiant from URL
     if (url.includes("index-education.net") && url.includes("identifiant=")) {
       const match = url.match(/identifiant=([^&]+)/);
-      if (match) {
-        console.log("[nōto] Captured Pronote SSO identifiant:", match[1]);
-        setPronoteUrl(url);
-        // Don't navigate to Pronote in WebView — we have what we need
+      if (match && match[1]) {
+        pronoteIdentRef.current = match[1];
+        console.log("[nōto] Pronote identifiant:", match[1]);
       }
+    }
+
+    // After login + Pronote SSO, if we have credentials, auto-finish
+    if (sawCallbackRef.current && pronoteIdentRef.current && !finishingRef.current) {
+      // Wait a bit then finish
+      finishingRef.current = true;
+      setTimeout(() => finishLogin(), 2000);
     }
   }
 
-  async function handleWebViewMessage(event: { nativeEvent: { data: string } }) {
+  async function handleMessage(event: { nativeEvent: { data: string } }) {
     try {
       const data = JSON.parse(event.nativeEvent.data);
 
-      if (data.type === "credentials") {
-        console.log("[nōto] Captured credentials — user:", data.username);
-        // Save password for IMAP (same as Keycloak)
-        setPassword(data.password);
-        const fullEmail = data.username.includes("@")
-          ? data.username
-          : `${data.username}@monlycee.net`;
-        setEmail(fullEmail);
+      if (data.type === "creds") {
+        console.log("[nōto] Got credentials — user:", data.u);
+        usernameRef.current = data.u;
+        passwordRef.current = data.p;
       }
 
-      if (data.type === "ent_info") {
-        console.log("[nōto] ENT info — email:", data.email, "pronote:", data.pronoteLink);
+      if (data.type === "portal") {
+        console.log("[nōto] Portal — email:", data.email, "pronote:", data.pronoteLink?.substring(0, 60));
 
-        if (data.email && !email) setEmail(data.email);
-
-        // Navigate to Pronote link to capture SSO identifiant
-        if (data.pronoteLink) {
+        // Navigate to Pronote SSO link
+        if (data.pronoteLink && !doneRef.current) {
+          doneRef.current = true;
           setStatus("Connexion à Pronote...");
-          console.log("[nōto] Navigating to Pronote SSO:", data.pronoteLink);
           webViewRef.current?.injectJavaScript(`
             window.location.href = '${data.pronoteLink}';
             true;
           `);
-
-          // Wait for Pronote redirect, then finish
-          setTimeout(() => {
-            finishLogin();
-          }, 5000);
-        } else {
-          finishLogin();
         }
       }
     } catch (e) {
@@ -175,33 +159,40 @@ export default function EntLoginScreen() {
   async function finishLogin() {
     setStatus("Finalisation...");
 
-    const fullEmail = email.includes("@") ? email : `${email}@monlycee.net`;
+    const username = usernameRef.current;
+    const password = passwordRef.current;
+    const pronoteIdent = pronoteIdentRef.current;
 
-    // Save IMAP credentials if we captured the password
-    if (password && fullEmail) {
+    console.log("[nōto] Finishing — user:", username, "pronote:", pronoteIdent ? "yes" : "no", "password:", password ? "yes" : "no");
+
+    // Build email from username
+    const fullEmail = username.includes("@") ? username : `${username}@monlycee.net`;
+
+    // Save IMAP credentials
+    if (username && password) {
       try {
         await saveMailCredentials({ email: fullEmail, password });
         console.log("[nōto] IMAP credentials saved for", fullEmail);
       } catch (e) {
-        console.warn("[nōto] Failed to save mail credentials:", e);
+        console.warn("[nōto] IMAP save error:", e);
       }
     }
 
-    // Save ENT session
+    // Save ENT session with Pronote identifiant
     await saveEntSession({
       providerId: entProvider.id,
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
       apiBaseUrl: entProvider.apiBaseUrl,
       useCookieJar: false,
+      pronoteIdentifiant: pronoteIdent || undefined,
+      pronoteBaseUrl: pronoteIdent ? "https://0752546k.index-education.net/pronote/" : undefined,
     });
 
-    console.log("[nōto] All done! Email:", fullEmail, "Pronote URL:", pronoteUrl ? "captured" : "none");
+    console.log("[nōto] All saved! Navigating home...");
 
     if (router.canDismiss()) router.dismissAll();
     router.replace("/");
   }
-
-  // --- Render: WebView only (everything is automatic) ---
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -213,7 +204,9 @@ export default function EntLoginScreen() {
         ref={webViewRef}
         source={{ uri: entProvider.apiBaseUrl }}
         onNavigationStateChange={handleNavigationChange}
-        onMessage={handleWebViewMessage}
+        onMessage={handleMessage}
+        injectedJavaScript={INJECT_JS}
+        injectedJavaScriptBeforeContentLoaded={INJECT_JS}
         javaScriptEnabled
         domStorageEnabled
         thirdPartyCookiesEnabled
