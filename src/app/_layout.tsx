@@ -69,6 +69,12 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="gallery"
+          options={{
+            title: "Photos",
+          }}
+        />
+        <Stack.Screen
           name="detail"
           options={{
             title: "Détail",

@@ -157,6 +157,16 @@ export default function DetailScreen() {
         style={[styles.container, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.listContent}
       >
+        <Pressable
+          onPress={() => router.push({
+            pathname: "/gallery",
+            params: { blogId: id, blogTitle: title },
+          })}
+          style={[styles.galleryBtn, { backgroundColor: theme.accent }]}
+        >
+          <Text style={styles.galleryBtnText}>📸 Voir toutes les photos</Text>
+        </Pressable>
+
         {blogPosts.map((post) => (
           <Pressable
             key={post.id}
@@ -230,6 +240,8 @@ export default function DetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   listContent: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
+  galleryBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: "center", marginBottom: Spacing.lg },
+  galleryBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
   postCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.sm, gap: 4 },
   postTitle: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, lineHeight: 22 },
   postDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
