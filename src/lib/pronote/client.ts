@@ -212,16 +212,29 @@ export async function fetchGrades(
   session: pronote.SessionHandle,
   period?: pronote.Period
 ): Promise<Grade[]> {
-  // Try Grades tab first, then Gradebook — parent accounts vary
+  // Try multiple tab locations — parent accounts vary
   const tab =
     session.userResource.tabs.get(pronote.TabLocation.Grades) ??
     session.userResource.tabs.get(pronote.TabLocation.Gradebook);
-  const p = period ?? tab?.defaultPeriod;
+
+  let p = period ?? tab?.defaultPeriod;
+
+  // Fallback: find any period from any available tab
   if (!p) {
-    console.log("[nōto] No grades/gradebook tab found");
+    for (const [, t] of session.userResource.tabs) {
+      if (t.defaultPeriod) {
+        p = t.defaultPeriod;
+        break;
+      }
+    }
+  }
+
+  if (!p) {
+    console.log("[nōto] No period found for grades");
     return [];
   }
 
+  console.log("[nōto] Fetching grades for period:", p.name ?? "unknown");
   const overview = await pronote.gradesOverview(session, p);
 
   return overview.grades.map((g) => ({

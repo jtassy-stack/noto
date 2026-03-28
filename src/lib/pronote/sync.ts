@@ -23,9 +23,12 @@ export async function syncWithSession(session: pronote.SessionHandle): Promise<v
     session.userResource = resource;
     console.log(`[nōto] Syncing data for ${resource.name} (${resource.id})...`);
 
-    // Log available tabs so we know what this account can access
-    const availableTabs = Array.from(resource.tabs.keys());
-    console.log(`[nōto] Available tabs:`, availableTabs);
+    // Log available tabs with names so we know what this account can access
+    const availableTabs: Record<number, string | undefined> = {};
+    for (const [loc, tab] of resource.tabs) {
+      availableTabs[loc] = tab.defaultPeriod?.name;
+    }
+    console.log(`[nōto] Available tabs:`, JSON.stringify(availableTabs));
 
     const nextWeek = new Date(today.getTime() + 7 * 86400000);
     const twoWeeks = new Date(today.getTime() + 14 * 86400000);
