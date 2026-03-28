@@ -20,6 +20,7 @@
     "expo-camera": "^55.0.12-canary-20260327-0789fbc",
     "expo-constants": "55.0.10-canary-20260327-0789fbc",
     "expo-font": "55.0.5-canary-20260327-0789fbc",
+    "expo-image-picker": "^55.0.15-canary-20260327-0789fbc",
     "expo-linking": "55.0.10-canary-20260327-0789fbc",
     "expo-notifications": "55.0.15-canary-20260327-0789fbc",
     "expo-router": "55.0.9-canary-20260327-0789fbc",
