@@ -1,46 +1,63 @@
 import { useState, useMemo, useCallback } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Tabs, router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import {
+  Home, BarChart2, Calendar, ClipboardList, Mail,
+  FileText, Camera, BookOpen,
+} from "lucide-react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { ChildrenContext } from "@/hooks/useChildren";
 import { ChildSwitcher } from "@/components/ui/ChildSwitcher";
 import { useAccountData } from "@/hooks/useAccountData";
 import { Fonts, FontSize, Spacing } from "@/constants/theme";
 
-type TabIcon = React.ComponentProps<typeof Ionicons>["name"];
-
 export default function TabLayout() {
   const theme = useTheme();
   const { children, loading, reload } = useAccountData();
   const [activeChildId, setActiveChildId] = useState("");
 
-  // Reload data when tab gains focus (after login)
   useFocusEffect(
     useCallback(() => {
       reload();
     }, [reload])
   );
 
-  // Auto-select first child when data loads
   const effectiveChildId = activeChildId || children[0]?.id || "";
+  const activeChild = children.find((c) => c.id === effectiveChildId) ?? null;
+  const isEnt = activeChild?.source === "ent";
 
   const childrenCtx = useMemo(
     () => ({
       children,
-      activeChild: children.find((c) => c.id === effectiveChildId) ?? null,
+      activeChild,
       setActiveChildId,
     }),
-    [children, effectiveChildId]
+    [children, activeChild]
   );
 
-  function tabIcon(name: TabIcon, focused: boolean) {
+  // Adaptive tab config based on child source
+  const tabConfig = {
+    grades: {
+      title: isEnt ? "Blog" : "Notes",
+      icon: isEnt ? FileText : BarChart2,
+    },
+    schedule: {
+      title: isEnt ? "Photos" : "EDT",
+      icon: isEnt ? Camera : Calendar,
+    },
+    homework: {
+      title: isEnt ? "Cahier" : "Devoirs",
+      icon: isEnt ? BookOpen : ClipboardList,
+    },
+  };
+
+  function LucideIcon({ icon: Icon, focused }: { icon: typeof Home; focused: boolean }) {
     return (
-      <Ionicons
-        name={name}
-        size={22}
+      <Icon
+        size={20}
         color={focused ? theme.accent : theme.textTertiary}
+        strokeWidth={1.8}
       />
     );
   }
@@ -55,11 +72,9 @@ export default function TabLayout() {
           </Text>
           <Pressable
             onPress={() => router.push("/auth/")}
-            style={[styles.addButton, { borderColor: theme.accent }]}
+            hitSlop={12}
           >
-            <Text style={[styles.addButtonText, { color: theme.accent }]}>
-              +
-            </Text>
+            <Text style={[styles.addButtonText, { color: theme.textTertiary }]}>+</Text>
           </Pressable>
         </View>
         {children.length > 0 && <ChildSwitcher />}
@@ -85,35 +100,35 @@ export default function TabLayout() {
           name="index"
           options={{
             title: "Accueil",
-            tabBarIcon: ({ focused }) => tabIcon("home-outline", focused),
+            tabBarIcon: ({ focused }) => <LucideIcon icon={Home} focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="grades"
           options={{
-            title: "Notes",
-            tabBarIcon: ({ focused }) => tabIcon("stats-chart-outline", focused),
+            title: tabConfig.grades.title,
+            tabBarIcon: ({ focused }) => <LucideIcon icon={tabConfig.grades.icon} focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="schedule"
           options={{
-            title: "EDT",
-            tabBarIcon: ({ focused }) => tabIcon("calendar-outline", focused),
+            title: tabConfig.schedule.title,
+            tabBarIcon: ({ focused }) => <LucideIcon icon={tabConfig.schedule.icon} focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="homework"
           options={{
-            title: "Devoirs",
-            tabBarIcon: ({ focused }) => tabIcon("book-outline", focused),
+            title: tabConfig.homework.title,
+            tabBarIcon: ({ focused }) => <LucideIcon icon={tabConfig.homework.icon} focused={focused} />,
           }}
         />
         <Tabs.Screen
           name="messages"
           options={{
             title: "Messages",
-            tabBarIcon: ({ focused }) => tabIcon("mail-outline", focused),
+            tabBarIcon: ({ focused }) => <LucideIcon icon={Mail} focused={focused} />,
           }}
         />
       </Tabs>
@@ -136,14 +151,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: Fonts.pixel,
   },
-  addButton: {
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
   addButtonText: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.medium,
+    fontSize: 22,
+    fontFamily: Fonts.regular,
   },
 });

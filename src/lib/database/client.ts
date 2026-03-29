@@ -4,26 +4,38 @@ import { CREATE_TABLES, SCHEMA_VERSION } from "./schema";
 const DB_NAME = "noto.db";
 
 let db: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
+  if (initPromise) return initPromise;
 
-  db = await SQLite.openDatabaseAsync(DB_NAME);
-  await db.execAsync("PRAGMA journal_mode = WAL;");
-  await db.execAsync("PRAGMA foreign_keys = ON;");
-  await db.execAsync(CREATE_TABLES);
+  initPromise = (async () => {
+    const instance = await SQLite.openDatabaseAsync(DB_NAME);
+    await instance.execAsync("PRAGMA journal_mode = WAL;");
+    await instance.execAsync("PRAGMA foreign_keys = ON;");
+    await instance.execAsync(CREATE_TABLES);
 
-  // Check and update schema version
-  const rows = await db.getAllAsync<{ version: number }>(
-    "SELECT version FROM schema_version LIMIT 1"
-  );
-  if (rows.length === 0) {
-    await db.runAsync("INSERT INTO schema_version (version) VALUES (?)", [
-      SCHEMA_VERSION,
-    ]);
+    // Check and update schema version
+    const rows = await instance.getAllAsync<{ version: number }>(
+      "SELECT version FROM schema_version LIMIT 1"
+    );
+    if (rows.length === 0) {
+      await instance.runAsync("INSERT INTO schema_version (version) VALUES (?)", [
+        SCHEMA_VERSION,
+      ]);
+    }
+
+    db = instance;
+    return instance;
+  })();
+
+  try {
+    return await initPromise;
+  } catch (e) {
+    initPromise = null;
+    throw e;
   }
-
-  return db;
 }
 
 export async function closeDatabase(): Promise<void> {

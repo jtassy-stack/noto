@@ -62,12 +62,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   pill: {
-    paddingHorizontal: Spacing.md + 4,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
     borderWidth: 1,
   },
   pillText: {
-    fontSize: FontSize.md,
+    fontSize: 13,
   },
 });

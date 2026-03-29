@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getConversationCredentials } from "@/lib/ent/conversation";
+import type { ConversationCredentials } from "@/lib/ent/conversation";
 import {
   MOTIF_LABELS,
   type AbsenceMotif,
@@ -46,12 +47,16 @@ export default function AbsenceScreen() {
   const [motif, setMotif] = useState<AbsenceMotif>("maladie");
   const [motifDetail, setMotifDetail] = useState("");
   const [dayOffset, setDayOffset] = useState(0); // 0=today, 1=tomorrow, etc.
+  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [recipients, setRecipients] = useState<string[] | null>(null);
+  const [cachedCreds, setCachedCreds] = useState<ConversationCredentials | null>(null);
+  const [sent, setSent] = useState(false);
 
   const selectedDate = new Date();
   selectedDate.setDate(selectedDate.getDate() + dayOffset);
 
-  async function handleSend() {
+  async function handlePreview() {
     if (!activeChild) return;
 
     const creds = await getConversationCredentials();
@@ -59,6 +64,36 @@ export default function AbsenceScreen() {
       Alert.alert("Erreur", "Connectez d'abord votre compte PCN.");
       return;
     }
+
+    setLoading(true);
+
+    try {
+      const { findRecipientsOnly } = await import("@/lib/ent/absence");
+      const found = await findRecipientsOnly(creds, activeChild);
+      setRecipients(found);
+      setCachedCreds(creds);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erreur inconnue";
+      Alert.alert("Erreur", msg);
+      console.warn("[nōto] Absence preview error:", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSendConfirm() {
+    Alert.alert(
+      "Confirmer l'envoi",
+      "Êtes-vous sûr de vouloir envoyer ce message d'absence ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Envoyer", style: "destructive", onPress: handleSend },
+      ]
+    );
+  }
+
+  async function handleSend() {
+    if (!activeChild || !cachedCreds) return;
 
     setSending(true);
 
@@ -75,25 +110,13 @@ export default function AbsenceScreen() {
         parentName,
       };
 
-      // DEV MODE: dry-run — find recipients but don't send
-      // TODO: remove dry-run when ready for production
-      const { findRecipientsOnly } = await import("@/lib/ent/absence");
-      const recipients = await findRecipientsOnly(creds, activeChild);
-
-      const motifText = motif === "autre" && motifDetail ? motifDetail : MOTIF_LABELS[motif];
-
-      Alert.alert(
-        "🧪 Mode test — Aperçu",
-        `Objet : Absence de ${activeChild.firstName} - ${activeChild.className} - ${formatDate(selectedDate)}\n\n` +
-        `Motif : ${motifText}\n\n` +
-        `Destinataires (${recipients.length}) :\n${recipients.map(r => `• ${r}`).join("\n")}\n\n` +
-        `⚠️ Message NON envoyé (mode dev)`,
-        [{ text: "OK", onPress: () => router.back() }]
-      );
+      const { sendAbsenceNotification } = await import("@/lib/ent/absence");
+      await sendAbsenceNotification(cachedCreds, req);
+      setSent(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur inconnue";
       Alert.alert("Erreur", msg);
-      console.warn("[nōto] Absence error:", e);
+      console.warn("[nōto] Absence send error:", e);
     } finally {
       setSending(false);
     }
@@ -205,21 +228,72 @@ export default function AbsenceScreen() {
         </Text>
       </View>
 
-      {/* Send button */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.sendBtn,
-          { backgroundColor: theme.crimson, opacity: pressed || sending ? 0.7 : 1 },
-        ]}
-        onPress={handleSend}
-        disabled={sending}
-      >
-        {sending ? (
-          <ActivityIndicator color="#FFFFFF" size="small" />
-        ) : (
-          <Text style={styles.sendBtnText}>Envoyer le signalement</Text>
-        )}
-      </Pressable>
+      {/* Recipients preview */}
+      {recipients && recipients.length > 0 && (
+        <View style={[styles.recipientsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: 0 }]}>
+            DESTINATAIRES ({recipients.length})
+          </Text>
+          {recipients.map((r, i) => (
+            <Text key={i} style={[styles.recipientName, { color: theme.text }]}>
+              {r}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {/* Preview button — step 1 */}
+      {!recipients && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.sendBtn,
+            { backgroundColor: theme.accent, opacity: pressed || loading ? 0.7 : 1 },
+          ]}
+          onPress={handlePreview}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.sendBtnText}>Aperçu des destinataires</Text>
+          )}
+        </Pressable>
+      )}
+
+      {/* Send button — step 2 (only after preview) */}
+      {recipients && !sent && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.sendBtn,
+            { backgroundColor: theme.crimson, opacity: pressed || sending ? 0.7 : 1 },
+          ]}
+          onPress={handleSendConfirm}
+          disabled={sending}
+        >
+          {sending ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.sendBtnText}>Confirmer l'envoi</Text>
+          )}
+        </Pressable>
+      )}
+
+      {/* Sent confirmation */}
+      {sent && (
+        <View style={styles.sentContainer}>
+          <Text style={styles.sentCheck}>✓</Text>
+          <Text style={[styles.sentText, { color: theme.accent }]}>Message envoyé</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.backBtn,
+              { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.backBtnText, { color: theme.text }]}>Retour</Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -251,6 +325,15 @@ const styles = StyleSheet.create({
   previewBody: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 20 },
   previewTo: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: Spacing.xs },
 
+  recipientsCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, marginTop: Spacing.lg, gap: Spacing.xs },
+  recipientName: { fontSize: FontSize.sm, fontFamily: Fonts.regular, paddingVertical: 2 },
+
   sendBtn: { borderRadius: BorderRadius.md, paddingVertical: 16, alignItems: "center", marginTop: Spacing.xl },
   sendBtnText: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+
+  sentContainer: { alignItems: "center", marginTop: Spacing.xl, gap: Spacing.md },
+  sentCheck: { fontSize: 48, color: "#34C759" },
+  sentText: { fontSize: FontSize.xl, fontFamily: Fonts.semiBold },
+  backBtn: { borderRadius: BorderRadius.md, paddingVertical: 12, paddingHorizontal: 32, borderWidth: 1, marginTop: Spacing.sm },
+  backBtnText: { fontSize: FontSize.md, fontFamily: Fonts.medium },
 });

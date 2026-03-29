@@ -40,11 +40,7 @@ function EntDashboard({ childName }: { childName: string }) {
     load();
   }, [childName]);
 
-  const notifIcon: Record<string, string> = {
-    MESSAGERIE: "✉️",
-    BLOG: "📝",
-    SCHOOLBOOK: "📒",
-  };
+  // No more emoji icons — use green dots matching Figma v2
 
   return (
     <ScrollView
@@ -64,8 +60,6 @@ function EntDashboard({ childName }: { childName: string }) {
             const dateStr = date
               ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
               : "";
-            const icon = notifIcon[n.type] || "📌";
-
             return (
               <Pressable
                 key={n.id}
@@ -73,9 +67,9 @@ function EntDashboard({ childName }: { childName: string }) {
                   pathname: "/detail",
                   params: { id: n.id, title: n.message, from: n.sender ?? "", date: dateStr, type: "timeline", body: n.message },
                 })}
-                style={[entStyles.timelineRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                style={entStyles.timelineRow}
               >
-                <Text style={entStyles.timelineIcon}>{icon}</Text>
+                <View style={[entStyles.timelineDot, { backgroundColor: theme.accent }]} />
                 <View style={entStyles.timelineContent}>
                   <Text style={[entStyles.timelineMsg, { color: theme.text }]} numberOfLines={2}>
                     {n.message}
@@ -113,13 +107,12 @@ const entStyles = StyleSheet.create({
   blogTitle: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, lineHeight: 20 },
   blogDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
   timelineRow: {
-    flexDirection: "row", alignItems: "flex-start", padding: 12,
-    borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: 4, gap: Spacing.sm,
+    flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, gap: Spacing.sm,
   },
-  timelineIcon: { fontSize: 18, marginTop: 2 },
+  timelineDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
   timelineContent: { flex: 1, gap: 3 },
-  timelineMsg: { fontSize: FontSize.sm, fontFamily: Fonts.regular, lineHeight: 18 },
-  timelineDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
+  timelineMsg: { fontSize: 13, fontFamily: Fonts.regular, lineHeight: 20 },
+  timelineDate: { fontSize: FontSize.xs, fontFamily: Fonts.mono },
   absenceBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: "center", marginBottom: Spacing.lg },
   absenceBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
   emptyState: { justifyContent: "center", alignItems: "center", paddingTop: Spacing.xxl },
@@ -234,10 +227,7 @@ export default function DashboardScreen() {
         </Text>
       )}
       {todaySchedule.map((s) => (
-        <View
-          key={s.id}
-          style={[styles.scheduleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        >
+        <View key={s.id} style={styles.scheduleRow}>
           <Text style={[styles.scheduleTime, { color: theme.accent }]}>
             {new Date(s.startTime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
           </Text>
@@ -258,29 +248,32 @@ export default function DashboardScreen() {
           <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
             DERNIÈRES NOTES
           </Text>
-          {recentGrades.map((g) => (
-            <View
-              key={g.id}
-              style={[styles.gradeRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            >
-              <View style={styles.gradeInfo}>
-                <Text style={[styles.gradeSubject, { color: theme.text }]}>
-                  {g.subject}
-                </Text>
-                <Text style={[styles.gradeDate, { color: theme.textTertiary }]}>
-                  {g.date}
-                </Text>
+          {recentGrades.map((g) => {
+            const pct = g.outOf > 0 ? g.value / g.outOf : 0;
+            const color = gradeColor(g.value, g.outOf, theme);
+            return (
+              <View key={g.id} style={styles.gradeRow}>
+                <View style={styles.gradeInfo}>
+                  <View style={styles.gradeHeader}>
+                    <Text style={[styles.gradeSubject, { color: theme.text }]}>
+                      {g.subject}
+                    </Text>
+                    <View style={styles.gradeValueRow}>
+                      <Text style={[styles.gradeValue, { color }]}>
+                        {g.value}
+                      </Text>
+                      <Text style={[styles.gradeOutOf, { color: theme.textTertiary }]}>
+                        /{g.outOf}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.gradeBarBg, { backgroundColor: theme.surfaceElevated }]}>
+                    <View style={[styles.gradeBarFill, { width: `${Math.min(pct * 100, 100)}%`, backgroundColor: color }]} />
+                  </View>
+                </View>
               </View>
-              <Text
-                style={[
-                  styles.gradeValue,
-                  { color: gradeColor(g.value, g.outOf, theme) },
-                ]}
-              >
-                {g.value}/{g.outOf}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
         </>
       )}
 
@@ -293,7 +286,7 @@ export default function DashboardScreen() {
           {pendingHomework.slice(0, 5).map((h) => (
             <View
               key={h.id}
-              style={[styles.homeworkRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              style={styles.homeworkRow}
             >
               <View style={styles.homeworkInfo}>
                 <Text style={[styles.homeworkSubject, { color: theme.text }]}>
@@ -352,15 +345,13 @@ const styles = StyleSheet.create({
   scheduleRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    marginBottom: 4,
+    paddingVertical: 10,
     gap: Spacing.md,
   },
   scheduleTime: {
     fontSize: FontSize.sm,
     fontFamily: Fonts.mono,
+    width: 42,
   },
   scheduleInfo: { flex: 1, gap: 2 },
   scheduleSubject: {
@@ -368,7 +359,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
   },
   scheduleMeta: {
-    fontSize: FontSize.xs,
+    fontSize: 11,
     fontFamily: Fonts.regular,
   },
 
@@ -377,10 +368,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 12,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    marginBottom: 4,
+    paddingVertical: 8,
   },
   gradeInfo: { flex: 1, gap: 2 },
   gradeSubject: {
@@ -391,19 +379,38 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontFamily: Fonts.regular,
   },
+  gradeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  gradeValueRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
   gradeValue: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontFamily: Fonts.monoBold,
+  },
+  gradeOutOf: {
+    fontSize: FontSize.xs,
+    fontFamily: Fonts.regular,
+  },
+  gradeBarBg: {
+    height: 3,
+    borderRadius: 1.5,
+    marginTop: 6,
+  },
+  gradeBarFill: {
+    height: 3,
+    borderRadius: 1.5,
   },
 
   // Homework
   homeworkRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: 12,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    marginBottom: 4,
+    paddingVertical: 10,
     gap: Spacing.sm,
   },
   homeworkInfo: { flex: 1, gap: 2 },

@@ -1,33 +1,101 @@
-import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useEffect, useState, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
 import { getHomeworkByChild } from "@/lib/database/repository";
+import { getConversationCredentials } from "@/lib/ent/conversation";
+import { fetchHomeworks, type PcnHomeworkEntry } from "@/lib/ent/pcn-data";
 import type { Homework } from "@/types";
+
+// Unified homework item for rendering (covers both Pronote and ENT)
+interface HomeworkItem {
+  id: string;
+  subject: string;
+  description: string;
+  dueDate: string;
+  isDone: boolean;
+}
+
+function pronoteToItem(h: Homework): HomeworkItem {
+  return { id: h.id, subject: h.subject, description: h.description, dueDate: h.dueDate, isDone: h.isDone };
+}
+
+function pcnToItem(h: PcnHomeworkEntry): HomeworkItem {
+  return { id: h.id, subject: h.subject, description: h.description, dueDate: h.dueDate, isDone: false };
+}
 
 export default function HomeworkScreen() {
   const theme = useTheme();
   const { activeChild } = useChildren();
-  const [homework, setHomework] = useState<Homework[]>([]);
+  const [items, setItems] = useState<HomeworkItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadHomework = useCallback(async () => {
     if (!activeChild) return;
-    const today = new Date().toISOString().split("T")[0]!;
-    getHomeworkByChild(activeChild.id, today).then(setHomework);
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (activeChild.source === "ent") {
+        const creds = await getConversationCredentials();
+        if (!creds) {
+          setError("Identifiants ENT non trouvés.");
+          setItems([]);
+          return;
+        }
+        const hw = await fetchHomeworks(creds);
+        setItems(hw.map(pcnToItem));
+      } else {
+        // Pronote (or other local DB sources)
+        const today = new Date().toISOString().split("T")[0]!;
+        const hw = await getHomeworkByChild(activeChild.id, today);
+        setItems(hw.map(pronoteToItem));
+      }
+    } catch (e) {
+      console.warn("[nōto] Homework load error:", e);
+      setError("Impossible de charger les devoirs.");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, [activeChild]);
 
-  if (!activeChild || (activeChild.source === "ent" && !activeChild.hasHomework)) {
+  useEffect(() => {
+    loadHomework();
+  }, [loadHomework]);
+
+  if (!activeChild) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
-          {!activeChild ? "Connectez un compte." : "Les devoirs ne sont pas disponibles pour cet enfant.\nConnectez Pronote pour y accéder."}
+          Connectez un compte.
         </Text>
       </View>
     );
   }
 
-  if (homework.length === 0) {
+  if (loading) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <ActivityIndicator color={theme.accent} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          {error}
+        </Text>
+      </View>
+    );
+  }
+
+  if (items.length === 0) {
     return (
       <View style={[styles.empty, { backgroundColor: theme.background }]}>
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
@@ -38,8 +106,8 @@ export default function HomeworkScreen() {
   }
 
   // Group by due date
-  const grouped = new Map<string, Homework[]>();
-  for (const h of homework) {
+  const grouped = new Map<string, HomeworkItem[]>();
+  for (const h of items) {
     const list = grouped.get(h.dueDate) ?? [];
     list.push(h);
     grouped.set(h.dueDate, list);
@@ -50,7 +118,7 @@ export default function HomeworkScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
     >
-      {Array.from(grouped.entries()).map(([date, items]) => {
+      {Array.from(grouped.entries()).map(([date, dateItems]) => {
         const d = new Date(date + "T00:00:00");
         const label = d.toLocaleDateString("fr-FR", {
           weekday: "long",
@@ -63,7 +131,7 @@ export default function HomeworkScreen() {
             <Text style={[styles.dateLabel, { color: theme.textTertiary }]}>
               {label.toUpperCase()}
             </Text>
-            {items.map((h) => (
+            {dateItems.map((h) => (
               <View
                 key={h.id}
                 style={[
@@ -83,7 +151,7 @@ export default function HomeworkScreen() {
                     ]}
                   />
                   <Text style={[styles.subject, { color: theme.text }]}>
-                    {h.subject}
+                    {h.subject || "Devoir"}
                   </Text>
                   {h.isDone && (
                     <Text style={[styles.doneBadge, { color: theme.textTertiary }]}>
@@ -91,12 +159,14 @@ export default function HomeworkScreen() {
                     </Text>
                   )}
                 </View>
-                <Text
-                  style={[styles.description, { color: theme.textSecondary }]}
-                  numberOfLines={4}
-                >
-                  {h.description}
-                </Text>
+                {h.description !== "" && (
+                  <Text
+                    style={[styles.description, { color: theme.textSecondary }]}
+                    numberOfLines={4}
+                  >
+                    {h.description}
+                  </Text>
+                )}
               </View>
             ))}
           </View>

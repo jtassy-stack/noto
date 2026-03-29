@@ -134,7 +134,7 @@ export default function MessagesScreen() {
           })}
           style={[styles.absenceBtn, { backgroundColor: theme.crimson }]}
         >
-          <Text style={styles.absenceBtnText}>🏥 Signaler une absence</Text>
+          <Text style={styles.absenceBtnText}>Signaler une absence</Text>
         </Pressable>
       )}
 
@@ -162,7 +162,7 @@ export default function MessagesScreen() {
           }}
           style={[
             styles.messageRow,
-            { backgroundColor: theme.surface, borderColor: theme.border, opacity: msg.unread ? 1 : 0.7 },
+            { borderBottomColor: theme.border, opacity: msg.unread ? 1 : 0.7 },
           ]}
         >
           {msg.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
@@ -183,7 +183,7 @@ export default function MessagesScreen() {
               {msg.subject}
             </Text>
             {msg.hasAttachment && (
-              <Text style={[styles.attachment, { color: theme.textTertiary }]}>📎 Pièce jointe</Text>
+              <Text style={[styles.attachment, { color: theme.textTertiary }]}>Pièce jointe</Text>
             )}
           </View>
         </Pressable>
@@ -200,17 +200,17 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center", lineHeight: 22 },
   connectBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, paddingHorizontal: Spacing.xl, marginTop: Spacing.sm },
   connectBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  absenceBtn: { borderRadius: BorderRadius.md, paddingVertical: 12, alignItems: "center", marginBottom: Spacing.md },
+  absenceBtn: { borderRadius: 10, paddingVertical: 12, alignItems: "center", marginBottom: Spacing.md },
   absenceBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  badge: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: Spacing.md },
-  badgeText: { fontSize: FontSize.sm, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  badge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginBottom: Spacing.md },
+  badgeText: { fontSize: FontSize.xs, fontFamily: Fonts.bold, color: "#FFFFFF" },
   error: { fontSize: FontSize.sm, fontFamily: Fonts.regular, marginBottom: Spacing.md },
-  messageRow: { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: 4, gap: Spacing.sm },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  messageRow: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 12, gap: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  unreadDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
   messageContent: { flex: 1, gap: 3 },
   messageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   messageFrom: { fontSize: FontSize.md, flex: 1 },
   messageDate: { fontSize: FontSize.xs, fontFamily: Fonts.mono, marginLeft: Spacing.sm },
-  messageSubject: { fontSize: FontSize.sm },
+  messageSubject: { fontSize: 13 },
   attachment: { fontSize: FontSize.xs, fontFamily: Fonts.regular, marginTop: 2 },
 });

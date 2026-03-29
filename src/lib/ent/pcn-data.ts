@@ -54,6 +54,58 @@ export async function fetchBlogs(creds: ConversationCredentials): Promise<BlogPo
   }));
 }
 
+// --- Cahier de textes (homeworks) ---
+
+export interface PcnHomeworkEntry {
+  id: string;
+  subject: string;
+  description: string;
+  dueDate: string; // ISO date (YYYY-MM-DD)
+}
+
+/**
+ * Fetch cahier de textes entries from PCN.
+ * GET /homeworks/list — returns homework entries for the logged-in parent's children.
+ */
+export async function fetchHomeworks(creds: ConversationCredentials): Promise<PcnHomeworkEntry[]> {
+  const data = await pcnFetchJson(creds, "/homeworks/list");
+  if (!data || typeof data !== "object") return [];
+
+  // The API may return { results: [...] } or a direct array
+  const raw = Array.isArray(data)
+    ? (data as Record<string, unknown>[])
+    : Array.isArray((data as Record<string, unknown>).results)
+      ? ((data as Record<string, unknown>).results as Record<string, unknown>[])
+      : [];
+
+  return raw.map((entry) => {
+    // Extract date — may be { "$date": "..." } or a string
+    let dueDate = "";
+    const rawDate = entry.dueDate ?? entry.date ?? entry.due_date;
+    if (rawDate && typeof rawDate === "object" && "$date" in (rawDate as Record<string, unknown>)) {
+      dueDate = String((rawDate as Record<string, string>).$date).split("T")[0] ?? "";
+    } else if (typeof rawDate === "string") {
+      dueDate = rawDate.split("T")[0] ?? "";
+    } else if (typeof rawDate === "number") {
+      dueDate = new Date(rawDate).toISOString().split("T")[0] ?? "";
+    }
+
+    const rawDesc = String(entry.description ?? entry.content ?? entry.title ?? "");
+    const description = stripHtml(rawDesc).trim();
+
+    return {
+      id: String(entry._id ?? entry.id ?? `hw-${dueDate}-${description.slice(0, 20)}`),
+      subject: String(
+        (entry.subject && typeof entry.subject === "object"
+          ? (entry.subject as Record<string, unknown>).label ?? (entry.subject as Record<string, unknown>).name
+          : entry.subject) ?? entry.subjectLabel ?? ""
+      ),
+      description,
+      dueDate,
+    };
+  }).filter((h) => h.dueDate !== "");
+}
+
 export async function fetchTimeline(creds: ConversationCredentials): Promise<TimelineNotification[]> {
   const data = await pcnFetchJson(creds, "/timeline/lastNotifications") as Record<string, unknown> | null;
   if (!data) return [];

@@ -95,8 +95,18 @@ export const CREATE_TABLES = `
     version INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS cached_photos (
+    id TEXT PRIMARY KEY,
+    blog_id TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    base64_data TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    cached_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
   CREATE INDEX IF NOT EXISTS idx_grades_child ON grades(child_id);
   CREATE INDEX IF NOT EXISTS idx_grades_date ON grades(date);
   CREATE INDEX IF NOT EXISTS idx_schedule_child_time ON schedule(child_id, start_time);
   CREATE INDEX IF NOT EXISTS idx_homework_child_due ON homework(child_id, due_date);
+  CREATE INDEX IF NOT EXISTS idx_cached_photos_blog ON cached_photos(blog_id);
 `;

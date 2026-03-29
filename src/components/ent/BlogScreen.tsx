@@ -112,13 +112,13 @@ export function EntBlogScreen() {
       )}
 
       {blogs.map((blog) => (
-        <View key={blog.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: blog.isFav ? theme.accent : theme.border }]}>
+        <View key={blog.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, borderLeftColor: theme.accent }]}>
           <Pressable
             onPress={() => router.push({ pathname: "/detail", params: { id: blog.id, title: blog.title, type: "blog" } })}
             style={styles.cardContent}
           >
             <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>{blog.title}</Text>
-            <Text style={[styles.cardMeta, { color: theme.textTertiary }]}>
+            <Text style={[styles.cardMeta, { color: theme.textSecondary }]}>
               {blog.postCount} article{blog.postCount > 1 ? "s" : ""}
               {blog.isTeacher ? "  ·  Prof de la classe" : ""}
             </Text>
@@ -135,10 +135,14 @@ export function EntBlogScreen() {
               }}
               style={styles.favBtn}
             >
-              <Text style={{ fontSize: 20 }}>{blog.isFav ? "⭐" : "☆"}</Text>
+              <Text style={[styles.starText, { color: blog.isFav ? theme.accent : theme.textTertiary }]}>
+                {blog.isFav ? "★" : "☆"}
+              </Text>
             </Pressable>
           )}
-          {blog.isTeacher && <Text style={styles.teacherBadge}>⭐</Text>}
+          {blog.isTeacher && (
+            <Text style={[styles.starText, { color: theme.accent, paddingHorizontal: Spacing.md }]}>★</Text>
+          )}
         </View>
       ))}
     </ScrollView>
@@ -149,10 +153,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
   empty: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center", marginTop: Spacing.xl },
-  card: { flexDirection: "row", alignItems: "center", borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: Spacing.sm, overflow: "hidden" },
-  cardContent: { flex: 1, padding: Spacing.md, gap: 4 },
-  cardTitle: { fontSize: FontSize.lg, fontFamily: Fonts.semiBold, lineHeight: 22 },
-  cardMeta: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
+  card: { flexDirection: "row", alignItems: "center", borderRadius: BorderRadius.lg, borderWidth: 1, borderLeftWidth: 3, marginBottom: Spacing.sm, overflow: "hidden" },
+  cardContent: { flex: 1, padding: 14, gap: 4 },
+  cardTitle: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, lineHeight: 20 },
+  cardMeta: { fontSize: 11, fontFamily: Fonts.regular },
   favBtn: { padding: Spacing.md, justifyContent: "center", alignItems: "center" },
-  teacherBadge: { fontSize: 20, paddingHorizontal: Spacing.md },
+  starText: { fontSize: 18 },
 });

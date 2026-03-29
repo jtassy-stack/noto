@@ -241,6 +241,65 @@ export async function getFavoritesByType(type: string, childId?: string): Promis
   return db.getAllAsync<{ id: string; title: string }>(query, params);
 }
 
+// --- Photo cache ---
+
+export interface CachedPhoto {
+  id: string;
+  blogId: string;
+  imageUrl: string;
+  base64Data: string;
+  sourceName: string;
+  cachedAt: number;
+}
+
+const CACHE_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+export async function getCachedPhotosForBlogs(blogIds: string[]): Promise<CachedPhoto[]> {
+  if (blogIds.length === 0) return [];
+  const db = await getDatabase();
+  const placeholders = blogIds.map(() => "?").join(",");
+  const cutoff = Math.floor(Date.now() / 1000) - CACHE_EXPIRY_SECONDS;
+  const rows = await db.getAllAsync<{
+    id: string;
+    blog_id: string;
+    image_url: string;
+    base64_data: string;
+    source_name: string;
+    cached_at: number;
+  }>(
+    `SELECT * FROM cached_photos WHERE blog_id IN (${placeholders}) AND cached_at > ? ORDER BY id`,
+    [...blogIds, cutoff]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    blogId: r.blog_id,
+    imageUrl: r.image_url,
+    base64Data: r.base64_data,
+    sourceName: r.source_name,
+    cachedAt: r.cached_at,
+  }));
+}
+
+export async function saveCachedPhoto(photo: Omit<CachedPhoto, "cachedAt">): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO cached_photos (id, blog_id, image_url, base64_data, source_name, cached_at)
+     VALUES (?, ?, ?, ?, ?, unixepoch())`,
+    [photo.id, photo.blogId, photo.imageUrl, photo.base64Data, photo.sourceName]
+  );
+}
+
+export async function deleteExpiredPhotos(): Promise<void> {
+  const db = await getDatabase();
+  const cutoff = Math.floor(Date.now() / 1000) - CACHE_EXPIRY_SECONDS;
+  await db.runAsync("DELETE FROM cached_photos WHERE cached_at <= ?", [cutoff]);
+}
+
+export async function deleteCachedPhotosForBlog(blogId: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync("DELETE FROM cached_photos WHERE blog_id = ?", [blogId]);
+}
+
 // --- Sync metadata ---
 
 export async function getLastSyncTime(): Promise<Date | null> {
