@@ -309,11 +309,9 @@ export function filterMessagesByChild(
     return msg.groupNames.some(group => {
       // School-wide message (contains "POLY", "école", etc.)
       if (group.includes("POLY") || group.includes("école") || group.includes("DOMBASLE")) return true;
-      // Class-specific: check if group contains the child's class name
-      if (group.includes(classParts)) return true;
-      // Also check individual class parts (e.g. "CM1" or "CM2")
-      const words = classParts.split(/\s+/);
-      return words.some(w => w.length > 2 && group.includes(w));
+      // Class-specific: check if group contains the child's full class name
+      if (classParts && group.includes(classParts)) return true;
+      return false;
     });
   });
 }
