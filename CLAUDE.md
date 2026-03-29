@@ -20,6 +20,14 @@
 - Light mode default, dark mode supported (auto via system preference)
 - Palette: see `src/constants/theme.ts` — zero orange rule, 1-Up green is brand accent
 
+## Testing
+
+- **LIVE APIs with REAL accounts** — never send messages, create drafts, or modify data
+- Tests must be **GET-only** — no POST, PUT, DELETE to live APIs
+- Unit tests: mock all API calls, test pure logic (parsing, filtering, formatting)
+- Absence feature: MUST stay in **dry-run mode** during dev
+- If testing POST behavior, mock the fetch call
+
 ## Architecture
 
 - **Local-first**: all school data stays on-device (SQLite + SecureStore)
