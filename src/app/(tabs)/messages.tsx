@@ -4,8 +4,11 @@ import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
-import { getMailCredentials, fetchInbox, type MailMessage } from "@/lib/ent/mail";
-import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild, type ConversationMessage } from "@/lib/ent/conversation";
+import { setChildSetting } from "@/lib/database/repository";
+import { getMailCredentials, fetchInbox } from "@/lib/ent/mail";
+import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild } from "@/lib/ent/conversation";
+import { fetchDiscussions } from "@/lib/pronote/client";
+import type { MessageSource } from "@/types";
 
 interface DisplayMessage {
   id: string;
@@ -14,6 +17,7 @@ interface DisplayMessage {
   date: string;
   unread: boolean;
   hasAttachment: boolean;
+  source: "ent" | "pronote";
 }
 
 export default function MessagesScreen() {
@@ -24,58 +28,100 @@ export default function MessagesScreen() {
   const [unseen, setUnseen] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsSourcePick, setNeedsSourcePick] = useState(false);
+
+  // Fallback (option B): inline source picker for Pronote children without a preference
+  async function pickSourceInline(source: MessageSource) {
+    if (activeChild) {
+      await setChildSetting(activeChild.id, "message_source", source);
+      // Force re-render — the children context will pick it up on next load
+      setNeedsSourcePick(false);
+      loadMessages();
+    }
+  }
 
   const loadMessages = useCallback(async () => {
+    const msgSource = activeChild?.messageSource;
+    const isEntChild = activeChild?.source === "ent";
+    const isPronoteChild = activeChild?.source === "pronote";
+
+    // Pronote child with no messaging preference — show inline picker (option B)
+    if (isPronoteChild && !msgSource) {
+      setNeedsSourcePick(true);
+      setConnected(true);
+      return;
+    }
+    setNeedsSourcePick(false);
+
     const imapCreds = await getMailCredentials();
     const convCreds = await getConversationCredentials();
 
-    if (!imapCreds && !convCreds) {
+    // Determine which backends to use based on messageSource preference
+    const wantEnt = isEntChild || msgSource === "ent" || msgSource === "both";
+    const wantPronote = msgSource === "pronote" || msgSource === "both";
+
+    const hasEntCreds = !!(imapCreds || convCreds);
+    if (!hasEntCreds && !wantPronote) {
       setConnected(false);
       return;
     }
-
-    // Pick messaging backend based on selected child's source
-    // ENT child → Conversation API (PCN)
-    // Pronote child → IMAP (Mon Lycée) if available
-    // No child selected → use whatever is available
-    const isEntChild = activeChild?.source === "ent";
-    const useConversation = convCreds && (isEntChild || !imapCreds);
-    const useIMAP = imapCreds && !isEntChild;
 
     setConnected(true);
     setLoading(true);
     setError(null);
 
     try {
-      if (useConversation && convCreds) {
-        // PCN: ENTCore Conversation API — filtered by child's class
-        const result = await fetchConversationInbox(convCreds, 0);
-        const filtered = activeChild?.className
-          ? filterMessagesByChild(result.messages, activeChild.className)
-          : result.messages;
-        console.log("[nōto] Messages:", result.messages.length, "total →", filtered.length, "for", activeChild?.firstName);
-        setMessages(filtered.map((m) => ({
-          id: m.id,
-          subject: m.subject,
-          from: m.from,
-          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
-          unread: m.unread,
-          hasAttachment: m.hasAttachment,
-        })));
-        setUnseen(filtered.filter(m => m.unread).length);
-      } else if (useIMAP && imapCreds) {
-        // Mon Lycée: IMAP via proxy
-        const result = await fetchInbox(imapCreds, 0);
-        setMessages(result.messages.map((m) => ({
-          id: String(m.id),
-          subject: m.subject,
-          from: m.from,
-          date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
-          unread: m.unread,
-          hasAttachment: m.hasAttachment,
-        })));
-        setUnseen(result.unseen);
+      const allMessages: DisplayMessage[] = [];
+      let totalUnseen = 0;
+
+      // Fetch ENT messages (Conversation API or IMAP)
+      if (wantEnt) {
+        if (convCreds) {
+          const result = await fetchConversationInbox(convCreds, 0);
+          const filtered = activeChild?.className
+            ? filterMessagesByChild(result.messages, activeChild.className)
+            : result.messages;
+          allMessages.push(...filtered.map((m) => ({
+            id: m.id,
+            subject: m.subject,
+            from: m.from,
+            date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
+            unread: m.unread,
+            hasAttachment: m.hasAttachment,
+            source: "ent" as const,
+          })));
+          totalUnseen += filtered.filter(m => m.unread).length;
+        } else if (imapCreds) {
+          const result = await fetchInbox(imapCreds, 0);
+          allMessages.push(...result.messages.map((m) => ({
+            id: String(m.id),
+            subject: m.subject,
+            from: m.from,
+            date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
+            unread: m.unread,
+            hasAttachment: m.hasAttachment,
+            source: "ent" as const,
+          })));
+          totalUnseen += result.unseen;
+        }
       }
+
+      // Fetch Pronote discussions
+      if (wantPronote && activeChild) {
+        try {
+          const pronoteMessages = await fetchDiscussions(activeChild.accountId);
+          allMessages.push(...pronoteMessages.map((m) => ({
+            ...m,
+            source: "pronote" as const,
+          })));
+          totalUnseen += pronoteMessages.filter(m => m.unread).length;
+        } catch (e) {
+          console.warn("[nōto] Pronote discussions error:", e);
+        }
+      }
+
+      setMessages(allMessages);
+      setUnseen(totalUnseen);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur";
       setError(msg);
@@ -88,6 +134,38 @@ export default function MessagesScreen() {
   useEffect(() => {
     loadMessages();
   }, [loadMessages, activeChild]);
+
+  // Fallback picker (option B) — Pronote child without messaging preference
+  if (needsSourcePick && activeChild) {
+    return (
+      <View style={[styles.empty, { backgroundColor: theme.background }]}>
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>Messagerie</Text>
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+          Quelle messagerie pour {activeChild.firstName} ?
+        </Text>
+        <View style={{ gap: Spacing.sm, width: "100%", paddingHorizontal: Spacing.lg, marginTop: Spacing.md }}>
+          <Pressable
+            style={[styles.connectBtn, { backgroundColor: theme.accent }]}
+            onPress={() => pickSourceInline("pronote")}
+          >
+            <Text style={styles.connectBtnText}>Pronote uniquement</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.connectBtn, { backgroundColor: "#1B3A6B" }]}
+            onPress={() => pickSourceInline("ent")}
+          >
+            <Text style={styles.connectBtnText}>ENT uniquement</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.connectBtn, { backgroundColor: theme.accent }]}
+            onPress={() => pickSourceInline("both")}
+          >
+            <Text style={styles.connectBtnText}>Les deux</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (connected === false) {
     return (
@@ -154,10 +232,9 @@ export default function MessagesScreen() {
         <Pressable
           key={msg.id}
           onPress={() => {
-            const isEntChild = activeChild?.source === "ent";
             router.push({
               pathname: "/message",
-              params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date, source: isEntChild ? "ent" : "imap" },
+              params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date, source: msg.source === "ent" ? "ent" : "imap" },
             });
           }}
           style={[

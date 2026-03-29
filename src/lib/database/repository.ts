@@ -1,5 +1,5 @@
 import { getDatabase } from "./client";
-import type { Account, Child, Grade, ScheduleEntry, Homework } from "@/types";
+import type { Account, Child, Grade, ScheduleEntry, Homework, MessageSource } from "@/types";
 
 // --- Accounts ---
 
@@ -58,22 +58,32 @@ export async function getChildren(): Promise<Child[]> {
     last_name: string;
     class_name: string;
     avatar_uri: string | null;
-  }>("SELECT * FROM children ORDER BY first_name");
+    message_source: string | null;
+  }>(
+    `SELECT c.*, cs.value as message_source
+     FROM children c
+     LEFT JOIN child_settings cs ON cs.child_id = c.id AND cs.key = 'message_source'
+     ORDER BY c.first_name`
+  );
 
-  return rows.map((r) => ({
-    id: r.id,
-    accountId: r.account_id,
-    firstName: r.first_name,
-    lastName: r.last_name,
-    className: r.class_name,
-    avatarUri: r.avatar_uri ?? undefined,
-    // Determine source and capabilities from account ID
-    source: r.account_id.startsWith("ent-") ? "ent" as const : "pronote" as const,
-    hasGrades: !r.account_id.startsWith("ent-"),
-    hasSchedule: !r.account_id.startsWith("ent-"),
-    hasHomework: !r.account_id.startsWith("ent-"),
-    hasMessages: r.account_id.startsWith("ent-"),
-  }));
+  return rows.map((r) => {
+    const isEnt = r.account_id.startsWith("ent-");
+    const msgSrc = r.message_source as MessageSource | null;
+    return {
+      id: r.id,
+      accountId: r.account_id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      className: r.class_name,
+      avatarUri: r.avatar_uri ?? undefined,
+      source: isEnt ? "ent" as const : "pronote" as const,
+      hasGrades: !isEnt,
+      hasSchedule: !isEnt,
+      hasHomework: !isEnt,
+      hasMessages: isEnt || !!msgSrc,
+      messageSource: msgSrc ?? (isEnt ? "ent" : undefined),
+    };
+  });
 }
 
 // --- Grades ---
@@ -298,6 +308,36 @@ export async function deleteExpiredPhotos(): Promise<void> {
 export async function deleteCachedPhotosForBlog(blogId: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync("DELETE FROM cached_photos WHERE blog_id = ?", [blogId]);
+}
+
+// --- Child Settings ---
+
+export async function getChildSetting(childId: string, key: string): Promise<string | null> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ value: string }>(
+    "SELECT value FROM child_settings WHERE child_id = ? AND key = ?",
+    [childId, key]
+  );
+  return rows.length > 0 ? rows[0]!.value : null;
+}
+
+export async function setChildSetting(childId: string, key: string, value: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO child_settings (child_id, key, value) VALUES (?, ?, ?)",
+    [childId, key, value]
+  );
+}
+
+export async function getChildSettings(childId: string): Promise<Record<string, string>> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ key: string; value: string }>(
+    "SELECT key, value FROM child_settings WHERE child_id = ?",
+    [childId]
+  );
+  const result: Record<string, string> = {};
+  for (const r of rows) result[r.key] = r.value;
+  return result;
 }
 
 // --- Sync metadata ---

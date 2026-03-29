@@ -15,6 +15,7 @@ export interface Account {
 // --- Child / Student ---
 
 export type ChildSource = "pronote" | "ent";
+export type MessageSource = "pronote" | "ent" | "both";
 
 export interface Child {
   id: string;
@@ -28,6 +29,7 @@ export interface Child {
   hasSchedule?: boolean;
   hasHomework?: boolean;
   hasMessages?: boolean;
+  messageSource?: MessageSource;
 }
 
 // --- Grades ---

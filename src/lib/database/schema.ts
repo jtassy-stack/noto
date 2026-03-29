@@ -108,5 +108,12 @@ export const CREATE_TABLES = `
   CREATE INDEX IF NOT EXISTS idx_grades_date ON grades(date);
   CREATE INDEX IF NOT EXISTS idx_schedule_child_time ON schedule(child_id, start_time);
   CREATE INDEX IF NOT EXISTS idx_homework_child_due ON homework(child_id, due_date);
+  CREATE TABLE IF NOT EXISTS child_settings (
+    child_id TEXT NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (child_id, key)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_cached_photos_blog ON cached_photos(blog_id);
 `;

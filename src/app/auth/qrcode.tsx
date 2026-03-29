@@ -104,7 +104,13 @@ export default function QRCodeLoginScreen() {
       // Then sync data while session is still alive
       await syncWithSession(session);
 
-      router.replace("/");
+      // Ask about messaging preference
+      const ids = children.map((c) => c.id).join(",");
+      const names = children.map((c) => c.firstName).join(",");
+      router.replace({
+        pathname: "/auth/message-source",
+        params: { childIds: ids, childNames: names },
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur inconnue";
       setError(`Connexion échouée : ${message}`);

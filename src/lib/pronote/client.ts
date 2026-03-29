@@ -330,6 +330,71 @@ export async function fetchAbsences(
   return nb;
 }
 
+// --- Discussions (Messaging) ---
+
+export interface PronoteMessage {
+  id: string;
+  subject: string;
+  from: string;
+  date: string;
+  unread: boolean;
+  hasAttachment: false;
+}
+
+/**
+ * Fetch Pronote discussions for the current session.
+ * Requires a live session — will attempt reconnection if needed.
+ */
+export async function fetchDiscussions(accountId: string): Promise<PronoteMessage[]> {
+  let session = currentSession;
+
+  // No active session — try to reconnect via stored refresh token
+  if (!session) {
+    session = await reconnect(accountId);
+    if (!session) {
+      console.warn("[nōto] Cannot fetch discussions: no session and reconnect failed");
+      return [];
+    }
+  }
+
+  // Check if discussions are authorized
+  if (!session.user.authorizations.canReadDiscussions) {
+    console.log("[nōto] Discussions not authorized for this account");
+    return [];
+  }
+
+  try {
+    const result = await pronote.discussions(session);
+
+    return result.items.map((d) => ({
+      id: d.participantsMessageID,
+      subject: d.subject,
+      from: d.creator ?? d.recipientName ?? "Pronote",
+      date: d.date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
+      unread: d.numberOfMessagesUnread > 0,
+      hasAttachment: false as const,
+    }));
+  } catch (e: unknown) {
+    // Session expired — try reconnecting once
+    if (e instanceof pronote.SessionExpiredError) {
+      console.log("[nōto] Session expired, reconnecting...");
+      session = await reconnect(accountId);
+      if (!session) return [];
+
+      const result = await pronote.discussions(session);
+      return result.items.map((d) => ({
+        id: d.participantsMessageID,
+        subject: d.subject,
+        from: d.creator ?? d.recipientName ?? "Pronote",
+        date: d.date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
+        unread: d.numberOfMessagesUnread > 0,
+        hasAttachment: false as const,
+      }));
+    }
+    throw e;
+  }
+}
+
 // --- Instance Discovery ---
 
 export async function checkInstance(url: string) {
