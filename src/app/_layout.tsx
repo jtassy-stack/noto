@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme, View, ActivityIndicator, StyleSheet } from "react-native";
@@ -6,10 +7,17 @@ import { SpaceMono_400Regular, SpaceMono_700Bold } from "@expo-google-fonts/spac
 import { PixelifySans_700Bold } from "@expo-google-fonts/pixelify-sans";
 import { InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif";
 import { useTheme } from "@/hooks/useTheme";
+import { setupNotifications, registerBackgroundTask } from "@/lib/notifications/background-check";
 
 export default function RootLayout() {
   const theme = useTheme();
   const scheme = useColorScheme();
+
+  // Setup notifications + background message checking
+  useEffect(() => {
+    setupNotifications();
+    registerBackgroundTask();
+  }, []);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
