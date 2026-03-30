@@ -268,11 +268,13 @@ export default function DetailScreen() {
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: -apple-system, sans-serif; font-size: 16px; line-height: 1.6; color: ${colors.text}; background: ${colors.background}; padding: 0 4px; margin: 0; }
+  body { font-family: -apple-system, sans-serif; font-size: 16px; line-height: 1.6; color: ${colors.text} !important; background: ${colors.background}; padding: 0 4px; margin: 0; }
+  * { color: inherit !important; }
+  span, div, p, li, td, th, b, strong, em, i, u { color: ${colors.text} !important; }
   img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
   video, iframe { max-width: 100%; border-radius: 8px; margin: 8px 0; }
-  a { color: ${colors.accent}; }
-  h1, h2, h3 { color: ${colors.text}; }
+  a { color: ${colors.accent} !important; }
+  h1, h2, h3 { color: ${colors.text} !important; }
   hr { border: none; border-top: 1px solid ${colors.border}; margin: 16px 0; }
 </style>
 </head><body>${fixedHtml}</body></html>`;
