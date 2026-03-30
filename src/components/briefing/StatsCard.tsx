@@ -38,7 +38,7 @@ export function StatsCard({ stats, theme }: Props) {
             <Text style={[styles.overallLabel, { color: theme.textSecondary }]}>
               {stats.overallAverage!.label}
             </Text>
-            <Text style={[styles.overallValue, { color: barColor(stats.overallAverage!.value / 100, theme) }]}>
+            <Text style={[styles.overallValue, { color: barColor(stats.overallAverage!.value / stats.overallAverage!.maxValue, theme) }]}>
               {stats.overallAverage!.value}{stats.overallAverage!.unit}
             </Text>
           </View>
@@ -47,8 +47,8 @@ export function StatsCard({ stats, theme }: Props) {
               style={[
                 styles.barFill,
                 {
-                  width: `${Math.min(stats.overallAverage!.value, 100)}%`,
-                  backgroundColor: barColor(stats.overallAverage!.value / 100, theme),
+                  width: `${Math.min((stats.overallAverage!.value / stats.overallAverage!.maxValue) * 100, 100)}%`,
+                  backgroundColor: barColor(stats.overallAverage!.value / stats.overallAverage!.maxValue, theme),
                 },
               ]}
             />
@@ -88,7 +88,7 @@ export function StatsCard({ stats, theme }: Props) {
                   )}
                 </View>
                 <Text style={[styles.subjectPct, { color: barColor(s.average, theme) }]}>
-                  {Math.round(s.average * 100)}%
+                  {s.average20 !== undefined ? s.average20.toFixed(1) : Math.round(s.average * 20)}
                 </Text>
               </View>
             </View>

@@ -23,59 +23,62 @@ export function extractTextInsights(
 ): TextInsight[] {
   const insights: TextInsight[] = [];
 
-  // Grade trend (compare last 5 vs previous 5)
+  // Grade trend (compare last 5 vs previous 5, weighted on /20)
   if (grades.length >= 5) {
     const recent = grades.slice(0, 5);
     const older = grades.slice(5, 10);
     if (older.length >= 3) {
-      const recentAvg = recent.reduce((s, g) => s + (g.outOf > 0 ? g.value / g.outOf : 0), 0) / recent.length;
-      const olderAvg = older.reduce((s, g) => s + (g.outOf > 0 ? g.value / g.outOf : 0), 0) / older.length;
-      const diff = recentAvg - olderAvg;
-      if (diff > 0.05) {
+      const avgOn20 = (list: Grade[]) => {
+        let w = 0, c = 0;
+        for (const g of list) { if (g.outOf > 0) { w += to20(g.value, g.outOf) * g.coefficient; c += g.coefficient; } }
+        return c > 0 ? w / c : 0;
+      };
+      const diff = avgOn20(recent) - avgOn20(older);
+      if (diff > 1) {
         insights.push({
           label: "Tendance",
-          text: "Les notes récentes sont en hausse par rapport aux précédentes.",
+          text: `Les notes récentes sont en hausse (+${diff.toFixed(1)} pts sur 20).`,
           accent: "green",
         });
-      } else if (diff < -0.05) {
+      } else if (diff < -1) {
         insights.push({
           label: "Tendance",
-          text: "Les notes récentes sont en baisse. Un point avec l'enfant peut être utile.",
+          text: `Les notes récentes sont en baisse (${diff.toFixed(1)} pts sur 20). Un point peut être utile.`,
           accent: "red",
         });
       }
     }
   }
 
-  // Best and weakest subjects
+  // Best and weakest subjects (weighted on /20)
   if (grades.length >= 3) {
-    const bySubject = new Map<string, { total: number; count: number }>();
+    const bySubject = new Map<string, { weighted: number; coeff: number }>();
     for (const g of grades) {
       if (g.outOf <= 0) continue;
-      const prev = bySubject.get(g.subject) ?? { total: 0, count: 0 };
-      prev.total += g.value / g.outOf;
-      prev.count += 1;
+      const prev = bySubject.get(g.subject) ?? { weighted: 0, coeff: 0 };
+      prev.weighted += to20(g.value, g.outOf) * g.coefficient;
+      prev.coeff += g.coefficient;
       bySubject.set(g.subject, prev);
     }
     const averages = [...bySubject.entries()]
-      .filter(([, v]) => v.count >= 2)
-      .map(([subject, v]) => ({ subject, avg: v.total / v.count }))
-      .sort((a, b) => b.avg - a.avg);
+      .filter(([, v]) => v.coeff > 0)
+      .map(([subject, v]) => ({ subject, avg20: v.weighted / v.coeff }))
+      .sort((a, b) => b.avg20 - a.avg20);
 
     if (averages.length >= 2) {
       const best = averages[0]!;
-      if (best.avg >= 0.7) {
+      if (best.avg20 >= 14) {
         insights.push({
           label: "Point fort",
-          text: `${best.subject} est la matière la plus solide (${Math.round(best.avg * 100)}%).`,
+          text: `${best.subject} est la matière la plus solide (${best.avg20.toFixed(1)}/20).`,
           accent: "green",
         });
       }
       const weakest = averages[averages.length - 1]!;
-      if (weakest.avg < 0.5) {
+      if (weakest.avg20 < 10) {
         insights.push({
           label: "À surveiller",
-          text: `${weakest.subject} a la moyenne la plus basse (${Math.round(weakest.avg * 100)}%).`,
+          text: `${weakest.subject} a la moyenne la plus basse (${weakest.avg20.toFixed(1)}/20).`,
           accent: "amber",
         });
       }
@@ -108,17 +111,22 @@ export function extractTextInsights(
 export function extractEntTextInsights(
   schoolbookWords: SchoolbookWord[],
   unreadMessages: number,
+  childFirstName?: string,
 ): TextInsight[] {
   const insights: TextInsight[] = [];
 
-  // Summarize schoolbook content
-  for (const w of schoolbookWords.slice(0, 2)) {
+  // Summarize schoolbook content — focus on what matters for THIS child
+  for (const w of schoolbookWords.slice(0, 3)) {
     const plain = stripHtml(w.text).replace(/\s+/g, " ").trim();
     if (plain.length > 20) {
+      // Extract key info: dates, actions required
+      const hasDate = plain.match(/\d{1,2}\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)/i);
+      const hasAction = /inscription|répondre|retourner|signer|remplir|apporter/i.test(plain);
+
       insights.push({
-        label: w.sender || "Carnet",
+        label: hasAction ? "Action requise" : w.sender || "Carnet",
         text: plain.slice(0, 150) + (plain.length > 150 ? "…" : ""),
-        accent: "default",
+        accent: hasAction ? "red" : "default",
       });
     }
   }
@@ -146,8 +154,10 @@ export interface StatItem {
 
 export interface SubjectStat {
   subject: string;
-  average: number; // 0-1
+  average: number; // 0-1 for bar rendering
+  average20: number; // on /20 for display
   classAverage?: number; // 0-1
+  classAverage20?: number; // on /20
   gradeCount: number;
 }
 
@@ -160,47 +170,83 @@ export interface StatsData {
   counters: Array<{ label: string; value: number; icon: string }>;
 }
 
+/** Normalize a grade to /20, weighted by coefficient */
+function to20(value: number, outOf: number): number {
+  if (outOf <= 0) return 0;
+  return (value / outOf) * 20;
+}
+
 export function extractStats(
   grades: Grade[],
   schedule: ScheduleEntry[],
   homework: Homework[],
 ): StatsData {
   const subjects: SubjectStat[] = [];
-  const bySubject = new Map<string, { values: number[]; classAvgs: number[]; outOfs: number[] }>();
+  const bySubject = new Map<string, {
+    values: number[]; outOfs: number[]; coeffs: number[];
+    classAvgs: number[];
+  }>();
 
   for (const g of grades) {
     if (g.outOf <= 0) continue;
-    const prev = bySubject.get(g.subject) ?? { values: [], classAvgs: [], outOfs: [] };
+    const prev = bySubject.get(g.subject) ?? { values: [], outOfs: [], coeffs: [], classAvgs: [] };
     prev.values.push(g.value);
     prev.outOfs.push(g.outOf);
+    prev.coeffs.push(g.coefficient);
     if (g.classAverage !== undefined) prev.classAvgs.push(g.classAverage);
     bySubject.set(g.subject, prev);
   }
 
-  let totalPct = 0;
-  let totalCount = 0;
+  // Weighted averages on /20
+  let totalWeighted = 0;
+  let totalCoeff = 0;
 
   for (const [subject, data] of bySubject) {
-    const avg = data.values.reduce((s, v, i) => s + v / data.outOfs[i]!, 0) / data.values.length;
-    const classAvg = data.classAvgs.length > 0
-      ? data.classAvgs.reduce((s, v, i) => s + v / data.outOfs[i]!, 0) / data.classAvgs.length
-      : undefined;
+    // Weighted average for this subject on /20
+    let subWeighted = 0;
+    let subCoeff = 0;
+    for (let i = 0; i < data.values.length; i++) {
+      const on20 = to20(data.values[i]!, data.outOfs[i]!);
+      subWeighted += on20 * data.coeffs[i]!;
+      subCoeff += data.coeffs[i]!;
+    }
+    const avg20 = subCoeff > 0 ? subWeighted / subCoeff : 0;
 
-    subjects.push({ subject, average: avg, classAverage: classAvg, gradeCount: data.values.length });
-    totalPct += avg;
-    totalCount++;
+    // Class average on /20
+    let classAvg20: number | undefined;
+    if (data.classAvgs.length > 0) {
+      let cWeighted = 0;
+      let cCoeff = 0;
+      for (let i = 0; i < data.classAvgs.length; i++) {
+        cWeighted += to20(data.classAvgs[i]!, data.outOfs[i]!) * data.coeffs[i]!;
+        cCoeff += data.coeffs[i]!;
+      }
+      classAvg20 = cCoeff > 0 ? cWeighted / cCoeff : undefined;
+    }
+
+    subjects.push({
+      subject,
+      average: avg20 / 20, // 0-1 for bar rendering
+      average20: avg20,
+      classAverage: classAvg20 !== undefined ? classAvg20 / 20 : undefined,
+      classAverage20: classAvg20,
+      gradeCount: data.values.length,
+    });
+
+    totalWeighted += subWeighted;
+    totalCoeff += subCoeff;
   }
 
   subjects.sort((a, b) => b.average - a.average);
 
-  const overallPct = totalCount > 0 ? totalPct / totalCount : undefined;
-  const overallAverage: StatItem | undefined = overallPct !== undefined
+  const overall20 = totalCoeff > 0 ? totalWeighted / totalCoeff : undefined;
+  const overallAverage: StatItem | undefined = overall20 !== undefined
     ? {
         label: "Moyenne générale",
-        value: Math.round(overallPct * 100),
-        maxValue: 100,
-        unit: "%",
-        accent: overallPct >= 0.6 ? "green" : overallPct >= 0.5 ? "amber" : "red",
+        value: Math.round(overall20 * 10) / 10,
+        maxValue: 20,
+        unit: "/20",
+        accent: overall20 >= 12 ? "green" : overall20 >= 10 ? "amber" : "red",
       }
     : undefined;
 
