@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, useColorScheme } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, useColorScheme, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { WebView } from "react-native-webview";
+import { cacheDirectory, downloadAsync } from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import FileViewer from "react-native-file-viewer";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getConversationCredentials } from "@/lib/ent/conversation";
@@ -42,6 +45,41 @@ export default function DetailScreen() {
   const [plainText, setPlainText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiBaseUrl, setApiBaseUrl] = useState("");
+  const [attachments, setAttachments] = useState<Array<{ url: string; name: string }>>([]);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  async function downloadAndOpen(url: string, name: string) {
+    setDownloading(url);
+    try {
+      const ext = name.includes(".") ? "" : ".pdf";
+      const localUri = `${cacheDirectory}${name.replace(/[^a-zA-Z0-9._-]/g, "_")}${ext}`;
+
+      const result = await downloadAsync(url, localUri);
+
+      if (result.status !== 200) {
+        Alert.alert("Erreur", "Impossible de télécharger le document.");
+        return;
+      }
+
+      // Open with native viewer (Quick Look iOS / Intent Android)
+      try {
+        await FileViewer.open(result.uri, { showOpenWithDialog: true });
+      } catch {
+        // Fallback to share sheet
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(result.uri, {
+            mimeType: result.headers["content-type"] || "application/octet-stream",
+            dialogTitle: name,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("[nōto] Document download error:", e);
+      Alert.alert("Erreur", "Impossible de télécharger le document.");
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -57,8 +95,89 @@ export default function DetailScreen() {
       // Schoolbook (carnet de liaison) — HTML with possible document links
       if (type === "schoolbook" && passedBody) {
         const creds = await getConversationCredentials();
-        if (creds) setApiBaseUrl(creds.apiBaseUrl);
-        setHtmlContent(passedBody);
+        if (creds) {
+          setApiBaseUrl(creds.apiBaseUrl);
+
+          // Login to get auth cookies for document fetching
+          await fetch(`${creds.apiBaseUrl}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+            redirect: "follow",
+          });
+
+          // Extract document links and inline images with auth
+          let html = passedBody;
+
+          // Convert relative image URLs to base64 (images need auth)
+          const imgRegex = /src="(\/workspace\/document\/[^"]+)"/g;
+          const imgMatches = [...html.matchAll(imgRegex)];
+          for (const match of imgMatches) {
+            try {
+              const imgRes = await fetch(`${creds.apiBaseUrl}${match[1]}`);
+              if (imgRes.ok) {
+                const blob = await imgRes.blob();
+                const base64 = await blobToBase64(blob);
+                html = html.replace(match[0], `src="${base64}"`);
+              }
+            } catch {}
+          }
+
+          // Extract document download links for the attachment bar
+          const docRegex = /href="(\/workspace\/document\/[^"]+)"/g;
+          const docMatches = [...html.matchAll(docRegex)];
+          const docs: Array<{ url: string; name: string }> = [];
+          for (const match of docMatches) {
+            const docPath = match[1]!;
+            const fullUrl = `${creds.apiBaseUrl}${docPath}`;
+
+            // Resolve actual filename via HEAD request (Content-Disposition header)
+            let fileName = "";
+            try {
+              const headRes = await fetch(fullUrl, { method: "HEAD" });
+              const disposition = headRes.headers.get("content-disposition") ?? "";
+              // Parse: attachment; filename="document.pdf" or filename*=UTF-8''document.pdf
+              const fnMatch = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";\n]+)/i);
+              if (fnMatch) {
+                fileName = decodeURIComponent(fnMatch[1]!.trim().replace(/^"|"$/g, ""));
+              }
+              // Fallback: try Content-Type to guess extension
+              if (!fileName) {
+                const ct = headRes.headers.get("content-type") ?? "";
+                const extMap: Record<string, string> = {
+                  "application/pdf": "document.pdf",
+                  "image/jpeg": "image.jpg",
+                  "image/png": "image.png",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "document.docx",
+                  "application/msword": "document.doc",
+                };
+                fileName = extMap[ct] ?? "";
+              }
+            } catch {}
+
+            // Last fallback: extract from link text in HTML
+            if (!fileName) {
+              const linkTextRegex = new RegExp(
+                `href="${docPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>([\\s\\S]*?)</a>`,
+                "i"
+              );
+              const linkMatch = html.match(linkTextRegex);
+              if (linkMatch) {
+                fileName = stripHtml(linkMatch[1]!).trim();
+              }
+            }
+
+            docs.push({
+              url: fullUrl,
+              name: fileName || docPath.split("/").pop() || "Document",
+            });
+          }
+          if (docs.length > 0) setAttachments(docs);
+
+          setHtmlContent(html);
+        } else {
+          setHtmlContent(passedBody);
+        }
         setLoading(false);
         return;
       }
@@ -204,9 +323,37 @@ export default function DetailScreen() {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+          {from ? <Text style={[styles.from, { color: theme.accent }]}>{from}</Text> : null}
           {date ? <Text style={[styles.date, { color: theme.textTertiary }]}>{date}</Text> : null}
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
         </View>
+
+        {/* Attachment bar */}
+        {attachments.length > 0 && (
+          <View style={styles.attachmentBar}>
+            {attachments.map((doc) => (
+              <Pressable
+                key={doc.url}
+                style={({ pressed }) => [
+                  styles.attachmentChip,
+                  { backgroundColor: theme.surfaceElevated, borderColor: theme.border, opacity: pressed ? 0.6 : 1 },
+                ]}
+                onPress={() => downloadAndOpen(doc.url, doc.name)}
+                disabled={downloading === doc.url}
+              >
+                {downloading === doc.url ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
+                ) : (
+                  <Text style={[styles.attachmentIcon, { color: theme.accent }]}>&#x1F4CE;</Text>
+                )}
+                <Text style={[styles.attachmentName, { color: theme.text }]} numberOfLines={1}>
+                  {doc.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         <WebView
           source={{ html: wrapHtml(htmlContent), baseUrl: apiBaseUrl }}
           style={styles.webview}
@@ -266,4 +413,12 @@ const styles = StyleSheet.create({
   textContent: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
   body: { fontSize: FontSize.md, fontFamily: Fonts.regular, lineHeight: 24 },
   empty: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center" },
+  attachmentBar: { paddingHorizontal: Spacing.lg, gap: 6, marginBottom: Spacing.sm },
+  attachmentChip: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: BorderRadius.md, borderWidth: 1,
+  },
+  attachmentIcon: { fontSize: 16 },
+  attachmentName: { fontSize: FontSize.sm, fontFamily: Fonts.medium, flex: 1 },
 });
