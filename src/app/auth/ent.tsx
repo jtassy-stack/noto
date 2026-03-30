@@ -7,7 +7,8 @@ import { getEntProvider, ENT_PROVIDERS } from "@/lib/ent/providers";
 import { saveMailCredentials, fetchUnreadCount } from "@/lib/ent/mail";
 import { loginToENT, saveConversationCredentials, fetchENTChildren } from "@/lib/ent/conversation";
 import { saveEntSession } from "@/lib/ent/auth";
-import { saveAccount, saveChildren } from "@/lib/database/repository";
+import { saveAccount, saveChildren, setChildSetting } from "@/lib/database/repository";
+import type { Child } from "@/types";
 
 export default function EntLoginScreen() {
   const theme = useTheme();
@@ -63,6 +64,13 @@ export default function EntLoginScreen() {
             createdAt: Date.now(),
           });
           await saveChildren(children);
+          // Store ENT user IDs for schoolbook API
+          for (const c of children) {
+            const entUserId = (c as Child & { _entUserId?: string })._entUserId;
+            if (entUserId) {
+              await setChildSetting(c.id, "ent_user_id", entUserId);
+            }
+          }
           console.log("[nōto] Saved", children.length, "children from ENT");
         }
       }

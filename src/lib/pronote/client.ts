@@ -28,40 +28,42 @@ export function getSession(): pronote.SessionHandle | null {
  * Call this when the session expires (SessionExpiredError).
  */
 export async function reconnect(accountId: string): Promise<pronote.SessionHandle | null> {
-  // Find stored refresh tokens
-  const keys = [`noto_refresh_`];
-  // Try all stored credentials
-  const allAccounts = await SecureStore.getItemAsync(`noto_refresh_list`);
-  if (!allAccounts) {
-    // Try legacy format: iterate known usernames from the account
-    // For now, scan SecureStore isn't possible, so we store a list
-    return null;
-  }
-
-  const usernames: string[] = JSON.parse(allAccounts);
-  for (const username of usernames) {
-    const raw = await SecureStore.getItemAsync(`noto_refresh_${username}`);
-    if (!raw) continue;
-
-    const stored = JSON.parse(raw) as {
-      token: string;
-      username: string;
-      url: string;
-      kind: number;
-    };
-
+  // Strategy 1: Try token stored by account ID (new format)
+  const byAccount = await SecureStore.getItemAsync(`noto_refresh_acct_${accountId}`);
+  if (byAccount) {
+    console.log("[nōto] Reconnect: found token by account ID", accountId);
+    const stored = JSON.parse(byAccount) as { token: string; username: string; url: string; kind: number };
     try {
-      const { session } = await authenticateWithToken(
-        stored.url,
-        stored.username,
-        stored.token
-      );
+      const { session } = await authenticateWithToken(stored.url, stored.username, stored.token);
+      console.log("[nōto] Reconnect: success via account ID");
       return session;
     } catch (e) {
-      console.warn("[nōto] Reconnect failed for", username, e);
+      console.warn("[nōto] Reconnect: account ID token failed", e);
     }
   }
 
+  // Strategy 2: Try username list (legacy format)
+  const allAccounts = await SecureStore.getItemAsync(`noto_refresh_list`);
+  if (allAccounts) {
+    const usernames: string[] = JSON.parse(allAccounts);
+    console.log("[nōto] Reconnect: trying usernames:", usernames);
+    for (const username of usernames) {
+      const raw = await SecureStore.getItemAsync(`noto_refresh_${username}`);
+      if (!raw) continue;
+      const stored = JSON.parse(raw) as { token: string; username: string; url: string; kind: number };
+      try {
+        const { session } = await authenticateWithToken(stored.url, stored.username, stored.token);
+        // Backfill account ID key for next time
+        await SecureStore.setItemAsync(`noto_refresh_acct_${accountId}`, raw);
+        console.log("[nōto] Reconnect: success via username", username);
+        return session;
+      } catch (e) {
+        console.warn("[nōto] Reconnect failed for", username, e);
+      }
+    }
+  }
+
+  console.warn("[nōto] Reconnect: no valid tokens found for account", accountId);
   return null;
 }
 
@@ -97,16 +99,15 @@ export async function authenticateWithCredentials(
 
   currentSession = session;
 
-  // Store refresh token for next login
-  await SecureStore.setItemAsync(
-    `noto_refresh_${refresh.username}`,
-    JSON.stringify({
-      token: refresh.token,
-      username: refresh.username,
-      url: refresh.url,
-      kind: refresh.kind,
-    })
-  );
+  // Store refresh token for next login (both by username and account ID)
+  const tokenData = JSON.stringify({
+    token: refresh.token,
+    username: refresh.username,
+    url: refresh.url,
+    kind: refresh.kind,
+  });
+  await SecureStore.setItemAsync(`noto_refresh_${refresh.username}`, tokenData);
+  await SecureStore.setItemAsync(`noto_refresh_acct_${session.information.id}`, tokenData);
   await trackUsername(refresh.username);
 
   return { session, refresh };
@@ -130,16 +131,15 @@ export async function authenticateWithToken(
 
   currentSession = session;
 
-  // Update stored token
-  await SecureStore.setItemAsync(
-    `noto_refresh_${refresh.username}`,
-    JSON.stringify({
-      token: refresh.token,
-      username: refresh.username,
-      url: refresh.url,
-      kind: refresh.kind,
-    })
-  );
+  // Update stored token (both by username and account ID)
+  const tokenData = JSON.stringify({
+    token: refresh.token,
+    username: refresh.username,
+    url: refresh.url,
+    kind: refresh.kind,
+  });
+  await SecureStore.setItemAsync(`noto_refresh_${refresh.username}`, tokenData);
+  await SecureStore.setItemAsync(`noto_refresh_acct_${session.information.id}`, tokenData);
 
   return { session, refresh };
 }
@@ -159,15 +159,15 @@ export async function authenticateWithQRCode(
 
   currentSession = session;
 
-  await SecureStore.setItemAsync(
-    `noto_refresh_${refresh.username}`,
-    JSON.stringify({
-      token: refresh.token,
-      username: refresh.username,
-      url: refresh.url,
-      kind: refresh.kind,
-    })
-  );
+  const tokenData = JSON.stringify({
+    token: refresh.token,
+    username: refresh.username,
+    url: refresh.url,
+    kind: refresh.kind,
+  });
+  await SecureStore.setItemAsync(`noto_refresh_${refresh.username}`, tokenData);
+  await SecureStore.setItemAsync(`noto_refresh_acct_${session.information.id}`, tokenData);
+  await trackUsername(refresh.username);
 
   return { session, refresh };
 }
@@ -175,16 +175,6 @@ export async function authenticateWithQRCode(
 // --- Data Mapping ---
 
 export function mapChildren(session: pronote.SessionHandle): Child[] {
-  // Debug: log what Pronote returns so we can see the data shape
-  console.log("[nōto] user.name:", session.user.name);
-  console.log("[nōto] resources:", session.user.resources.map(r => ({
-    id: r.id, name: r.name, className: r.className, kind: r.kind,
-  })));
-  console.log("[nōto] authorizations:", {
-    tabs: session.user.authorizations.tabs,
-    canReadDiscussions: session.user.authorizations.canReadDiscussions,
-  });
-
   return session.user.resources.map((r) => {
     // Pronote parent accounts: r.name can be "LASTNAME Firstname" or just "LASTNAME"
     // Try to split on the case boundary (uppercase block = last name, rest = first name)

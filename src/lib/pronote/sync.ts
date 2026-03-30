@@ -28,7 +28,6 @@ export async function syncWithSession(session: pronote.SessionHandle): Promise<v
     for (const [loc, tab] of resource.tabs) {
       availableTabs[loc] = tab.defaultPeriod?.name;
     }
-    console.log(`[nōto] Available tabs:`, JSON.stringify(availableTabs));
 
     const nextWeek = new Date(today.getTime() + 7 * 86400000);
     const twoWeeks = new Date(today.getTime() + 14 * 86400000);

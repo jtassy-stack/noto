@@ -4,7 +4,7 @@ import { Tabs, router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   Home, BarChart2, Calendar, ClipboardList, Mail,
-  FileText, Camera, BookOpen,
+  FileText, Camera, BookOpen, Settings,
 } from "lucide-react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { ChildrenContext } from "@/hooks/useChildren";
@@ -47,7 +47,7 @@ export default function TabLayout() {
       icon: isEnt ? Camera : Calendar,
     },
     homework: {
-      title: isEnt ? "Cahier" : "Devoirs",
+      title: isEnt ? "Carnet" : "Devoirs",
       icon: isEnt ? BookOpen : ClipboardList,
     },
   };
@@ -71,10 +71,10 @@ export default function TabLayout() {
             <Text style={{ color: theme.accent }}>.</Text>
           </Text>
           <Pressable
-            onPress={() => router.push("/auth/")}
+            onPress={() => router.push("/settings")}
             hitSlop={12}
           >
-            <Text style={[styles.addButtonText, { color: theme.textTertiary }]}>+</Text>
+            <Settings size={20} color={theme.textTertiary} strokeWidth={1.8} />
           </Pressable>
         </View>
         {children.length > 0 && <ChildSwitcher />}

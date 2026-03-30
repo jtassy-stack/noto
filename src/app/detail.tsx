@@ -54,6 +54,15 @@ export default function DetailScreen() {
         return;
       }
 
+      // Schoolbook (carnet de liaison) — HTML with possible document links
+      if (type === "schoolbook" && passedBody) {
+        const creds = await getConversationCredentials();
+        if (creds) setApiBaseUrl(creds.apiBaseUrl);
+        setHtmlContent(passedBody);
+        setLoading(false);
+        return;
+      }
+
       if (!id && !blogId) { setLoading(false); return; }
 
       try {

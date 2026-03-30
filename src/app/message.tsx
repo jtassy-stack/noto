@@ -53,7 +53,13 @@ export default function MessageScreen() {
           if (!creds) { setError("Reconnectez votre messagerie."); return; }
 
           const msg = await fetchImapMessage(creds, parseInt(id, 10));
-          setPlainText(msg.body ?? "");
+          const body = msg.body ?? "";
+
+          if (body.includes("<html") || body.includes("<body") || body.includes("<span") || body.includes("<div")) {
+            setHtmlContent(body);
+          } else {
+            setPlainText(body);
+          }
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Erreur");

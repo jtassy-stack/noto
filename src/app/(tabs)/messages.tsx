@@ -17,7 +17,7 @@ interface DisplayMessage {
   date: string;
   unread: boolean;
   hasAttachment: boolean;
-  source: "ent" | "pronote";
+  source: "ent" | "imap" | "pronote";
 }
 
 export default function MessagesScreen() {
@@ -30,18 +30,20 @@ export default function MessagesScreen() {
   const [error, setError] = useState<string | null>(null);
   const [needsSourcePick, setNeedsSourcePick] = useState(false);
 
+  // Overridden message source — set by inline picker before context refreshes
+  const [overrideSource, setOverrideSource] = useState<MessageSource | null>(null);
+
   // Fallback (option B): inline source picker for Pronote children without a preference
   async function pickSourceInline(source: MessageSource) {
     if (activeChild) {
       await setChildSetting(activeChild.id, "message_source", source);
-      // Force re-render — the children context will pick it up on next load
+      setOverrideSource(source);
       setNeedsSourcePick(false);
-      loadMessages();
     }
   }
 
   const loadMessages = useCallback(async () => {
-    const msgSource = activeChild?.messageSource;
+    const msgSource = overrideSource ?? activeChild?.messageSource;
     const isEntChild = activeChild?.source === "ent";
     const isPronoteChild = activeChild?.source === "pronote";
 
@@ -74,9 +76,12 @@ export default function MessagesScreen() {
       const allMessages: DisplayMessage[] = [];
       let totalUnseen = 0;
 
-      // Fetch ENT messages (Conversation API or IMAP)
+      // Fetch ENT messages
+      // Conversation API = PCN (only for ENT-source children)
+      // IMAP = Mon Lycée (for Pronote/lycée children choosing ENT messaging)
       if (wantEnt) {
-        if (convCreds) {
+        if (isEntChild && convCreds) {
+          // PCN child → use Conversation API
           const result = await fetchConversationInbox(convCreds, 0);
           const filtered = activeChild?.className
             ? filterMessagesByChild(result.messages, activeChild.className)
@@ -92,6 +97,7 @@ export default function MessagesScreen() {
           })));
           totalUnseen += filtered.filter(m => m.unread).length;
         } else if (imapCreds) {
+          // Pronote child → use IMAP (Mon Lycée)
           const result = await fetchInbox(imapCreds, 0);
           allMessages.push(...result.messages.map((m) => ({
             id: String(m.id),
@@ -100,7 +106,7 @@ export default function MessagesScreen() {
             date: m.date ? new Date(m.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "",
             unread: m.unread,
             hasAttachment: m.hasAttachment,
-            source: "ent" as const,
+            source: "imap" as const,
           })));
           totalUnseen += result.unseen;
         }
@@ -129,11 +135,16 @@ export default function MessagesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeChild]);
+  }, [activeChild, overrideSource]);
+
+  // Reset override when switching children
+  useEffect(() => {
+    setOverrideSource(null);
+  }, [activeChild?.id]);
 
   useEffect(() => {
     loadMessages();
-  }, [loadMessages, activeChild]);
+  }, [loadMessages]);
 
   // Fallback picker (option B) — Pronote child without messaging preference
   if (needsSourcePick && activeChild) {
@@ -234,7 +245,7 @@ export default function MessagesScreen() {
           onPress={() => {
             router.push({
               pathname: "/message",
-              params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date, source: msg.source === "ent" ? "ent" : "imap" },
+              params: { id: msg.id, from: msg.from, subject: msg.subject, date: msg.date, source: msg.source },
             });
           }}
           style={[

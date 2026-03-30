@@ -30,6 +30,7 @@ export interface Child {
   hasHomework?: boolean;
   hasMessages?: boolean;
   messageSource?: MessageSource;
+  entUserId?: string;
 }
 
 // --- Grades ---

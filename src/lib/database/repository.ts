@@ -59,10 +59,14 @@ export async function getChildren(): Promise<Child[]> {
     class_name: string;
     avatar_uri: string | null;
     message_source: string | null;
+    ent_user_id: string | null;
   }>(
-    `SELECT c.*, cs.value as message_source
+    `SELECT c.*,
+       ms.value as message_source,
+       eu.value as ent_user_id
      FROM children c
-     LEFT JOIN child_settings cs ON cs.child_id = c.id AND cs.key = 'message_source'
+     LEFT JOIN child_settings ms ON ms.child_id = c.id AND ms.key = 'message_source'
+     LEFT JOIN child_settings eu ON eu.child_id = c.id AND eu.key = 'ent_user_id'
      ORDER BY c.first_name`
   );
 
@@ -82,6 +86,7 @@ export async function getChildren(): Promise<Child[]> {
       hasHomework: !isEnt,
       hasMessages: isEnt || !!msgSrc,
       messageSource: msgSrc ?? (isEnt ? "ent" : undefined),
+      entUserId: r.ent_user_id ?? undefined,
     };
   });
 }

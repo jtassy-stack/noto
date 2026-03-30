@@ -197,7 +197,9 @@ export async function fetchENTChildren(
       hasSchedule: false,
       hasHomework: false,
       hasMessages: true,
-    });
+      // Store ENT user ID for schoolbook API — not in the Child type but carried here
+      _entUserId: relatedId,
+    } as Child & { _entUserId: string });
   }
 
   console.log("[nōto] ENT children:", children.map(c => c.firstName));

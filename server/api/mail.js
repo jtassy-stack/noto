@@ -121,15 +121,16 @@ async function fetchMessage(client, folder, uid) {
       flags: true,
       bodyStructure: true,
       source: true,
-    });
+      uid: true,
+    }, { uid: true });
 
     // Mark as seen
-    await client.messageFlagsAdd(String(uid), ["\\Seen"]);
+    await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
 
     // Extract text body
     let body = "";
     try {
-      const textPart = await client.download(String(uid), "1");
+      const textPart = await client.download(String(uid), "1", { uid: true });
       if (textPart) {
         const chunks = [];
         for await (const chunk of textPart.content) {

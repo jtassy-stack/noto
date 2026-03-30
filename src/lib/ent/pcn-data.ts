@@ -35,9 +35,14 @@ export interface TimelineNotification {
   id: string;
   type: string; // MESSAGERIE, BLOG, SCHOOLBOOK
   eventType: string;
-  message: string; // HTML with links
+  message: string;
   date: string;
   sender?: string;
+  resourceUri?: string;
+  /** For SCHOOLBOOK: the word ID extracted from resourceUri */
+  wordId?: string;
+  /** For SCHOOLBOOK: the word title from params */
+  wordTitle?: string;
 }
 
 export async function fetchBlogs(creds: ConversationCredentials): Promise<BlogPost[]> {
@@ -106,6 +111,111 @@ export async function fetchHomeworks(creds: ConversationCredentials): Promise<Pc
   }).filter((h) => h.dueDate !== "");
 }
 
+// --- Carnet de liaison (schoolbook) ---
+
+export interface SchoolbookWord {
+  id: string;
+  title: string;
+  text: string;
+  date: string;
+  sender: string;
+  acknowledged: boolean;
+  category?: string;
+}
+
+/**
+ * Fetch carnet de liaison entries.
+ * GET /schoolbook/list — returns words/entries from teachers for the parent's children.
+ */
+export async function fetchSchoolbook(creds: ConversationCredentials): Promise<SchoolbookWord[]> {
+  // Try /schoolbook/list/0 (paginated) then /schoolbook/list
+  let data = await pcnFetchJson(creds, "/schoolbook/list/0");
+  if (!data) data = await pcnFetchJson(creds, "/schoolbook/list");
+  if (!data) return [];
+
+  const raw = Array.isArray(data)
+    ? (data as Record<string, unknown>[])
+    : typeof data === "object" && data !== null && Array.isArray((data as Record<string, unknown>).results)
+      ? ((data as Record<string, unknown>).results as Record<string, unknown>[])
+      : [];
+
+  return raw.map((entry) => {
+    let date = "";
+    const rawDate = entry.modified ?? entry.created ?? entry.date;
+    if (rawDate && typeof rawDate === "object" && "$date" in (rawDate as Record<string, unknown>)) {
+      date = String((rawDate as Record<string, string>).$date);
+    } else if (typeof rawDate === "string") {
+      date = rawDate;
+    } else if (typeof rawDate === "number") {
+      date = new Date(rawDate).toISOString();
+    }
+
+    const rawText = String(entry.text ?? entry.content ?? entry.body ?? "");
+
+    return {
+      id: String(entry._id ?? entry.id ?? ""),
+      title: String(entry.title ?? entry.subject ?? "").trim(),
+      text: stripHtml(rawText).trim(),
+      date,
+      sender: String(
+        (entry.owner && typeof entry.owner === "object" ? (entry.owner as Record<string, unknown>).displayName : null)
+          ?? entry.ownerName ?? entry.sender ?? ""
+      ),
+      acknowledged: Boolean(entry.ack ?? entry.acknowledged ?? false),
+      category: entry.category ? String(entry.category) : undefined,
+    };
+  });
+}
+
+/**
+ * Fetch a single schoolbook word (carnet de liaison) by ID.
+ * GET /schoolbook/word/:id
+ */
+export interface SchoolbookWordDetail {
+  id: string;
+  title: string;
+  text: string;
+  sender: string;
+  date: string;
+}
+
+/**
+ * Fetch all schoolbook words (carnet de liaison) for a specific child.
+ * GET /schoolbook/list/0/{entChildId}
+ * The entChildId is the ENT user ID, not the nōto child ID.
+ */
+export async function fetchSchoolbookForChild(creds: ConversationCredentials, entChildId: string): Promise<SchoolbookWordDetail[]> {
+  const data = await pcnFetchJson(creds, `/schoolbook/list/0/${entChildId}`);
+  if (!Array.isArray(data)) {
+    console.log("[nōto] Schoolbook: no data for child", entChildId);
+    return [];
+  }
+
+  const words = data as Record<string, unknown>[];
+
+  return words.map((entry) => ({
+    id: String(entry.id ?? ""),
+    title: String(entry.title ?? ""),
+    text: String(entry.text ?? entry.content ?? ""),
+    sender: String(
+      (entry.owner && typeof entry.owner === "object"
+        ? (entry.owner as Record<string, unknown>).displayName
+        : null) ?? entry.ownerName ?? ""
+    ),
+    date: entry.modified && typeof entry.modified === "object" && "$date" in (entry.modified as Record<string, unknown>)
+      ? String((entry.modified as Record<string, string>).$date)
+      : String(entry.modified ?? entry.created ?? ""),
+  }));
+}
+
+/**
+ * Fetch a single schoolbook word by ID from a pre-fetched list.
+ */
+export async function fetchSchoolbookWord(creds: ConversationCredentials, wordId: string, entChildId: string): Promise<SchoolbookWordDetail | null> {
+  const words = await fetchSchoolbookForChild(creds, entChildId);
+  return words.find((w) => w.id === wordId) ?? null;
+}
+
 export async function fetchTimeline(creds: ConversationCredentials): Promise<TimelineNotification[]> {
   const data = await pcnFetchJson(creds, "/timeline/lastNotifications") as Record<string, unknown> | null;
   if (!data) return [];
@@ -113,9 +223,14 @@ export async function fetchTimeline(creds: ConversationCredentials): Promise<Tim
   const results = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
   if (results.length === 0) return [];
 
-  return results.map((n) => {
+  const mapped = results.map((n) => {
     const rawMessage = String(n.message ?? "");
     const plainMessage = stripHtml(rawMessage).replace(/\n/g, " ").replace(/\s+/g, " ");
+    const params = (n.params && typeof n.params === "object") ? (n.params as Record<string, unknown>) : {};
+
+    // Extract schoolbook word ID from params.resourceUri: "/schoolbook#/word/49824"
+    const resourceUri = params.resourceUri ? String(params.resourceUri) : undefined;
+    const wordIdMatch = resourceUri?.match(/\/word\/(\d+)/);
 
     return {
       id: String(n._id ?? ""),
@@ -125,7 +240,12 @@ export async function fetchTimeline(creds: ConversationCredentials): Promise<Tim
       date: n.date && typeof n.date === "object" && "$date" in (n.date as Record<string, unknown>)
         ? String((n.date as Record<string, string>).$date)
         : String(n.date ?? ""),
-      sender: n.params && typeof n.params === "object" ? String((n.params as Record<string, string>).username ?? "") : undefined,
+      sender: params.username ? String(params.username) : undefined,
+      resourceUri,
+      wordId: wordIdMatch ? wordIdMatch[1] : undefined,
+      wordTitle: params.wordTitle ? String(params.wordTitle) : undefined,
     };
   });
+
+  return mapped;
 }

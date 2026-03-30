@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { router } from "expo-router";
-import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { Fonts, FontSize, Spacing, BorderRadius, gradeColor } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
 import { useSync } from "@/hooks/useSync";
@@ -9,165 +9,240 @@ import {
   getGradesByChild,
   getScheduleByChild,
   getHomeworkByChild,
+  setChildSetting,
 } from "@/lib/database/repository";
-import { gradeColor } from "@/constants/theme";
-import { getConversationCredentials } from "@/lib/ent/conversation";
-import { fetchTimeline, type TimelineNotification } from "@/lib/ent/pcn-data";
+import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild } from "@/lib/ent/conversation";
+import { fetchTimeline, fetchSchoolbookWord } from "@/lib/ent/pcn-data";
+import { buildBriefing, buildEntBriefing, type Briefing, type BriefingItem } from "@/lib/briefing/engine";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
 
-// --- ENT Dashboard (blog + timeline for PCN children) ---
+// --- Briefing Card Component ---
 
-function EntDashboard({ childName }: { childName: string }) {
-  const theme = useTheme();
-  const entRouter = router;
-  const [timeline, setTimeline] = useState<TimelineNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+// handleBriefingTap is defined inside DashboardScreen to access activeChild
 
-  useEffect(() => {
-    async function load() {
-      const creds = await getConversationCredentials();
-      if (!creds) { setLoading(false); return; }
+function BriefingCard({ item, theme, onPress }: { item: BriefingItem; theme: ReturnType<typeof useTheme>; onPress?: (item: BriefingItem) => void }) {
+  const accentMap = {
+    green: theme.accent,
+    red: theme.crimson,
+    amber: "#CA8A04",
+    default: theme.textSecondary,
+  };
+  const dotColor = accentMap[item.accent ?? "default"];
+  const isTappable = onPress && (!!item.data || item.type === "messages_unread");
 
-      try {
-        const t = await fetchTimeline(creds);
-        setTimeline(t);
-      } catch (e) {
-        console.warn("[nōto] ENT data error:", e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [childName]);
-
-  // No more emoji icons — use green dots matching Figma v2
-
-  return (
-    <ScrollView
-      style={[entStyles.container, { backgroundColor: theme.background }]}
-      contentContainerStyle={entStyles.content}
-    >
-      {loading && <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />}
-
-      {/* Timeline / Fil d'actu */}
-      {timeline.length > 0 && (
-        <>
-          <Text style={[entStyles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
-            FIL D'ACTUALITÉ
+  const content = (
+    <>
+      <View style={[cardStyles.dot, { backgroundColor: dotColor }]} />
+      <View style={cardStyles.content}>
+        <View style={cardStyles.titleRow}>
+          <Text style={[cardStyles.title, { color: theme.text }]} numberOfLines={2}>
+            {item.title}
           </Text>
-          {timeline.map((n) => {
-            const date = n.date ? new Date(n.date) : null;
-            const dateStr = date
-              ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-              : "";
-            return (
-              <Pressable
-                key={n.id}
-                onPress={() => entRouter.push({
-                  pathname: "/detail",
-                  params: { id: n.id, title: n.message, from: n.sender ?? "", date: dateStr, type: "timeline", body: n.message },
-                })}
-                style={entStyles.timelineRow}
-              >
-                <View style={[entStyles.timelineDot, { backgroundColor: theme.accent }]} />
-                <View style={entStyles.timelineContent}>
-                  <Text style={[entStyles.timelineMsg, { color: theme.text }]} numberOfLines={2}>
-                    {n.message}
-                  </Text>
-                  <Text style={[entStyles.timelineDate, { color: theme.textTertiary }]}>
-                    {dateStr}{n.sender ? ` · ${n.sender}` : ""}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </>
-      )}
-
-      {!loading && timeline.length === 0 && (
-        <View style={entStyles.emptyState}>
-          <Text style={[entStyles.emptyText, { color: theme.textTertiary }]}>
-            Aucune actualité pour le moment.
-          </Text>
+          {item.value && (
+            <Text style={[cardStyles.value, { color: dotColor }]}>
+              {item.value}
+            </Text>
+          )}
         </View>
-      )}
-    </ScrollView>
+        {item.subtitle && (
+          <Text style={[cardStyles.subtitle, { color: theme.textTertiary }]} numberOfLines={2}>
+            {item.subtitle}
+          </Text>
+        )}
+      </View>
+    </>
   );
+
+  if (isTappable) {
+    return (
+      <Pressable
+        style={({ pressed }) => [cardStyles.row, pressed && { opacity: 0.6 }]}
+        onPress={() => onPress!(item)}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={cardStyles.row}>{content}</View>;
 }
 
-const entStyles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
-  sectionLabel: { fontSize: 11, fontFamily: Fonts.medium, letterSpacing: 1.5, marginBottom: Spacing.sm },
-  blogCard: {
-    flexDirection: "row", padding: 14, borderRadius: BorderRadius.md,
-    borderWidth: 1, marginBottom: 6, gap: Spacing.sm,
+const cardStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    gap: Spacing.sm,
   },
-  blogContent: { flex: 1, gap: 4 },
-  blogTitle: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, lineHeight: 20 },
-  blogDate: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
-  timelineRow: {
-    flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, gap: Spacing.sm,
-  },
-  timelineDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
-  timelineContent: { flex: 1, gap: 3 },
-  timelineMsg: { fontSize: 13, fontFamily: Fonts.regular, lineHeight: 20 },
-  timelineDate: { fontSize: FontSize.xs, fontFamily: Fonts.mono },
-  absenceBtn: { borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: "center", marginBottom: Spacing.lg },
-  absenceBtnText: { fontSize: FontSize.md, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
-  emptyState: { justifyContent: "center", alignItems: "center", paddingTop: Spacing.xxl },
-  emptyText: { fontSize: FontSize.md, fontFamily: Fonts.regular, textAlign: "center" },
+  dot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
+  content: { flex: 1, gap: 3 },
+  titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: Spacing.sm },
+  title: { fontSize: FontSize.md, fontFamily: Fonts.medium, flex: 1, lineHeight: 20 },
+  value: { fontSize: FontSize.md, fontFamily: Fonts.monoBold },
+  subtitle: { fontSize: FontSize.xs, fontFamily: Fonts.regular, lineHeight: 16 },
 });
 
-// --- Pronote Dashboard ---
+// --- Main Screen ---
 
 export default function DashboardScreen() {
   const theme = useTheme();
   const { activeChild } = useChildren();
   const { sync, syncing } = useSync();
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-  const [homework, setHomework] = useState<Homework[]>([]);
+  const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  async function handleBriefingTap(item: BriefingItem) {
+    const data = item.data as Record<string, unknown> | undefined;
+    if (!data) {
+      if (item.type === "messages_unread") router.push("/(tabs)/messages");
+      return;
+    }
+
+    const type = data.type as string | undefined;
+    const message = data.message as string | undefined;
+    const sender = data.sender as string | undefined;
+    const date = data.date as string | undefined;
+    const wordId = data.wordId as string | undefined;
+    const wordTitle = data.wordTitle as string | undefined;
+    const dateStr = date
+      ? new Date(date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+      : "";
+
+    if (type === "SCHOOLBOOK" && wordId) {
+      const creds = await getConversationCredentials();
+      const entChildId = activeChild?.entUserId;
+      if (creds && entChildId) {
+        const word = await fetchSchoolbookWord(creds, wordId, entChildId);
+        if (word) {
+          router.push({
+            pathname: "/detail",
+            params: {
+              title: word.title || wordTitle || item.title,
+              from: word.sender || sender || "",
+              date: word.date ? new Date(word.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : dateStr,
+              type: "schoolbook",
+              body: word.text,
+            },
+          });
+          return;
+        }
+      }
+      // Fallback: WebView
+      router.push({
+        pathname: "/webview",
+        params: { title: wordTitle || item.title, path: `/schoolbook#/word/${wordId}` },
+      });
+    } else if (type === "MESSAGERIE" || item.type === "messages_unread") {
+      router.push("/(tabs)/messages");
+    } else if (type === "BLOG") {
+      const billetMatch = (message ?? "").match(/a publié un billet\s+(.+?)(?:\s+dans le blog|$)/i);
+      const title = billetMatch ? billetMatch[1]!.trim() : item.title;
+      router.push({
+        pathname: "/detail",
+        params: { title, from: sender ?? "", date: dateStr, type: "timeline", body: message ?? item.title },
+      });
+    }
+  }
+
+  async function loadBriefing() {
     if (!activeChild) return;
 
-    async function load() {
+    const isEnt = activeChild.source === "ent" && !activeChild.hasGrades;
+
+    if (isEnt) {
+      const creds = await getConversationCredentials();
+
+      // Backfill entUserId if missing
+      if (creds && !activeChild.entUserId) {
+        try {
+          // Login first
+          await fetch(`${creds.apiBaseUrl}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`,
+            redirect: "follow",
+          });
+          const personRes = await fetch(`${creds.apiBaseUrl}/userbook/api/person`, {
+            headers: { Accept: "application/json" },
+          });
+          if (personRes.ok) {
+            const personData = await personRes.json();
+            const results = personData.result ?? personData;
+            if (Array.isArray(results)) {
+              for (const entry of results) {
+                const relatedName = String(entry.relatedName ?? "");
+                const relatedId = String(entry.relatedId ?? "");
+                // Match by first name
+                if (relatedId && relatedName.includes(activeChild.firstName)) {
+                  await setChildSetting(activeChild.id, "ent_user_id", relatedId);
+                  activeChild.entUserId = relatedId;
+                  console.log("[nōto] Backfilled entUserId for", activeChild.firstName, ":", relatedId);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[nōto] entUserId backfill failed:", e);
+        }
+      }
+
+      // ENT child — build from schoolbook + messages + timeline
+      if (!creds) {
+        setBriefing(buildEntBriefing(activeChild.firstName, {
+          timeline: [], unreadMessages: 0, recentMessages: [],
+        }));
+        setLoaded(true);
+        return;
+      }
+      try {
+        const [timeline, inbox] = await Promise.all([
+          fetchTimeline(creds).catch(() => []),
+          fetchConversationInbox(creds, 0).catch(() => ({ messages: [] })),
+        ]);
+
+        const filtered = activeChild.className
+          ? filterMessagesByChild(inbox.messages, activeChild.className)
+          : inbox.messages;
+        const unreadMessages = filtered.filter((m) => m.unread).length;
+        const recentMessages = filtered.slice(0, 3).map((m) => ({
+          from: m.from, subject: m.subject, date: m.date,
+        }));
+
+        setBriefing(buildEntBriefing(activeChild.firstName, {
+          timeline, unreadMessages, recentMessages,
+        }));
+      } catch {
+        setBriefing(buildEntBriefing(activeChild.firstName, {
+          timeline: [], unreadMessages: 0, recentMessages: [],
+        }));
+      }
+    } else {
+      // Pronote child — build from grades + schedule + homework
       const today = new Date().toISOString().split("T")[0]!;
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]!;
 
       const [g, s, h] = await Promise.all([
-        getGradesByChild(activeChild!.id),
-        getScheduleByChild(activeChild!.id, today, tomorrow),
-        getHomeworkByChild(activeChild!.id, today),
+        getGradesByChild(activeChild.id),
+        getScheduleByChild(activeChild.id, today, tomorrow),
+        getHomeworkByChild(activeChild.id, today),
       ]);
-      setGrades(g);
-      setSchedule(s);
-      setHomework(h);
-      setLoaded(true);
-    }
 
-    load();
+      setBriefing(buildBriefing(activeChild.firstName, g, s, h));
+    }
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    setLoaded(false);
+    setBriefing(null);
+    loadBriefing();
   }, [activeChild]);
 
   // Auto-sync on first load if no data (Pronote children only)
   useEffect(() => {
-    if (loaded && activeChild && activeChild.source !== "ent" && grades.length === 0 && schedule.length === 0) {
-      sync(activeChild.id).then(() => {
-        // Reload after sync
-        const today = new Date().toISOString().split("T")[0]!;
-        const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]!;
-        Promise.all([
-          getGradesByChild(activeChild.id),
-          getScheduleByChild(activeChild.id, today, tomorrow),
-          getHomeworkByChild(activeChild.id, today),
-        ]).then(([g, s, h]) => {
-          setGrades(g);
-          setSchedule(s);
-          setHomework(h);
-        });
-      });
+    if (loaded && activeChild && activeChild.source !== "ent" && briefing && briefing.items.length <= 1) {
+      sync(activeChild.id).then(() => loadBriefing());
     }
   }, [loaded, activeChild]);
 
@@ -190,121 +265,71 @@ export default function DashboardScreen() {
     );
   }
 
-  // ENT-only child — show blog + timeline from PCN
-  if (activeChild.source === "ent" && !activeChild.hasGrades) {
-    return <EntDashboard childName={activeChild.firstName} />;
-  }
-
-  const recentGrades = grades.slice(0, 5);
-  const todaySchedule = schedule.filter((s) => !s.isCancelled);
-  const pendingHomework = homework.filter((h) => !h.isDone);
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={syncing}
+          onRefresh={() => {
+            if (activeChild.source !== "ent") {
+              sync(activeChild.id).then(() => loadBriefing());
+            } else {
+              loadBriefing();
+            }
+          }}
+          tintColor={theme.accent}
+        />
+      }
     >
+      {/* Greeting */}
+      {briefing && (
+        <Text style={[styles.greeting, { color: theme.text }]}>
+          {briefing.greeting}
+        </Text>
+      )}
+
+      {/* Loading */}
+      {!loaded && (
+        <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />
+      )}
+
       {/* Class info */}
-      <View style={styles.classRow}>
-        <Text style={[styles.className, { color: theme.textSecondary }]}>
+      {activeChild.className ? (
+        <Text style={[styles.className, { color: theme.textTertiary }]}>
           {activeChild.className}
         </Text>
-        {syncing && <ActivityIndicator size="small" color={theme.accent} />}
-        {!syncing && (
-          <Pressable onPress={() => sync(activeChild.id)}>
-            <Text style={[styles.syncBtn, { color: theme.accent }]}>↻ Sync</Text>
-          </Pressable>
-        )}
-      </View>
+      ) : null}
 
-      {/* Today's Schedule */}
-      <Text style={[styles.sectionLabel, { color: theme.textTertiary }]}>
-        AUJOURD'HUI
-      </Text>
-      {todaySchedule.length === 0 && !syncing && (
-        <Text style={[styles.emptySection, { color: theme.textTertiary }]}>
-          {loaded ? "Aucun cours aujourd'hui" : "Chargement..."}
-        </Text>
-      )}
-      {todaySchedule.map((s) => (
-        <View key={s.id} style={styles.scheduleRow}>
-          <Text style={[styles.scheduleTime, { color: theme.accent }]}>
-            {new Date(s.startTime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-          </Text>
-          <View style={styles.scheduleInfo}>
-            <Text style={[styles.scheduleSubject, { color: theme.text }]}>
-              {s.subject}
-            </Text>
-            <Text style={[styles.scheduleMeta, { color: theme.textSecondary }]}>
-              {[s.teacher, s.room].filter(Boolean).join(" · ")}
-            </Text>
-          </View>
-        </View>
-      ))}
-
-      {/* Recent Grades */}
-      {recentGrades.length > 0 && (
-        <>
-          <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
-            DERNIÈRES NOTES
-          </Text>
-          {recentGrades.map((g) => {
-            const pct = g.outOf > 0 ? g.value / g.outOf : 0;
-            const color = gradeColor(g.value, g.outOf, theme);
-            return (
-              <View key={g.id} style={styles.gradeRow}>
-                <View style={styles.gradeInfo}>
-                  <View style={styles.gradeHeader}>
-                    <Text style={[styles.gradeSubject, { color: theme.text }]}>
-                      {g.subject}
-                    </Text>
-                    <View style={styles.gradeValueRow}>
-                      <Text style={[styles.gradeValue, { color }]}>
-                        {g.value}
-                      </Text>
-                      <Text style={[styles.gradeOutOf, { color: theme.textTertiary }]}>
-                        /{g.outOf}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.gradeBarBg, { backgroundColor: theme.surfaceElevated }]}>
-                    <View style={[styles.gradeBarFill, { width: `${Math.min(pct * 100, 100)}%`, backgroundColor: color }]} />
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </>
-      )}
-
-      {/* Upcoming Homework */}
-      {pendingHomework.length > 0 && (
-        <>
-          <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: Spacing.lg }]}>
-            DEVOIRS À VENIR ({pendingHomework.length})
-          </Text>
-          {pendingHomework.slice(0, 5).map((h) => (
-            <View
-              key={h.id}
-              style={styles.homeworkRow}
-            >
-              <View style={styles.homeworkInfo}>
-                <Text style={[styles.homeworkSubject, { color: theme.text }]}>
-                  {h.subject}
-                </Text>
-                <Text
-                  style={[styles.homeworkDesc, { color: theme.textSecondary }]}
-                  numberOfLines={2}
-                >
-                  {h.description}
-                </Text>
-              </View>
-              <Text style={[styles.homeworkDate, { color: theme.accent }]}>
-                {h.dueDate}
-              </Text>
-            </View>
+      {/* Briefing items */}
+      {briefing && briefing.items.length > 0 && (
+        <View style={styles.briefingList}>
+          {briefing.items.map((item, i) => (
+            <BriefingCard key={`${item.type}-${i}`} item={item} theme={theme} onPress={handleBriefingTap} />
           ))}
-        </>
+        </View>
+      )}
+
+      {/* Empty state */}
+      {loaded && briefing && briefing.items.length === 0 && (
+        <View style={styles.emptyBriefing}>
+          <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+            Rien de particulier aujourd'hui.
+          </Text>
+        </View>
+      )}
+
+      {/* LLM context preview — dev only, remove later */}
+      {__DEV__ && briefing?.llmContext && (
+        <View style={[styles.debugCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Text style={[styles.debugLabel, { color: theme.textTertiary }]}>
+            LLM CONTEXT (Phase 2)
+          </Text>
+          <Text style={[styles.debugText, { color: theme.textSecondary }]}>
+            {briefing.llmContext}
+          </Text>
+        </View>
       )}
     </ScrollView>
   );
@@ -313,122 +338,29 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
-  classRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
+  greeting: {
+    fontSize: FontSize.lg,
+    fontFamily: Fonts.semiBold,
+    lineHeight: 24,
+    marginBottom: Spacing.xs,
   },
   className: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: Fonts.medium,
     letterSpacing: 1,
     textTransform: "uppercase",
-  },
-  syncBtn: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.medium,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontFamily: Fonts.medium,
-    letterSpacing: 1.5,
-    marginBottom: Spacing.sm,
-  },
-  emptySection: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.regular,
     marginBottom: Spacing.md,
   },
-
-  // Schedule
-  scheduleRow: {
-    flexDirection: "row",
+  briefingList: {
+    marginTop: Spacing.sm,
+  },
+  emptyBriefing: {
+    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 10,
-    gap: Spacing.md,
-  },
-  scheduleTime: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.mono,
-    width: 42,
-  },
-  scheduleInfo: { flex: 1, gap: 2 },
-  scheduleSubject: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.medium,
-  },
-  scheduleMeta: {
-    fontSize: 11,
-    fontFamily: Fonts.regular,
+    paddingTop: Spacing.xxl,
   },
 
-  // Grades
-  gradeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-  },
-  gradeInfo: { flex: 1, gap: 2 },
-  gradeSubject: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.medium,
-  },
-  gradeDate: {
-    fontSize: FontSize.xs,
-    fontFamily: Fonts.regular,
-  },
-  gradeHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  gradeValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  gradeValue: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.monoBold,
-  },
-  gradeOutOf: {
-    fontSize: FontSize.xs,
-    fontFamily: Fonts.regular,
-  },
-  gradeBarBg: {
-    height: 3,
-    borderRadius: 1.5,
-    marginTop: 6,
-  },
-  gradeBarFill: {
-    height: 3,
-    borderRadius: 1.5,
-  },
-
-  // Homework
-  homeworkRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 10,
-    gap: Spacing.sm,
-  },
-  homeworkInfo: { flex: 1, gap: 2 },
-  homeworkSubject: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.medium,
-  },
-  homeworkDesc: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.regular,
-    lineHeight: 18,
-  },
-  homeworkDate: {
-    fontSize: FontSize.sm,
-    fontFamily: Fonts.mono,
-  },
-
-  // Empty state
+  // Empty state (no child)
   empty: {
     flex: 1,
     justifyContent: "center",
@@ -457,19 +389,23 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.semiBold,
     color: "#FFFFFF",
   },
-  card: {
+
+  // Dev debug
+  debugCard: {
+    marginTop: Spacing.xl,
+    padding: Spacing.md,
     borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
     borderWidth: 1,
   },
-  cardTitle: {
-    fontSize: FontSize.lg,
-    fontFamily: Fonts.semiBold,
-    marginBottom: Spacing.sm,
+  debugLabel: {
+    fontSize: 9,
+    fontFamily: Fonts.mono,
+    letterSpacing: 1.5,
+    marginBottom: Spacing.xs,
   },
-  cardBody: {
-    fontSize: FontSize.md,
-    fontFamily: Fonts.regular,
-    lineHeight: 22,
+  debugText: {
+    fontSize: FontSize.xs,
+    fontFamily: Fonts.mono,
+    lineHeight: 16,
   },
 });
