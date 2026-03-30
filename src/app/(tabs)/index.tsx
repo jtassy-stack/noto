@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { router } from "expo-router";
 import { Fonts, FontSize, Spacing, BorderRadius, gradeColor } from "@/constants/theme";
@@ -103,6 +103,12 @@ export default function DashboardScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [insights, setInsights] = useState<TextInsight[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [period, setPeriod] = useState<"jour" | "semaine" | "semestre">("jour");
+
+  // All grades (unfiltered) — loaded once, filtered by period for display
+  const [allGrades, setAllGrades] = useState<Grade[]>([]);
+  const [allSchedule, setAllSchedule] = useState<ScheduleEntry[]>([]);
+  const [allHomework, setAllHomework] = useState<Homework[]>([]);
 
   async function handleBriefingTap(item: BriefingItem) {
     const data = item.data as Record<string, unknown> | undefined;
@@ -235,22 +241,78 @@ export default function DashboardScreen() {
         }));
       }
     } else {
-      // Pronote child — build from grades + schedule + homework
-      const today = new Date().toISOString().split("T")[0]!;
-      const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]!;
+      // Pronote child — fetch all data, filter by period for display
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0]!;
+      // Fetch semester-wide schedule + homework (broadest range)
+      const semesterStart = new Date(today);
+      semesterStart.setMonth(semesterStart.getMonth() - 6);
+      const semesterEnd = new Date(today);
+      semesterEnd.setMonth(semesterEnd.getMonth() + 1);
 
       const [g, s, h] = await Promise.all([
         getGradesByChild(activeChild.id),
-        getScheduleByChild(activeChild.id, today, tomorrow),
-        getHomeworkByChild(activeChild.id, today),
+        getScheduleByChild(activeChild.id, semesterStart.toISOString().split("T")[0]!, semesterEnd.toISOString().split("T")[0]!),
+        getHomeworkByChild(activeChild.id, todayStr),
       ]);
 
-      setBriefing(buildBriefing(activeChild.firstName, g, s, h));
-      setInsights(extractTextInsights(g, s, h));
-      setStats(extractStats(g, s, h));
+      setAllGrades(g);
+      setAllSchedule(s);
+      setAllHomework(h);
     }
     setLoaded(true);
   }
+
+  // Filter data by period for Pronote children
+  const periodData = useMemo(() => {
+    if (!activeChild || activeChild.source === "ent") return null;
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0]!;
+    const tomorrowStr = new Date(now.getTime() + 86400000).toISOString().split("T")[0]!;
+
+    let gradesCutoff: Date;
+    let scheduleDateStart: string;
+    let scheduleDateEnd: string;
+
+    switch (period) {
+      case "jour":
+        gradesCutoff = new Date(now); gradesCutoff.setDate(gradesCutoff.getDate() - 1);
+        scheduleDateStart = todayStr;
+        scheduleDateEnd = tomorrowStr;
+        break;
+      case "semaine":
+        gradesCutoff = new Date(now); gradesCutoff.setDate(gradesCutoff.getDate() - 7);
+        const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
+        scheduleDateStart = todayStr;
+        scheduleDateEnd = weekEnd.toISOString().split("T")[0]!;
+        break;
+      case "semestre":
+        gradesCutoff = new Date(now); gradesCutoff.setMonth(gradesCutoff.getMonth() - 6);
+        scheduleDateStart = todayStr;
+        scheduleDateEnd = new Date(now.getTime() + 30 * 86400000).toISOString().split("T")[0]!;
+        break;
+    }
+
+    const grades = period === "semestre"
+      ? allGrades
+      : allGrades.filter((g) => new Date(g.date) >= gradesCutoff);
+    const schedule = allSchedule.filter(
+      (s) => s.startTime >= scheduleDateStart && s.startTime < scheduleDateEnd
+    );
+    const homework = allHomework;
+
+    return { grades, schedule, homework };
+  }, [period, allGrades, allSchedule, allHomework, activeChild]);
+
+  // Rebuild briefing/stats/insights when period data changes
+  useEffect(() => {
+    if (!periodData || !activeChild || activeChild.source === "ent") return;
+    const { grades, schedule, homework } = periodData;
+    setBriefing(buildBriefing(activeChild.firstName, grades, schedule, homework));
+    setInsights(extractTextInsights(grades, schedule, homework));
+    setStats(extractStats(grades, schedule, homework));
+    setLoaded(true);
+  }, [periodData, activeChild]);
 
   useEffect(() => {
     setLoaded(false);
@@ -258,6 +320,9 @@ export default function DashboardScreen() {
     setAiSummary(null);
     setInsights([]);
     setStats(null);
+    setAllGrades([]);
+    setAllSchedule([]);
+    setAllHomework([]);
     loadBriefing();
   }, [activeChild]);
 
@@ -355,6 +420,32 @@ export default function DashboardScreen() {
         <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />
       )}
 
+      {/* Period picker (Pronote only) */}
+      {activeChild.source !== "ent" && (
+        <View style={styles.periodRow}>
+          {(["jour", "semaine", "semestre"] as const).map((p) => (
+            <Pressable
+              key={p}
+              onPress={() => { setPeriod(p); setAiSummary(null); }}
+              style={[
+                styles.periodChip,
+                {
+                  backgroundColor: period === p ? theme.accent : "transparent",
+                  borderColor: period === p ? theme.accent : theme.border,
+                },
+              ]}
+            >
+              <Text style={[
+                styles.periodText,
+                { color: period === p ? "#FFFFFF" : theme.textSecondary },
+              ]}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {/* AI Summary */}
       {(aiSummary || aiLoading) && (
         <View style={[styles.aiCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
@@ -416,6 +507,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: Spacing.md,
+  },
+  periodRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  periodChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  periodText: {
+    fontSize: FontSize.xs,
+    fontFamily: Fonts.medium,
   },
   aiCard: {
     padding: Spacing.md,
