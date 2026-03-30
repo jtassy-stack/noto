@@ -14,6 +14,7 @@ import {
 import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild } from "@/lib/ent/conversation";
 import { fetchTimeline, fetchSchoolbookWord } from "@/lib/ent/pcn-data";
 import { buildBriefing, buildEntBriefing, type Briefing, type BriefingItem } from "@/lib/briefing/engine";
+import { isAvailable as isMLAvailable, generateSummary } from "../../../modules/on-device-ml";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
 
 // --- Briefing Card Component ---
@@ -90,6 +91,8 @@ export default function DashboardScreen() {
   const { sync, syncing } = useSync();
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   async function handleBriefingTap(item: BriefingItem) {
     const data = item.data as Record<string, unknown> | undefined;
@@ -236,8 +239,35 @@ export default function DashboardScreen() {
   useEffect(() => {
     setLoaded(false);
     setBriefing(null);
+    setAiSummary(null);
     loadBriefing();
   }, [activeChild]);
+
+  // Generate AI summary when briefing is ready
+  useEffect(() => {
+    if (!briefing?.llmContext || aiSummary) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!isMLAvailable()) return;
+        setAiLoading(true);
+        const summary = await generateSummary(
+          briefing.llmContext,
+          "Tu es l'assistant de nōto., une app pour parents d'élèves. " +
+          "Résume les informations scolaires en 2-3 phrases courtes et naturelles en français. " +
+          "Sois concis, bienveillant, et mentionne les points importants (devoirs urgents, notes, absences). " +
+          "Ne répète pas le nom de l'élève s'il est déjà dans le contexte."
+        );
+        if (!cancelled) setAiSummary(summary);
+      } catch (e) {
+        console.log("[nōto] AI summary not available:", e);
+      } finally {
+        if (!cancelled) setAiLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [briefing]);
 
   // Auto-sync on first load if no data (Pronote children only)
   useEffect(() => {
@@ -295,6 +325,17 @@ export default function DashboardScreen() {
         <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.xl }} />
       )}
 
+      {/* AI Summary */}
+      {(aiSummary || aiLoading) && (
+        <View style={[styles.aiCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          {aiLoading ? (
+            <ActivityIndicator size="small" color={theme.accent} />
+          ) : (
+            <Text style={[styles.aiText, { color: theme.text }]}>{aiSummary}</Text>
+          )}
+        </View>
+      )}
+
       {/* Class info */}
       {activeChild.className ? (
         <Text style={[styles.className, { color: theme.textTertiary }]}>
@@ -320,17 +361,6 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* LLM context preview — dev only, remove later */}
-      {__DEV__ && briefing?.llmContext && (
-        <View style={[styles.debugCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-          <Text style={[styles.debugLabel, { color: theme.textTertiary }]}>
-            LLM CONTEXT (Phase 2)
-          </Text>
-          <Text style={[styles.debugText, { color: theme.textSecondary }]}>
-            {briefing.llmContext}
-          </Text>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -350,6 +380,19 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: Spacing.md,
+  },
+  aiCard: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  aiText: {
+    fontSize: FontSize.sm,
+    fontFamily: Fonts.regular,
+    lineHeight: 20,
   },
   briefingList: {
     marginTop: Spacing.sm,
@@ -390,22 +433,4 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
-  // Dev debug
-  debugCard: {
-    marginTop: Spacing.xl,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-  },
-  debugLabel: {
-    fontSize: 9,
-    fontFamily: Fonts.mono,
-    letterSpacing: 1.5,
-    marginBottom: Spacing.xs,
-  },
-  debugText: {
-    fontSize: FontSize.xs,
-    fontFamily: Fonts.mono,
-    lineHeight: 16,
-  },
 });
