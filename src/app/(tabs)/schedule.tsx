@@ -83,18 +83,18 @@ export default function ScheduleScreen() {
         return (
           <View key={s.id} style={styles.slot}>
             <View style={styles.timeCol}>
-              <Text style={[styles.startTime, { color: s.isCancelled ? theme.crimson : theme.accent }]}>{startTime}</Text>
+              <Text style={[styles.startTime, { color: theme.accent }]}>{startTime}</Text>
               <Text style={[styles.endTime, { color: theme.textTertiary }]}>{endTime}</Text>
             </View>
-            <View style={[styles.divider, { backgroundColor: s.isCancelled ? theme.crimson : theme.accent, opacity: s.isCancelled ? 0.5 : 0.3 }]} />
+            <View style={[styles.divider, { backgroundColor: s.isCancelled ? theme.crimson : theme.accent, opacity: s.isCancelled ? 0.4 : 0.3 }]} />
             <View style={styles.slotContent}>
-              <Text style={[styles.slotSubject, { color: s.isCancelled ? theme.crimson : theme.text, textDecorationLine: s.isCancelled ? "line-through" : "none" }]}>{s.subject}</Text>
-              <Text style={[styles.slotMeta, { color: s.isCancelled ? theme.crimson : theme.textSecondary, opacity: s.isCancelled ? 0.5 : 1 }]}>
+              <Text style={[styles.slotSubject, { color: s.isCancelled ? theme.textTertiary : theme.text, textDecorationLine: s.isCancelled ? "line-through" : "none" }]}>{s.subject}</Text>
+              <Text style={[styles.slotMeta, { color: theme.textTertiary }]}>
                 {[s.teacher, s.room].filter(Boolean).join(" · ")}
               </Text>
               {s.isCancelled && (
-                <View style={[styles.cancelBadge, { backgroundColor: theme.crimson }]}>
-                  <Text style={styles.cancelText}>ANNULÉ</Text>
+                <View style={[styles.cancelBadge, { backgroundColor: theme.crimson + "1F" }]}>
+                  <Text style={[styles.cancelText, { color: theme.crimson }]}>Annulé</Text>
                 </View>
               )}
             </View>
@@ -117,12 +117,12 @@ const styles = StyleSheet.create({
   dateLabel: { fontSize: FontSize.sm, fontFamily: Fonts.regular, marginBottom: Spacing.md, textTransform: "capitalize" },
   slot: { flexDirection: "row", paddingVertical: 14, gap: 14 },
   timeCol: { width: 46, gap: 2 },
-  startTime: { fontSize: FontSize.sm, fontFamily: Fonts.mono },
+  startTime: { fontSize: 13, fontFamily: Fonts.mono },
   endTime: { fontSize: FontSize.xs, fontFamily: Fonts.mono },
   divider: { width: 2, borderRadius: 1, alignSelf: "stretch" },
   slotContent: { flex: 1, gap: 3 },
-  slotSubject: { fontSize: FontSize.md, fontFamily: Fonts.semiBold },
-  slotMeta: { fontSize: FontSize.sm, fontFamily: Fonts.regular },
-  cancelBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, opacity: 0.2, marginTop: 2 },
-  cancelText: { fontSize: 10, fontFamily: Fonts.semiBold, color: "#FFFFFF" },
+  slotSubject: { fontSize: FontSize.md, fontFamily: Fonts.medium },
+  slotMeta: { fontSize: 11, fontFamily: Fonts.regular },
+  cancelBadge: { alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 2 },
+  cancelText: { fontSize: 10, fontFamily: Fonts.semiBold },
 });

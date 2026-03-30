@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
-import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
+import { Fonts, Spacing } from "@/constants/theme";
 import type { ThemeColors } from "@/constants/theme";
 import type { TextInsight } from "@/lib/briefing/insights";
 
@@ -19,11 +19,11 @@ export function InsightsCard({ insights, theme }: Props) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+    <View style={[styles.container, { backgroundColor: "#FFFFFF", borderColor: theme.border }]}>
       {insights.map((insight, i) => (
         <View key={i} style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
-          <View style={[styles.label, { backgroundColor: accentMap[insight.accent] + "18" }]}>
-            <Text style={[styles.labelText, { color: accentMap[insight.accent] }]}>
+          <View style={[styles.badge, { backgroundColor: accentMap[insight.accent] + "1F" }]}>
+            <Text style={[styles.badgeText, { color: accentMap[insight.accent] }]}>
               {insight.label}
             </Text>
           </View>
@@ -38,29 +38,29 @@ export function InsightsCard({ insights, theme }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: BorderRadius.md,
+    borderRadius: 12,
     borderWidth: 1,
+    padding: 16,
     marginBottom: Spacing.md,
-    overflow: "hidden",
   },
   row: {
-    padding: 12,
     gap: 6,
+    paddingVertical: 8,
   },
-  label: {
+  badge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  labelText: {
-    fontSize: FontSize.xs,
+  badgeText: {
+    fontSize: 10,
     fontFamily: Fonts.semiBold,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   text: {
-    fontSize: FontSize.sm,
+    fontSize: 13,
     fontFamily: Fonts.regular,
     lineHeight: 20,
   },

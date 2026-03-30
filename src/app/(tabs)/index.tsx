@@ -429,15 +429,12 @@ export default function DashboardScreen() {
               onPress={() => { setPeriod(p); setAiSummary(null); }}
               style={[
                 styles.periodChip,
-                {
-                  backgroundColor: period === p ? theme.accent : "transparent",
-                  borderColor: period === p ? theme.accent : theme.border,
-                },
+                period === p && styles.periodChipActive,
               ]}
             >
               <Text style={[
                 styles.periodText,
-                { color: period === p ? "#FFFFFF" : theme.textSecondary },
+                period === p ? styles.periodTextActive : styles.periodTextInactive,
               ]}>
                 {p.charAt(0).toUpperCase() + p.slice(1)}
               </Text>
@@ -510,18 +507,33 @@ const styles = StyleSheet.create({
   },
   periodRow: {
     flexDirection: "row",
-    gap: Spacing.xs,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0DFDA",
+    borderRadius: 10,
+    padding: 4,
     marginBottom: Spacing.md,
   },
   periodChip: {
-    paddingHorizontal: 14,
+    flex: 1,
     paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  periodChipActive: {
+    backgroundColor: "#F5F3EE",
   },
   periodText: {
     fontSize: FontSize.xs,
+  },
+  periodTextActive: {
+    fontFamily: Fonts.semiBold,
+    color: "#0A0A08",
+  },
+  periodTextInactive: {
     fontFamily: Fonts.medium,
+    color: "#888888",
   },
   aiCard: {
     padding: Spacing.md,

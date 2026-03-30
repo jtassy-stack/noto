@@ -23,8 +23,7 @@ export function StatsCard({ stats, theme }: Props) {
       {/* Counters row */}
       <View style={styles.countersRow}>
         {stats.counters.map((c) => (
-          <View key={c.label} style={[styles.counter, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-            <Text style={styles.counterIcon}>{c.icon}</Text>
+          <View key={c.label} style={styles.counter}>
             <Text style={[styles.counterValue, { color: theme.text }]}>{c.value}</Text>
             <Text style={[styles.counterLabel, { color: theme.textTertiary }]}>{c.label}</Text>
           </View>
@@ -112,11 +111,11 @@ const styles = StyleSheet.create({
   countersRow: { flexDirection: "row", gap: Spacing.sm },
   counter: {
     flex: 1, alignItems: "center", gap: 2,
-    paddingVertical: 10, borderRadius: BorderRadius.md, borderWidth: 1,
+    padding: 12, borderRadius: 12, borderWidth: 1,
+    backgroundColor: "#FFFFFF", borderColor: "#E0DFDA",
   },
-  counterIcon: { fontSize: 18 },
-  counterValue: { fontSize: FontSize.lg, fontFamily: Fonts.monoBold },
-  counterLabel: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
+  counterValue: { fontSize: 24, fontFamily: Fonts.monoBold },
+  counterLabel: { fontSize: 11, fontFamily: Fonts.regular },
 
   // Overall
   overallCard: {

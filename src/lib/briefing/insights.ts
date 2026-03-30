@@ -167,7 +167,7 @@ export interface StatsData {
   /** Per-subject averages for bar chart */
   subjects: SubjectStat[];
   /** Quick counters */
-  counters: Array<{ label: string; value: number; icon: string }>;
+  counters: Array<{ label: string; value: number }>;
 }
 
 /** Normalize a grade to /20, weighted by coefficient */
@@ -254,9 +254,9 @@ export function extractStats(
   const pending = homework.filter((h) => !h.isDone);
 
   const counters = [
-    { label: "Cours", value: active.length, icon: "📚" },
-    { label: "Devoirs", value: pending.length, icon: "📝" },
-    { label: "Notes", value: grades.length, icon: "📊" },
+    { label: "Cours", value: active.length },
+    { label: "Devoirs", value: pending.length },
+    { label: "Notes", value: grades.length },
   ];
 
   return { overallAverage, subjects, counters };
@@ -268,9 +268,9 @@ export function extractEntStats(
   blogCount: number,
 ): StatsData {
   const counters = [
-    { label: "Carnet", value: schoolbookWords.length, icon: "📋" },
-    { label: "Messages", value: unreadMessages, icon: "✉️" },
-    { label: "Blog", value: blogCount, icon: "📝" },
+    { label: "Carnet", value: schoolbookWords.length },
+    { label: "Messages", value: unreadMessages },
+    { label: "Blog", value: blogCount },
   ];
 
   return { subjects: [], counters };
