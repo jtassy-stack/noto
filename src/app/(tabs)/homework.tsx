@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { router } from "expo-router";
+import { cacheDirectory, downloadAsync } from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useChildren } from "@/hooks/useChildren";
@@ -9,6 +11,15 @@ import { getConversationCredentials } from "@/lib/ent/conversation";
 import { fetchHomeworks, fetchSchoolbookForChild, type PcnHomeworkEntry, type SchoolbookWordDetail } from "@/lib/ent/pcn-data";
 import { stripHtml } from "@/lib/utils/html";
 import type { Homework } from "@/types";
+
+let FileViewer: { open: (uri: string, opts?: Record<string, unknown>) => Promise<void> } | null = null;
+try { FileViewer = require("react-native-file-viewer"); } catch {}
+
+interface DocumentItem {
+  url: string;
+  name: string;
+  wordTitle: string;
+}
 
 // --- Pronote homework ---
 
@@ -76,8 +87,10 @@ export default function HomeworkScreen() {
   const { activeChild } = useChildren();
   const [items, setItems] = useState<HomeworkItem[]>([]);
   const [schoolbook, setSchoolbook] = useState<SchoolbookWordDetail[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   const isEnt = activeChild?.source === "ent";
 
@@ -119,10 +132,25 @@ export default function HomeworkScreen() {
           }
         }
 
-        // Fetch schoolbook (carnet de liaison)
+        // Fetch schoolbook + extract documents
         if (entUserId) {
           const words = await fetchSchoolbookForChild(creds, entUserId);
           setSchoolbook(words);
+
+          const docs: DocumentItem[] = [];
+          for (const w of words) {
+            const linkRegex = /href="(\/workspace\/document\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+            let found;
+            while ((found = linkRegex.exec(w.text)) !== null) {
+              const name = found[2]!.replace(/<[^>]+>/g, "").trim();
+              docs.push({
+                url: `${creds.apiBaseUrl}${found[1]}`,
+                name: name || found[1]!.split("/").pop() || "Document",
+                wordTitle: w.title,
+              });
+            }
+          }
+          setDocuments(docs);
         }
 
         // Also try homework
@@ -141,8 +169,41 @@ export default function HomeworkScreen() {
     }
   }, [activeChild]);
 
+  async function downloadAndOpen(url: string, name: string) {
+    setDownloading(url);
+    try {
+      const ext = name.includes(".") ? "" : ".pdf";
+      const localUri = `${cacheDirectory}${name.replace(/[^a-zA-Z0-9._-]/g, "_")}${ext}`;
+      const result = await downloadAsync(url, localUri);
+      if (result.status !== 200) {
+        Alert.alert("Erreur", "Impossible de télécharger le document.");
+        return;
+      }
+      try {
+        if (FileViewer) {
+          await FileViewer.open(result.uri, { showOpenWithDialog: true });
+        } else {
+          throw new Error("no FileViewer");
+        }
+      } catch {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(result.uri, {
+            mimeType: result.headers["content-type"] || "application/octet-stream",
+            dialogTitle: name,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("[nōto] Document download error:", e);
+      Alert.alert("Erreur", "Impossible de télécharger.");
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   useEffect(() => {
     setSchoolbook([]);
+    setDocuments([]);
     setItems([]);
     load();
   }, [load]);
@@ -166,9 +227,10 @@ export default function HomeworkScreen() {
   // --- ENT: Carnet de liaison ---
   if (isEnt) {
     const hasSchoolbook = schoolbook.length > 0;
+    const hasDocs = documents.length > 0;
     const hasHomework = items.length > 0;
 
-    if (!hasSchoolbook && !hasHomework) {
+    if (!hasSchoolbook && !hasDocs && !hasHomework) {
       return (
         <View style={[styles.empty, { backgroundColor: theme.background }]}>
           <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
@@ -183,10 +245,11 @@ export default function HomeworkScreen() {
         style={[styles.container, { backgroundColor: theme.background }]}
         contentContainerStyle={styles.content}
       >
+        {/* Messages du carnet */}
         {hasSchoolbook && (
           <>
             <Text style={[styles.sectionLabel, { color: theme.textTertiary }]}>
-              CARNET DE LIAISON
+              MOTS
             </Text>
             {schoolbook.map((word) => (
               <SchoolbookCard key={word.id} word={word} theme={theme} />
@@ -194,9 +257,44 @@ export default function HomeworkScreen() {
           </>
         )}
 
-        {hasHomework && (
+        {/* Documents extraits des mots */}
+        {hasDocs && (
           <>
             <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: hasSchoolbook ? Spacing.lg : 0 }]}>
+              DOCUMENTS ({documents.length})
+            </Text>
+            {documents.map((doc, i) => (
+              <Pressable
+                key={`${doc.url}-${i}`}
+                style={({ pressed }) => [
+                  styles.docRow,
+                  { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.6 : 1 },
+                ]}
+                onPress={() => downloadAndOpen(doc.url, doc.name)}
+                disabled={downloading === doc.url}
+              >
+                {downloading === doc.url ? (
+                  <ActivityIndicator size="small" color={theme.accent} style={{ width: 20 }} />
+                ) : (
+                  <Text style={styles.docIcon}>&#x1F4CE;</Text>
+                )}
+                <View style={styles.docInfo}>
+                  <Text style={[styles.docName, { color: theme.text }]} numberOfLines={2}>
+                    {doc.name}
+                  </Text>
+                  <Text style={[styles.docSource, { color: theme.textTertiary }]} numberOfLines={1}>
+                    {doc.wordTitle}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </>
+        )}
+
+        {/* Cahier de textes */}
+        {hasHomework && (
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.textTertiary, marginTop: (hasSchoolbook || hasDocs) ? Spacing.lg : 0 }]}>
               CAHIER DE TEXTES
             </Text>
             {items.map((h) => (
@@ -311,4 +409,13 @@ const styles = StyleSheet.create({
     flexDirection: "row", justifyContent: "space-between", paddingLeft: 14, marginTop: 4,
   },
   meta: { fontSize: FontSize.xs, fontFamily: Fonts.mono },
+
+  docRow: {
+    flexDirection: "row", alignItems: "center", gap: Spacing.sm,
+    padding: 12, borderRadius: BorderRadius.md, borderWidth: 1, marginBottom: 6,
+  },
+  docIcon: { fontSize: 16, width: 20, textAlign: "center" },
+  docInfo: { flex: 1, gap: 2 },
+  docName: { fontSize: FontSize.sm, fontFamily: Fonts.medium, lineHeight: 18 },
+  docSource: { fontSize: FontSize.xs, fontFamily: Fonts.regular },
 });

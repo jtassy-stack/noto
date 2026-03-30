@@ -4,7 +4,12 @@ import { useLocalSearchParams, router } from "expo-router";
 import { WebView } from "react-native-webview";
 import { cacheDirectory, downloadAsync } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import FileViewer from "react-native-file-viewer";
+
+// react-native-file-viewer only works in dev builds, not Expo Go
+let FileViewer: { open: (uri: string, opts?: Record<string, unknown>) => Promise<void> } | null = null;
+try {
+  FileViewer = require("react-native-file-viewer");
+} catch {}
 import { Fonts, FontSize, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { getConversationCredentials } from "@/lib/ent/conversation";
@@ -63,7 +68,11 @@ export default function DetailScreen() {
 
       // Open with native viewer (Quick Look iOS / Intent Android)
       try {
-        await FileViewer.open(result.uri, { showOpenWithDialog: true });
+        if (FileViewer) {
+          await FileViewer.open(result.uri, { showOpenWithDialog: true });
+        } else {
+          throw new Error("FileViewer not available");
+        }
       } catch {
         // Fallback to share sheet
         if (await Sharing.isAvailableAsync()) {

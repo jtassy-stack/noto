@@ -12,9 +12,10 @@ import {
   setChildSetting,
 } from "@/lib/database/repository";
 import { getConversationCredentials, fetchConversationInbox, filterMessagesByChild } from "@/lib/ent/conversation";
-import { fetchTimeline, fetchSchoolbookWord } from "@/lib/ent/pcn-data";
+import { fetchTimeline, fetchSchoolbookWord, fetchSchoolbookForChild } from "@/lib/ent/pcn-data";
 import { buildBriefing, buildEntBriefing, type Briefing, type BriefingItem } from "@/lib/briefing/engine";
 import { isAvailable as isMLAvailable, generateSummary } from "../../../modules/on-device-ml";
+import { generateTextSummary } from "@/lib/briefing/text-generator";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
 
 // --- Briefing Card Component ---
@@ -199,9 +200,11 @@ export default function DashboardScreen() {
         return;
       }
       try {
-        const [timeline, inbox] = await Promise.all([
+        const entChildId = activeChild.entUserId;
+        const [timeline, inbox, schoolbookWords] = await Promise.all([
           fetchTimeline(creds).catch(() => []),
           fetchConversationInbox(creds, 0).catch(() => ({ messages: [] })),
+          entChildId ? fetchSchoolbookForChild(creds, entChildId).catch(() => []) : Promise.resolve([]),
         ]);
 
         const filtered = activeChild.className
@@ -213,7 +216,7 @@ export default function DashboardScreen() {
         }));
 
         setBriefing(buildEntBriefing(activeChild.firstName, {
-          timeline, unreadMessages, recentMessages,
+          timeline, unreadMessages, recentMessages, schoolbookWords,
         }));
       } catch {
         setBriefing(buildEntBriefing(activeChild.firstName, {
@@ -243,28 +246,40 @@ export default function DashboardScreen() {
     loadBriefing();
   }, [activeChild]);
 
-  // Generate AI summary when briefing is ready
+  // Generate summary when briefing is ready
+  // Priority: Apple Intelligence (iOS 26+) → text generator (everywhere)
   useEffect(() => {
-    if (!briefing?.llmContext || aiSummary) return;
+    if (!briefing || aiSummary) return;
 
     let cancelled = false;
     (async () => {
+      // Try Apple Intelligence first
       try {
-        if (!isMLAvailable()) return;
-        setAiLoading(true);
-        const summary = await generateSummary(
-          briefing.llmContext,
-          "Tu es l'assistant de nōto., une app pour parents d'élèves. " +
-          "Résume les informations scolaires en 2-3 phrases courtes et naturelles en français. " +
-          "Sois concis, bienveillant, et mentionne les points importants (devoirs urgents, notes, absences). " +
-          "Ne répète pas le nom de l'élève s'il est déjà dans le contexte."
-        );
-        if (!cancelled) setAiSummary(summary);
-      } catch (e) {
-        console.log("[nōto] AI summary not available:", e);
-      } finally {
-        if (!cancelled) setAiLoading(false);
+        if (isMLAvailable() && briefing.llmContext) {
+          setAiLoading(true);
+          const summary = await generateSummary(
+            briefing.llmContext,
+            "Tu es l'assistant de nōto., une app pour parents d'élèves. " +
+            "Résume les informations scolaires en 2-3 phrases courtes et naturelles en français. " +
+            "Sois concis, bienveillant, et mentionne les points importants (devoirs urgents, notes, absences). " +
+            "Ne répète pas le nom de l'élève s'il est déjà dans le contexte."
+          );
+          if (!cancelled && summary) {
+            setAiSummary(summary);
+            setAiLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Apple Intelligence not available — fall through
       }
+
+      // Fallback: text generator (works everywhere)
+      if (!cancelled && briefing.items.length > 0) {
+        const text = generateTextSummary(briefing);
+        if (text) setAiSummary(text);
+      }
+      if (!cancelled) setAiLoading(false);
     })();
     return () => { cancelled = true; };
   }, [briefing]);

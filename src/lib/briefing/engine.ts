@@ -219,10 +219,19 @@ export interface TimelineEntry {
   resourceUri?: string;
 }
 
+export interface SchoolbookWord {
+  id: string;
+  title: string;
+  text: string;
+  sender: string;
+  date: string;
+}
+
 export interface EntBriefingData {
   timeline: TimelineEntry[];
   unreadMessages: number;
   recentMessages: Array<{ from: string; subject: string; date: string }>;
+  schoolbookWords?: SchoolbookWord[];
 }
 
 export function buildEntBriefing(
@@ -241,7 +250,36 @@ export function buildEntBriefing(
   );
 
   // --- Carnet de liaison (SCHOOLBOOK) — highest priority ---
-  if (schoolbookEntries.length > 0) {
+  // Use full schoolbook words if available, fallback to timeline entries
+  const words = data.schoolbookWords ?? [];
+  const allDocuments: string[] = [];
+
+  if (words.length > 0) {
+    for (const w of words) {
+      const dateStr = formatEntDate(w.date);
+      const docs = extractDocuments(w.text);
+      allDocuments.push(...docs);
+
+      items.push({
+        type: "schoolbook_urgent",
+        priority: 95,
+        title: w.title,
+        subtitle: [w.sender, dateStr, docs.length > 0 ? `${docs.length} pièce(s) jointe(s)` : ""].filter(Boolean).join(" · "),
+        accent: "red",
+        data: { ...w, type: "SCHOOLBOOK", wordId: String(w.id), wordTitle: w.title },
+      });
+    }
+
+    // Rich LLM context with document names and word summaries
+    const wordSummaries = words.map((w) => {
+      const plainText = w.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const docs = extractDocuments(w.text);
+      const docStr = docs.length > 0 ? ` [Documents joints: ${docs.join(", ")}]` : "";
+      return `- "${w.title}" de ${w.sender}: ${plainText.slice(0, 200)}${docStr}`;
+    });
+    contextParts.push(`Carnet de liaison (${words.length} mot(s)):\n${wordSummaries.join("\n")}`);
+  } else if (schoolbookEntries.length > 0) {
+    // Fallback: timeline-only schoolbook entries
     for (const w of schoolbookEntries) {
       const dateStr = formatEntDate(w.date);
       const title = (w as unknown as { wordTitle?: string }).wordTitle
@@ -260,6 +298,11 @@ export function buildEntBriefing(
     contextParts.push(
       `Carnet de liaison: ${schoolbookEntries.length} mot(s) de ${[...new Set(schoolbookEntries.map((w) => w.sender).filter(Boolean))].join(", ")}.`
     );
+  }
+
+  // Documents summary
+  if (allDocuments.length > 0) {
+    contextParts.push(`Documents à consulter: ${allDocuments.join(", ")}.`);
   }
 
   // --- Messages non lus ---
@@ -336,6 +379,18 @@ export function buildEntBriefing(
     items,
     llmContext: `Élève: ${childFirstName}.\n${contextParts.join("\n")}`,
   };
+}
+
+/** Extract document link names from schoolbook HTML */
+function extractDocuments(html: string): string[] {
+  const docs: string[] = [];
+  const regex = /href="\/workspace\/document\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = regex.exec(html)) !== null) {
+    const name = m[1]!.replace(/<[^>]+>/g, "").trim();
+    if (name) docs.push(name);
+  }
+  return docs;
 }
 
 function formatEntDate(date?: string): string {
