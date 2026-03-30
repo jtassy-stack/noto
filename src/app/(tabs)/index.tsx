@@ -339,10 +339,12 @@ export default function DashboardScreen() {
           setAiLoading(true);
           const summary = await generateSummary(
             briefing.llmContext,
-            "Tu es l'assistant de nōto., une app pour parents d'élèves. " +
-            "Résume les informations scolaires en 2-3 phrases courtes et naturelles en français. " +
-            "Sois concis, bienveillant, et mentionne les points importants (devoirs urgents, notes, absences). " +
-            "Ne répète pas le nom de l'élève s'il est déjà dans le contexte."
+            "Tu es l'assistant de nōto., une app pour les parents d'élèves. " +
+            "Tu t'adresses directement aux parents, pas à l'élève. " +
+            "Utilise 'votre enfant' ou le prénom, jamais 'tu' pour l'élève. " +
+            "Résume en 2-3 phrases courtes, bienveillantes et pratiques. " +
+            "Mentionne ce qui demande une action parentale : devoirs à vérifier, documents à signer, notes à surveiller. " +
+            "Ton positif : encourage quand c'est bien, suggère un échange si c'est difficile."
           );
           if (!cancelled && summary) {
             setAiSummary(summary);

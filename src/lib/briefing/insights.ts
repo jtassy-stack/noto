@@ -37,13 +37,13 @@ export function extractTextInsights(
       if (diff > 1) {
         insights.push({
           label: "Tendance",
-          text: `Les notes récentes sont en hausse (+${diff.toFixed(1)} pts sur 20).`,
+          text: `Les notes de votre enfant sont en hausse (+${diff.toFixed(1)} pts/20). À encourager !`,
           accent: "green",
         });
       } else if (diff < -1) {
         insights.push({
           label: "Tendance",
-          text: `Les notes récentes sont en baisse (${diff.toFixed(1)} pts sur 20). Un point peut être utile.`,
+          text: `Les notes récentes sont en baisse (${diff.toFixed(1)} pts/20). Un échange avec votre enfant peut aider.`,
           accent: "red",
         });
       }
@@ -90,7 +90,7 @@ export function extractTextInsights(
   if (pending.length >= 5) {
     insights.push({
       label: "Charge de travail",
-      text: `${pending.length} devoirs en attente — semaine chargée.`,
+      text: `${pending.length} devoirs en attente — pensez à vérifier avec votre enfant.`,
       accent: "amber",
     });
   }
@@ -100,7 +100,7 @@ export function extractTextInsights(
   if (cancelled.length >= 2) {
     insights.push({
       label: "Emploi du temps",
-      text: `${cancelled.length} cours annulés aujourd'hui.`,
+      text: `${cancelled.length} cours annulés aujourd'hui. Votre enfant sortira plus tôt.`,
       accent: "amber",
     });
   }

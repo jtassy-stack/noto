@@ -20,42 +20,42 @@ const OPENERS = [
 
 const SCHEDULE_PHRASES = [
   (n: number, first: string, time: string) =>
-    `${n} cours aujourd'hui, ça commence par ${first} à ${time}.`,
+    `Votre enfant a ${n} cours aujourd'hui, ça commence par ${first} à ${time}.`,
   (n: number, first: string, time: string) =>
-    `Journée de ${n} cours — ${first} à ${time} pour commencer.`,
+    `Journée de ${n} cours — début à ${time} avec ${first}.`,
   (n: number, first: string, time: string) =>
-    `${n} cours au programme, début à ${time} avec ${first}.`,
+    `${n} cours au programme aujourd'hui, ${first} à ${time} en premier.`,
 ];
 
 const NO_CLASS_PHRASES = [
-  "Pas de cours aujourd'hui.",
-  "Journée libre — pas de cours.",
-  "Repos aujourd'hui, pas de cours prévu.",
+  "Votre enfant n'a pas cours aujourd'hui.",
+  "Pas de cours prévu aujourd'hui.",
+  "Journée sans cours.",
 ];
 
 const CANCELLED_PHRASES = [
   (n: number, subjects: string) => `${n} cours annulé${n > 1 ? "s" : ""} (${subjects}).`,
-  (n: number, subjects: string) => `Attention : ${subjects} annulé${n > 1 ? "s" : ""}.`,
+  (n: number, subjects: string) => `À noter : ${subjects} annulé${n > 1 ? "s" : ""}.`,
 ];
 
 const URGENT_HW_PHRASES = [
-  (n: number, subjects: string) => `${n} devoir${n > 1 ? "s" : ""} urgent${n > 1 ? "s" : ""} : ${subjects}.`,
-  (n: number, subjects: string) => `À faire vite : ${subjects} (${n > 1 ? "à rendre bientôt" : "pour bientôt"}).`,
+  (n: number, subjects: string) => `${n} devoir${n > 1 ? "s" : ""} à vérifier ce soir : ${subjects}.`,
+  (n: number, subjects: string) => `Pensez à vérifier : ${subjects} (${n > 1 ? "à rendre bientôt" : "pour bientôt"}).`,
 ];
 
 const UPCOMING_HW_PHRASES = [
-  (n: number) => `${n} devoir${n > 1 ? "s" : ""} cette semaine.`,
+  (n: number) => `${n} devoir${n > 1 ? "s" : ""} à suivre cette semaine.`,
   (n: number) => `${n} devoir${n > 1 ? "s" : ""} à venir dans la semaine.`,
 ];
 
 const GRADE_GOOD_PHRASES = [
-  (subject: string, value: string) => `Bonne note en ${subject} : ${value}.`,
-  (subject: string, value: string) => `${value} en ${subject} — bien joué !`,
+  (subject: string, value: string) => `Bonne note en ${subject} : ${value} — à encourager !`,
+  (subject: string, value: string) => `${value} en ${subject}, bon travail.`,
 ];
 
 const GRADE_ALERT_PHRASES = [
   (subject: string, value: string) => `Note à surveiller en ${subject} : ${value}.`,
-  (subject: string, value: string) => `${value} en ${subject} — peut mieux faire.`,
+  (subject: string, value: string) => `${value} en ${subject} — un échange avec votre enfant peut aider.`,
 ];
 
 const SCHOOLBOOK_PHRASES = [

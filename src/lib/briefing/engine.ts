@@ -198,7 +198,7 @@ export function buildBriefing(
   // Sort by priority
   items.sort((a, b) => b.priority - a.priority);
 
-  const greeting = `${timeGreeting()} ! Voici le point pour ${childFirstName}.`;
+  const greeting = `${timeGreeting()} ! Voici le point pour ${childFirstName} aujourd'hui.`;
 
   return {
     greeting,
