@@ -47,21 +47,31 @@ export default function GradesScreen() {
     );
   }
 
-  // Compute subject averages
-  const subjectMap = new Map<string, { total: number; count: number }>();
+  // Compute weighted subject averages on /20
+  const subjectMap = new Map<string, { weighted: number; coeff: number; count: number }>();
   for (const g of grades) {
-    const normalized = (g.value / g.outOf) * 20;
-    const existing = subjectMap.get(g.subject) ?? { total: 0, count: 0 };
-    existing.total += normalized;
+    if (g.outOf <= 0) continue;
+    const on20 = (g.value / g.outOf) * 20;
+    const existing = subjectMap.get(g.subject) ?? { weighted: 0, coeff: 0, count: 0 };
+    existing.weighted += on20 * g.coefficient;
+    existing.coeff += g.coefficient;
     existing.count += 1;
     subjectMap.set(g.subject, existing);
   }
 
   const subjectAverages: SubjectAvg[] = Array.from(subjectMap.entries())
-    .map(([subject, { total, count }]) => ({ subject, average: total / count, count }))
+    .filter(([, v]) => v.coeff > 0)
+    .map(([subject, { weighted, coeff, count }]) => ({ subject, average: weighted / coeff, count }))
     .sort((a, b) => b.average - a.average);
 
-  const generalAvg = subjectAverages.reduce((sum, s) => sum + s.average, 0) / subjectAverages.length;
+  // General average: weighted across all grades (not average of averages)
+  let totalWeighted = 0, totalCoeff = 0;
+  for (const g of grades) {
+    if (g.outOf <= 0) continue;
+    totalWeighted += (g.value / g.outOf) * 20 * g.coefficient;
+    totalCoeff += g.coefficient;
+  }
+  const generalAvg = totalCoeff > 0 ? totalWeighted / totalCoeff : 0;
 
   return (
     <ScrollView
