@@ -16,6 +16,13 @@ import { fetchTimeline, fetchSchoolbookWord, fetchSchoolbookForChild } from "@/l
 import { buildBriefing, buildEntBriefing, type Briefing, type BriefingItem } from "@/lib/briefing/engine";
 import { isAvailable as isMLAvailable, generateSummary } from "../../../modules/on-device-ml";
 import { generateTextSummary } from "@/lib/briefing/text-generator";
+import {
+  extractTextInsights, extractEntTextInsights,
+  extractStats, extractEntStats,
+  type TextInsight, type StatsData,
+} from "@/lib/briefing/insights";
+import { InsightsCard } from "@/components/briefing/InsightsCard";
+import { StatsCard } from "@/components/briefing/StatsCard";
 import type { Grade, ScheduleEntry, Homework } from "@/types";
 
 // --- Briefing Card Component ---
@@ -94,6 +101,8 @@ export default function DashboardScreen() {
   const [loaded, setLoaded] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [insights, setInsights] = useState<TextInsight[]>([]);
+  const [stats, setStats] = useState<StatsData | null>(null);
 
   async function handleBriefingTap(item: BriefingItem) {
     const data = item.data as Record<string, unknown> | undefined;
@@ -215,9 +224,11 @@ export default function DashboardScreen() {
           from: m.from, subject: m.subject, date: m.date,
         }));
 
-        setBriefing(buildEntBriefing(activeChild.firstName, {
-          timeline, unreadMessages, recentMessages, schoolbookWords,
-        }));
+        const entBriefingData = { timeline, unreadMessages, recentMessages, schoolbookWords };
+        setBriefing(buildEntBriefing(activeChild.firstName, entBriefingData));
+        setInsights(extractEntTextInsights(schoolbookWords, unreadMessages));
+        const blogCount = timeline.filter((n) => n.type === "BLOG").length;
+        setStats(extractEntStats(schoolbookWords, unreadMessages, blogCount));
       } catch {
         setBriefing(buildEntBriefing(activeChild.firstName, {
           timeline: [], unreadMessages: 0, recentMessages: [],
@@ -235,6 +246,8 @@ export default function DashboardScreen() {
       ]);
 
       setBriefing(buildBriefing(activeChild.firstName, g, s, h));
+      setInsights(extractTextInsights(g, s, h));
+      setStats(extractStats(g, s, h));
     }
     setLoaded(true);
   }
@@ -243,6 +256,8 @@ export default function DashboardScreen() {
     setLoaded(false);
     setBriefing(null);
     setAiSummary(null);
+    setInsights([]);
+    setStats(null);
     loadBriefing();
   }, [activeChild]);
 
@@ -350,6 +365,12 @@ export default function DashboardScreen() {
           )}
         </View>
       )}
+
+      {/* Stats */}
+      {stats && <StatsCard stats={stats} theme={theme} />}
+
+      {/* Insights */}
+      {insights.length > 0 && <InsightsCard insights={insights} theme={theme} />}
 
       {/* Class info */}
       {activeChild.className ? (
