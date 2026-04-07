@@ -2,13 +2,6 @@ import Foundation
 
 /// High-level Pronote client for fetching school data.
 /// Wraps PronoteSession and PronoteAuth into a clean API.
-///
-/// Usage:
-/// ```swift
-/// let client = PronoteClient(url: "https://demo.pronote.net")
-/// try await client.login(username: "parent", password: "pass", deviceUUID: uuid)
-/// let grades = try await client.fetchGrades()
-/// ```
 final class PronoteClient: Sendable {
     private let session: PronoteSession
     private let deviceUUID: String
@@ -21,62 +14,58 @@ final class PronoteClient: Sendable {
 
     // MARK: - Auth
 
-    /// Login with username/password. Returns a refresh token to store in Keychain.
     func login(username: String, password: String) async throws -> PronoteRefreshToken {
         try await PronoteAuth.loginWithCredentials(
-            session: session,
-            username: username,
-            password: password,
-            deviceUUID: deviceUUID
+            session: session, username: username, password: password, deviceUUID: deviceUUID
         )
     }
 
-    /// Login with QR code data + PIN.
     func loginWithQRCode(qrData: [String: Any], pin: String) async throws -> PronoteRefreshToken {
         try await PronoteAuth.loginWithQRCode(
-            session: session,
-            qrData: qrData,
-            pin: pin,
-            deviceUUID: deviceUUID
+            session: session, qrData: qrData, pin: pin, deviceUUID: deviceUUID
         )
     }
 
-    /// Reconnect using a stored refresh token.
     func reconnect(username: String, token: String) async throws -> PronoteRefreshToken {
         try await PronoteAuth.loginWithToken(
-            session: session,
-            username: username,
-            token: token,
-            deviceUUID: deviceUUID
+            session: session, username: username, token: token, deviceUUID: deviceUUID
         )
     }
 
-    /// Switch active child (for parent accounts with multiple children).
     func switchChild(index: Int) async {
         await session.setActiveChild(index: index)
     }
 
-    /// Get list of children on this account.
     var children: [PronoteChildResource] {
         get async { await session.childResources }
     }
 
     // MARK: - Grades
 
-    func fetchGrades(periodIndex: Int = 0) async throws -> [PronoteGrade] {
-        try await session.ensureTabAuthorized(.grades)
-
+    func fetchGrades() async throws -> [PronoteGrade] {
         let payload: [String: Any] = [
-            "_Signature_": ["onglet": PronoteTab.grades.rawValue],
-            "donnees": ["Periode": ["N": periodIndex]],
+            "Signature": ["onglet": PronoteTab.grades.rawValue],
+            "donnees": [String: Any](),
         ]
 
         let response = try await session.request(function: "DernieresNotes", payload: payload)
 
-        guard let data = response["donneesSec"] as? [String: Any],
-              let gradeList = data["listeDevoirs"] as? [[String: Any]] else {
-            return []
+        // Debug: dump response keys to understand structure
+        NSLog("[noto] DernieresNotes response keys: \(response.keys.sorted())")
+        for (key, value) in response {
+            if let dict = value as? [String: Any] {
+                NSLog("[noto]   \(key) keys: \(dict.keys.sorted())")
+            } else if let arr = value as? [Any] {
+                NSLog("[noto]   \(key): array[\(arr.count)]")
+            } else {
+                NSLog("[noto]   \(key): \(type(of: value)) = \(String(describing: value).prefix(100))")
+            }
         }
+
+        // Response is the decrypted data — look for grade list
+        let gradeList = response["listeDevoirs"] as? [[String: Any]]
+            ?? (response["donnees"] as? [String: Any])?["listeDevoirs"] as? [[String: Any]]
+            ?? []
 
         return gradeList.compactMap { parseGrade($0) }
     }
@@ -84,26 +73,29 @@ final class PronoteClient: Sendable {
     // MARK: - Timetable
 
     func fetchTimetable(from: Date, to: Date? = nil) async throws -> [PronoteLesson] {
-        try await session.ensureTabAuthorized(.timetable)
-
-        let formatter = ISO8601DateFormatter()
         let endDate = to ?? Calendar.current.date(byAdding: .day, value: 7, to: from)!
 
         let payload: [String: Any] = [
-            "_Signature_": ["onglet": PronoteTab.timetable.rawValue],
+            "Signature": ["onglet": PronoteTab.timetable.rawValue],
             "donnees": [
-                "dateDebut": ["V": formatter.string(from: from)],
-                "dateFin": ["V": formatter.string(from: endDate)],
-                "avecCoursAnnule": true,
-            ],
+                "estEDTAnnuel": false,
+                "estEDTPermanence": false,
+                "avecAbsencesEleve": false,
+                "avecAbsencesRessource": true,
+                "avecConseilDeClasse": true,
+                "avecCoursSortiePeda": true,
+                "avecInfosPrefsGrille": true,
+                "avecRessourcesLibrePiedHoraire": false,
+                "dateDebut": dateValue(from),
+                "dateFin": dateValue(endDate),
+            ] as [String: Any],
         ]
 
         let response = try await session.request(function: "PageEmploiDuTemps", payload: payload)
 
-        guard let data = response["donneesSec"] as? [String: Any],
-              let lessonList = data["ListeCours"] as? [[String: Any]] else {
-            return []
-        }
+        let lessonList = response["ListeCours"] as? [[String: Any]]
+            ?? (response["donnees"] as? [String: Any])?["ListeCours"] as? [[String: Any]]
+            ?? []
 
         return lessonList.compactMap { parseLesson($0) }
     }
@@ -111,66 +103,57 @@ final class PronoteClient: Sendable {
     // MARK: - Homework
 
     func fetchHomework(from: Date, to: Date? = nil) async throws -> [PronoteAssignment] {
-        try await session.ensureTabAuthorized(.assignments)
-
-        let formatter = ISO8601DateFormatter()
         let endDate = to ?? Calendar.current.date(byAdding: .day, value: 14, to: from)!
 
         let payload: [String: Any] = [
-            "_Signature_": ["onglet": PronoteTab.assignments.rawValue],
+            "Signature": ["onglet": PronoteTab.assignments.rawValue],
             "donnees": [
-                "dateDebut": ["V": formatter.string(from: from)],
-                "dateFin": ["V": formatter.string(from: endDate)],
-            ],
+                "domaine": dateRangeValue(from: from, to: endDate),
+            ] as [String: Any],
         ]
 
         let response = try await session.request(function: "PageCahierDeTexte", payload: payload)
 
-        guard let data = response["donneesSec"] as? [String: Any],
-              let hwList = data["ListeTravauxAFaire"] as? [[String: Any]] else {
-            return []
-        }
+        let hwList = response["ListeTravauxAFaire"] as? [String: Any]
+        let items = hwList?["V"] as? [[String: Any]]
+            ?? response["ListeTravauxAFaire"] as? [[String: Any]]
+            ?? (response["donnees"] as? [String: Any])?["ListeTravauxAFaire"] as? [[String: Any]]
+            ?? []
 
-        return hwList.compactMap { parseAssignment($0) }
+        return items.compactMap { parseAssignment($0) }
     }
 
     // MARK: - Messages
 
     func fetchDiscussions() async throws -> [PronoteDiscussion] {
-        try await session.ensureTabAuthorized(.discussions)
-
         let payload: [String: Any] = [
-            "_Signature_": ["onglet": PronoteTab.discussions.rawValue],
-            "donnees": [:],
+            "Signature": ["onglet": PronoteTab.discussions.rawValue],
+            "donnees": [String: Any](),
         ]
 
-        let response = try await session.request(function: "ListeDiscussions", payload: payload)
+        let response = try await session.request(function: "ListeMessagerie", payload: payload)
 
-        guard let data = response["donneesSec"] as? [String: Any],
-              let discussions = data["listeDiscussions"] as? [[String: Any]] else {
-            return []
-        }
+        let discussions = response["listeMessagerie"] as? [[String: Any]]
+            ?? response["ListeMessagerie"] as? [[String: Any]]
+            ?? (response["donnees"] as? [String: Any])?["listeMessagerie"] as? [[String: Any]]
+            ?? []
 
         return discussions.compactMap { parseDiscussion($0) }
     }
 
-    func fetchMessages(discussionId: String) async throws -> [PronoteMessage] {
-        let payload: [String: Any] = [
-            "_Signature_": ["onglet": PronoteTab.discussions.rawValue],
-            "donnees": [
-                "Objet": ["N": discussionId],
-                "marpiercqueLu": true,
-            ],
-        ]
+    // MARK: - Date Helpers (Pronote format)
 
-        let response = try await session.request(function: "ListeMessages", payload: payload)
+    private func dateValue(_ date: Date) -> [String: Any] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy HH:mm:ss"
+        formatter.locale = Locale(identifier: "fr_FR")
+        return ["_T": 7, "V": formatter.string(from: date)]
+    }
 
-        guard let data = response["donneesSec"] as? [String: Any],
-              let messages = data["listeMessages"] as? [[String: Any]] else {
-            return []
-        }
-
-        return messages.compactMap { parseMessage($0) }
+    private func dateRangeValue(from: Date, to: Date) -> [String: Any] {
+        // Pronote uses week numbers for assignments
+        // For simplicity, use the _T:8 format with week range
+        return ["_T": 8, "V": "[0..52]"] // All weeks — let client filter
     }
 
     // MARK: - Parsers
@@ -178,14 +161,15 @@ final class PronoteClient: Sendable {
     private func parseGrade(_ json: [String: Any]) -> PronoteGrade? {
         guard let id = json["N"] as? String else { return nil }
 
-        let subjectDict = json["Matiere"] as? [String: Any]
-        let subjectName = subjectDict?["L"] as? String ?? "?"
+        let subjectDict = json["Matiere"] as? [String: Any] ?? json["matiere"] as? [String: Any]
+        let subjectName = subjectDict?["V"] as? [String: Any] != nil
+            ? (subjectDict?["V"] as? [String: Any])?["L"] as? String ?? "?"
+            : subjectDict?["L"] as? String ?? "?"
 
-        let kindRaw = json["estEnGroupe"] as? Int ?? 0
-        let kind = PronoteGradeKind(rawValue: kindRaw) ?? .grade
+        let kind = PronoteGradeKind(rawValue: json["G"] as? Int ?? 0) ?? .grade
 
         let value: Double? = if kind == .grade {
-            parseGradeValue(json["note"] as? [String: Any])
+            parseNumericValue(json["note"] as? [String: Any] ?? json["Note"] as? [String: Any])
         } else {
             nil
         }
@@ -195,14 +179,14 @@ final class PronoteClient: Sendable {
             subjectName: subjectName,
             value: value,
             kind: kind,
-            outOf: parseGradeValue(json["bareme"] as? [String: Any]) ?? 20,
-            coefficient: json["coefficient"] as? Double ?? 1,
-            date: parseDate(json["date"] as? [String: Any]) ?? .now,
+            outOf: parseNumericValue(json["bareme"] as? [String: Any] ?? json["Bareme"] as? [String: Any]) ?? 20,
+            coefficient: json["coefficient"] as? Double ?? json["Coefficient"] as? Double ?? 1,
+            date: parsePronoteDate(json["date"] as? [String: Any] ?? json["Date"] as? [String: Any]) ?? .now,
             chapter: json["commentaire"] as? String,
             comment: nil,
-            classAverage: parseGradeValue(json["moyenne"] as? [String: Any]),
-            classMin: parseGradeValue(json["noteMin"] as? [String: Any]),
-            classMax: parseGradeValue(json["noteMax"] as? [String: Any])
+            classAverage: parseNumericValue(json["moyenne"] as? [String: Any]),
+            classMin: parseNumericValue(json["noteMin"] as? [String: Any]),
+            classMax: parseNumericValue(json["noteMax"] as? [String: Any])
         )
     }
 
@@ -211,16 +195,18 @@ final class PronoteClient: Sendable {
 
         let subjectDict = json["Matiere"] as? [String: Any]
         let subject = subjectDict?["L"] as? String
+            ?? (subjectDict?["V"] as? [String: Any])?["L"] as? String
 
         return PronoteLesson(
             id: id,
             subject: subject,
-            startDate: parseDate(json["DateDuCours"] as? [String: Any]) ?? .now,
-            endDate: parseDate(json["DateFinCours"] as? [String: Any]) ?? .now,
+            startDate: parsePronoteDate(json["DateDuCours"] as? [String: Any]) ?? .now,
+            endDate: parsePronoteDate(json["DateFinCours"] as? [String: Any]
+                ?? json["dateFin"] as? [String: Any]) ?? .now,
             cancelled: json["estAnnule"] as? Bool ?? false,
             status: json["Statut"] as? String,
-            teacherNames: parseStringArray(json["ListeProfesseurs"]),
-            classrooms: parseStringArray(json["ListeSalles"]),
+            teacherNames: parseNameList(json["ListeProfesseurs"]),
+            classrooms: parseNameList(json["ListeSalles"]),
             isTest: json["estDevoir"] as? Bool ?? false
         )
     }
@@ -229,16 +215,17 @@ final class PronoteClient: Sendable {
         guard let id = json["N"] as? String else { return nil }
 
         let subjectDict = json["Matiere"] as? [String: Any]
-        let subjectName = subjectDict?["L"] as? String ?? "?"
+        let subjectName = subjectDict?["L"] as? String
+            ?? (subjectDict?["V"] as? [String: Any])?["L"] as? String ?? "?"
 
         return PronoteAssignment(
             id: id,
             subjectName: subjectName,
-            description: stripHTML(json["descriptif"] as? String ?? ""),
-            deadline: parseDate(json["PourLe"] as? [String: Any]) ?? .now,
+            description: stripHTML(json["descriptif"] as? [String: Any]),
+            deadline: parsePronoteDate(json["PourLe"] as? [String: Any]) ?? .now,
             done: json["TAFFait"] as? Bool ?? false,
             difficulty: PronoteAssignmentDifficulty(rawValue: json["niveauDifficulte"] as? Int ?? 0) ?? .none,
-            themes: parseStringArray(json["ListeThemes"])
+            themes: parseNameList(json["ListeThemes"])
         )
     }
 
@@ -246,43 +233,48 @@ final class PronoteClient: Sendable {
         guard let id = json["N"] as? String else { return nil }
         return PronoteDiscussion(
             participantsMessageID: id,
-            subject: json["Objet"] as? String ?? "",
-            creator: json["Auteur"] as? String,
-            date: parseDate(json["Date"] as? [String: Any]) ?? .now,
-            unreadCount: json["nbNonLus"] as? Int ?? 0
-        )
-    }
-
-    private func parseMessage(_ json: [String: Any]) -> PronoteMessage? {
-        guard let id = json["N"] as? String else { return nil }
-        return PronoteMessage(
-            id: id,
-            content: stripHTML(json["contenu"] as? String ?? ""),
-            date: parseDate(json["Date"] as? [String: Any]) ?? .now,
-            sender: json["Auteur"] as? String ?? ""
+            subject: json["objet"] as? String ?? json["Objet"] as? String ?? "",
+            creator: json["expediteur"] as? String ?? json["Expediteur"] as? String,
+            date: parsePronoteDate(json["date"] as? [String: Any] ?? json["Date"] as? [String: Any]) ?? .now,
+            unreadCount: json["nbNonLus"] as? Int ?? json["NbNonLus"] as? Int ?? 0
         )
     }
 
     // MARK: - Parse Helpers
 
-    private func parseGradeValue(_ dict: [String: Any]?) -> Double? {
+    private func parseNumericValue(_ dict: [String: Any]?) -> Double? {
+        guard let dict else { return nil }
+        // Format: {_T: 10, V: "14.5"} or just {V: "14.5"}
+        if let v = dict["V"] as? String {
+            return Double(v.replacingOccurrences(of: ",", with: "."))
+        }
+        if let v = dict["V"] as? Double { return v }
+        return nil
+    }
+
+    private func parsePronoteDate(_ dict: [String: Any]?) -> Date? {
         guard let v = dict?["V"] as? String else { return nil }
-        return Double(v.replacingOccurrences(of: ",", with: "."))
+        // Pronote date format: "07/04/2026 08:00:00" or ISO
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        for format in ["dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy", "yyyy-MM-dd'T'HH:mm:ss"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: v) { return date }
+        }
+        return ISO8601DateFormatter().date(from: v)
     }
 
-    private func parseDate(_ dict: [String: Any]?) -> Date? {
-        guard let v = dict?["V"] as? String else { return nil }
-        let formatter = ISO8601DateFormatter()
-        return formatter.date(from: v)
+    private func parseNameList(_ value: Any?) -> [String] {
+        guard let list = value as? [String: Any], let items = list["V"] as? [[String: Any]] else {
+            guard let directList = value as? [[String: Any]] else { return [] }
+            return directList.compactMap { $0["L"] as? String }
+        }
+        return items.compactMap { $0["L"] as? String }
     }
 
-    private func parseStringArray(_ value: Any?) -> [String] {
-        guard let list = value as? [[String: Any]] else { return [] }
-        return list.compactMap { $0["L"] as? String }
-    }
-
-    private func stripHTML(_ html: String) -> String {
-        html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+    private func stripHTML(_ dict: [String: Any]?) -> String {
+        let raw = dict?["V"] as? String ?? dict?["L"] as? String ?? ""
+        return raw.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

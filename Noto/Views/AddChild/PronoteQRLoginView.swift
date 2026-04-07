@@ -299,7 +299,13 @@ struct PronoteQRLoginView: View {
                 try? await syncService.sync(child: child, client: client)
             }
 
-            dismiss()
+            // Show sync errors if any, otherwise dismiss
+            if let syncError = syncService.lastSyncError {
+                errorMessage = "Sync: \(syncError)"
+                step = .pin
+            } else {
+                dismiss()
+            }
         } catch {
             errorMessage = "Erreur : \(error)"
             pin = ""

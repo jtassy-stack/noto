@@ -14,20 +14,20 @@ final class PronoteSyncService {
     /// Full sync for a Pronote child: grades, schedule, homework.
     /// Errors are caught per-resource so partial sync succeeds.
     func sync(child: Child, client: PronoteClient) async throws {
-        print("[noto] Starting sync for \(child.firstName)")
+        NSLog("[noto] Starting sync for \(child.firstName)")
 
         // Fetch all data in parallel, catch errors individually
-        async let gradesResult = fetchSafe { try await client.fetchGrades() }
-        async let timetableResult = fetchSafe { try await client.fetchTimetable(from: .now) }
-        async let homeworkResult = fetchSafe { try await client.fetchHomework(from: .now) }
-        async let messagesResult = fetchSafe { try await client.fetchDiscussions() }
+        async let gradesResult = fetchSafe("Grades") { try await client.fetchGrades() }
+        async let timetableResult = fetchSafe("Timetable") { try await client.fetchTimetable(from: .now) }
+        async let homeworkResult = fetchSafe("Homework") { try await client.fetchHomework(from: .now) }
+        async let messagesResult = fetchSafe("Messages") { try await client.fetchDiscussions() }
 
         let grades = await gradesResult
         let lessons = await timetableResult
         let homework = await homeworkResult
         let discussions = await messagesResult
 
-        print("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
+        NSLog("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
 
         // Clear existing data for this child (full refresh)
         clearExistingData(for: child)
@@ -39,7 +39,7 @@ final class PronoteSyncService {
         syncMessages(discussions, for: child)
 
         try modelContext.save()
-        print("[noto] Sync complete for \(child.firstName)")
+        NSLog("[noto] Sync complete for \(child.firstName)")
     }
 
     // MARK: - Clear
@@ -125,12 +125,18 @@ final class PronoteSyncService {
 
     // MARK: - Safe Fetch
 
-    private func fetchSafe<T>(_ fetch: () async throws -> [T]) async -> [T] {
+    private func fetchSafe<T>(_ label: String, _ fetch: () async throws -> [T]) async -> [T] {
         do {
-            return try await fetch()
+            let result = try await fetch()
+            NSLog("[noto] ✅ \(label): \(result.count) items")
+            return result
         } catch {
-            print("[noto] Sync fetch error: \(error)")
+            NSLog("[noto] ❌ \(label) failed: \(error)")
+            // Store last error for debug display
+            lastSyncError = "\(label): \(error)"
             return []
         }
     }
+
+    var lastSyncError: String?
 }

@@ -155,7 +155,7 @@ actor PronoteSession {
             fieldNames.secureData: processedData,
         ]
 
-        print("[noto] REQUEST: \(function) → \(endpoint.absoluteString)")
+        NSLog("[noto] REQUEST: \(function) → \(endpoint.absoluteString)")
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -177,9 +177,12 @@ actor PronoteSession {
             throw PronoteError.invalidResponse("Invalid JSON response")
         }
 
+        NSLog("[noto] RAW RESPONSE \(function): keys=\(responseJSON.keys.sorted())")
+
         // Decrypt response data
         guard let secureData = responseJSON[fieldNames.secureData] as? String else {
             // Response might not have encrypted data (e.g. errors)
+            NSLog("[noto] No '\(fieldNames.secureData)' in response for \(function)")
             return responseJSON
         }
 
@@ -202,9 +205,12 @@ actor PronoteSession {
         }
 
         guard let result = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
-            throw PronoteError.invalidResponse("Cannot parse decrypted response")
+            let preview = String(data: responseData.prefix(300), encoding: .utf8) ?? "binary"
+            NSLog("[noto] RESPONSE \(function): cannot parse JSON. Preview: \(preview)")
+            throw PronoteError.invalidResponse("Cannot parse decrypted response for \(function)")
         }
 
+        NSLog("[noto] RESPONSE \(function): \(result.keys.sorted())")
         return result
     }
 
