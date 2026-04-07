@@ -7,10 +7,30 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var families: [Family]
     @StateObject private var engine: BriefingEngineWrapper = .init()
+    @ObservedObject private var pronoteService = PronoteService.shared
+
+    @AppStorage("lastSyncDate") private var lastSyncDateInterval: Double = 0
+
+    @State private var isSyncing = false
+    @State private var showNoConnectionAlert = false
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
     private var isFamilyMode: Bool { selectedChild == nil }
+
+    private var lastSyncDate: Date? {
+        lastSyncDateInterval > 0 ? Date(timeIntervalSince1970: lastSyncDateInterval) : nil
+    }
+
+    private var lastSyncLabel: String? {
+        guard let date = lastSyncDate else { return nil }
+        let seconds = Int(Date.now.timeIntervalSince(date))
+        if seconds < 60 { return "Dernière sync: à l'instant" }
+        if seconds < 3600 { return "Dernière sync: il y a \(seconds / 60) min" }
+        let hours = seconds / 3600
+        if hours < 24 { return "Dernière sync: il y a \(hours) h" }
+        return "Dernière sync: il y a \(hours / 24) j"
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,6 +40,12 @@ struct HomeView: View {
                     if let name = family?.parentName {
                         GreetingHeader(parentName: name)
                     }
+
+                    // Sync status row
+                    SyncStatusRow(
+                        isSyncing: isSyncing,
+                        lastSyncLabel: lastSyncLabel
+                    )
 
                     // Briefing text summary
                     if !engine.briefingText.isEmpty {
@@ -48,13 +74,42 @@ struct HomeView: View {
             .navigationTitle(selectedChild?.firstName ?? "nōto.")
             .navigationBarTitleDisplayMode(.large)
             .refreshable {
-                await refreshBriefing()
+                await performFullRefresh()
             }
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
                 await refreshBriefing()
             }
+            .alert("Reconnexion requise", isPresented: $showNoConnectionAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Aucune session Pronote active. Reconnectez-vous pour synchroniser les données.")
+            }
         }
+    }
+
+    // MARK: - Refresh Logic
+
+    private func performFullRefresh() async {
+        guard let bridge = pronoteService.bridge else {
+            showNoConnectionAlert = true
+            // Still rebuild briefing from cached data
+            await refreshBriefing()
+            return
+        }
+
+        isSyncing = true
+        defer { isSyncing = false }
+
+        let syncService = PronoteSyncService(modelContext: modelContext)
+        let targetChildren = selectedChild.map { [$0] } ?? children
+
+        for (index, child) in targetChildren.enumerated() {
+            await syncService.sync(child: child, bridge: bridge, childIndex: index)
+        }
+
+        lastSyncDateInterval = Date.now.timeIntervalSince1970
+        await refreshBriefing()
     }
 
     private func refreshBriefing() async {
@@ -88,6 +143,32 @@ final class BriefingEngineWrapper: ObservableObject {
 }
 
 // MARK: - Subviews
+
+private struct SyncStatusRow: View {
+    let isSyncing: Bool
+    let lastSyncLabel: String?
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.xs) {
+            if isSyncing {
+                ProgressView()
+                    .scaleEffect(0.75)
+                Text("Synchronisation...")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            } else if let label = lastSyncLabel {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                Text(label)
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .animation(.easeInOut(duration: 0.2), value: isSyncing)
+    }
+}
 
 private struct GreetingHeader: View {
     let parentName: String
