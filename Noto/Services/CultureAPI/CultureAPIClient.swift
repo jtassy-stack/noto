@@ -2,13 +2,14 @@ import Foundation
 
 /// Client for culture-api (celyn.io).
 /// Fetches cultural recommendations based on school context.
-/// No credentials stored — uses API key from Keychain.
 final class CultureAPIClient: Sendable {
     private let baseURL: URL
     private let apiKey: String
     private let session: URLSession
 
-    init(baseURL: URL = URL(string: "https://celyn.io/api")!, apiKey: String) {
+    private static let defaultAPIKey = "ck_caccfd12fb2d4dd99551769a0ab33196"
+
+    init(baseURL: URL = URL(string: "https://celyn.io/api")!, apiKey: String = CultureAPIClient.defaultAPIKey) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.session = URLSession(configuration: .ephemeral)
@@ -21,6 +22,7 @@ final class CultureAPIClient: Sendable {
         types: [String] = ["event", "podcast", "oeuvre"],
         ageMin: Int? = nil,
         ageMax: Int? = nil,
+        geo: (lat: Double, lng: Double)? = nil,
         limit: Int = 10
     ) async throws -> [CultureSearchResult] {
         var params = [
@@ -30,6 +32,10 @@ final class CultureAPIClient: Sendable {
         ]
         if let ageMin { params.append(URLQueryItem(name: "age_min", value: "\(ageMin)")) }
         if let ageMax { params.append(URLQueryItem(name: "age_max", value: "\(ageMax)")) }
+        if let geo {
+            params.append(URLQueryItem(name: "lat", value: "\(geo.lat)"))
+            params.append(URLQueryItem(name: "lng", value: "\(geo.lng)"))
+        }
 
         let data = try await get("/search/thematic", params: params)
 
@@ -177,7 +183,11 @@ final class CultureAPIClient: Sendable {
     // MARK: - Parsing
 
     private func parseSearchResult(_ json: [String: Any]) -> CultureSearchResult? {
-        guard let id = json["id"] as? Int else { return nil }
+        // id can be a UUID string or an Int depending on the result type
+        let id: String
+        if let strId = json["id"] as? String { id = strId }
+        else if let intId = json["id"] as? Int { id = String(intId) }
+        else { return nil }
         return CultureSearchResult(
             id: id,
             type: json["type"] as? String ?? "event",
@@ -187,15 +197,32 @@ final class CultureAPIClient: Sendable {
             topics: json["topics"] as? [String] ?? [],
             imageURL: json["image_url"] as? String ?? json["imageUrl"] as? String,
             ageMin: json["age_min"] as? Int,
-            ageMax: json["age_max"] as? Int
+            ageMax: json["age_max"] as? Int,
+            venueName: json["venue_name"] as? String,
+            venueCity: json["venue_city"] as? String,
+            startTime: json["start_time"] as? String,
+            endTime: json["end_time"] as? String,
+            category: json["category"] as? String,
+            oeuvreTitle: json["oeuvre_title"] as? String,
+            episodeTitle: json["episode_title"] as? String,
+            showName: json["show_name"] as? String,
+            station: json["station"] as? String,
+            audioURL: json["audio_url"] as? String,
+            publishedAt: json["published_at"] as? String,
+            opinionSummary: json["opinion_summary"] as? String,
+            oeuvreType: json["oeuvre_type"] as? String,
+            director: json["director"] as? String,
+            author: json["author"] as? String,
+            year: json["year"] as? Int,
+            genres: json["genres"] as? [String] ?? []
         )
     }
 }
 
 // MARK: - Types
 
-struct CultureSearchResult: Sendable {
-    let id: Int
+struct CultureSearchResult: Sendable, Identifiable {
+    let id: String
     let type: String
     let title: String
     let description: String?
@@ -204,6 +231,29 @@ struct CultureSearchResult: Sendable {
     let imageURL: String?
     let ageMin: Int?
     let ageMax: Int?
+
+    // Event-specific
+    let venueName: String?
+    let venueCity: String?
+    let startTime: String?
+    let endTime: String?
+    let category: String?
+    let oeuvreTitle: String?
+
+    // Podcast-specific
+    let episodeTitle: String?
+    let showName: String?
+    let station: String?
+    let audioURL: String?
+    let publishedAt: String?
+    let opinionSummary: String?
+
+    // Oeuvre-specific
+    let oeuvreType: String?
+    let director: String?
+    let author: String?
+    let year: Int?
+    let genres: [String]
 }
 
 struct BatchQuery {

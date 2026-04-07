@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+import OSLog
+
+private let logger = Logger(subsystem: "com.pmf.noto", category: "Discover")
 
 struct DiscoverView: View {
     let selectedChild: Child?
@@ -8,7 +11,32 @@ struct DiscoverView: View {
     @State private var recos: [CultureSearchResult] = []
     @State private var isLoading = false
     @State private var hasLoaded = false
-    @State private var showAPIKeySetup = false
+    @State private var selectedReco: CultureSearchResult? = nil
+    @StateObject private var locationService = LocationService()
+
+    /// Maps Pronote subject codes (uppercase, with suffixes) to clean cultural search terms.
+    private static func normalizeSubject(_ raw: String) -> String {
+        let s = raw.lowercased()
+        if s.contains("math") { return "mathématiques" }
+        if s.contains("phys") { return "physique chimie" }
+        if s.contains("svt") || s.contains("biolog") { return "sciences naturelles" }
+        if s.contains("hist") || s.contains("geo") { return "histoire géographie" }
+        if s.contains("français") || s.contains("franc") || s.contains("litt") { return "littérature" }
+        if s.contains("anglais") { return "anglais" }
+        if s.contains("espagnol") { return "espagnol" }
+        if s.contains("allemand") { return "allemand" }
+        if s.contains("philosophi") { return "philosophie" }
+        if s.contains("music") { return "musique" }
+        if s.contains("art") { return "arts" }
+        if s.contains("sport") || s.contains("eps") { return "sport" }
+        if s.contains("info") || s.contains("nsi") { return "informatique" }
+        if s.contains("eco") || s.contains("ses") { return "économie société" }
+        // Fallback: lowercase, strip suffixes like "LVA-SI", "LV1", "LV2"
+        return raw
+            .replacingOccurrences(of: #"\s*LV[A-Z0-9-]*"#, with: "", options: .regularExpression)
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces)
+    }
 
     private var children: [Child] {
         if let child = selectedChild { return [child] }
@@ -21,27 +49,15 @@ struct DiscoverView: View {
                 if isLoading {
                     ProgressView("Chargement des recommandations…")
                 } else if recos.isEmpty && hasLoaded {
-                    if !hasAPIKey {
-                        ContentUnavailableView {
-                            Label("Configurer Découvrir", systemImage: "key.fill")
-                        } description: {
-                            Text("Entrez votre clé API culture pour accéder aux recommandations.")
-                        } actions: {
-                            Button("Configurer") {
-                                showAPIKeySetup = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                    } else {
-                        ContentUnavailableView(
-                            "Pas de recommandations",
-                            systemImage: "safari",
-                            description: Text("Les recommandations culturelles apparaîtront quand des données scolaires sont disponibles.")
-                        )
-                    }
+                    ContentUnavailableView(
+                        "Pas de recommandations",
+                        systemImage: "safari",
+                        description: Text("Les recommandations culturelles apparaîtront quand des données scolaires sont disponibles.")
+                    )
                 } else if !recos.isEmpty {
-                    List(recos, id: \.id) { reco in
+                    List(recos) { reco in
                         RecoRow(reco: reco)
+                            .onTapGesture { selectedReco = reco }
                     }
                     .listStyle(.plain)
                 } else {
@@ -55,52 +71,42 @@ struct DiscoverView: View {
             .navigationTitle("Découvrir")
             .navigationBarTitleDisplayMode(.large)
             .task(id: selectedChild?.id) {
+                locationService.requestOnce()
                 await loadRecos()
+            }
+            .onChange(of: children.count) { _, count in
+                guard count > 0, recos.isEmpty, !isLoading else { return }
+                Task { await loadRecos() }
             }
             .refreshable {
                 await loadRecos()
             }
-            .sheet(isPresented: $showAPIKeySetup) {
-                APIKeySetupSheet {
-                    await loadRecos()
-                }
+            .sheet(item: $selectedReco) { reco in
+                RecoDetailView(reco: reco)
             }
         }
     }
 
-    private var hasAPIKey: Bool {
-        guard let data = try? KeychainService.load(key: "culture_api_key"),
-              let key = String(data: data, encoding: .utf8),
-              !key.isEmpty else { return false }
-        return true
-    }
-
     private func loadRecos() async {
-        // Check if we have an API key
-        guard let keyData = try? KeychainService.load(key: "culture_api_key"),
-              let apiKey = String(data: keyData, encoding: .utf8) else {
-            hasLoaded = true
-            return
-        }
-
         isLoading = true
-        let client = CultureAPIClient(apiKey: apiKey)
+        let client = CultureAPIClient()
         let curriculumService = CurriculumService()
         await curriculumService.load()
         let matcher = CurriculumMatcher(curriculumService: curriculumService)
 
         // Build query from children's school context
+        logger.info("loadRecos: children=\(children.count)")
         var allTopics: [String] = []
         for child in children {
+            logger.info("child \(child.firstName): grades=\(child.grades.count) schedule=\(child.schedule.count)")
             let chapters = child.schedule.compactMap { entry -> ChapterContext? in
                 guard let chapter = entry.chapter else { return nil }
                 return ChapterContext(subject: entry.subject, text: chapter)
             }
-            // Also use subjects as topics
-            let subjects = Set(child.grades.map(\.subject))
-            for subject in subjects {
-                allTopics.append(subject)
-            }
+            // Normalize Pronote subject codes to cultural search terms
+            let subjects = Set(child.grades.map { Self.normalizeSubject($0.subject) })
+            logger.info("subjects: \(subjects.joined(separator: ", "))")
+            allTopics.append(contentsOf: subjects)
 
             let query = matcher.buildCultureQuery(
                 level: child.grade,
@@ -112,87 +118,30 @@ struct DiscoverView: View {
             allTopics.append(contentsOf: query.topics)
         }
 
-        let uniqueTopics = Array(Set(allTopics)).prefix(5)
+        let uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).prefix(5)
+        logger.info("uniqueTopics: \(uniqueTopics.joined(separator: ", "))")
         guard !uniqueTopics.isEmpty else {
             isLoading = false
             hasLoaded = true
             return
         }
 
+        let geo = locationService.location.map {
+            (lat: $0.coordinate.latitude, lng: $0.coordinate.longitude)
+        }
         do {
             recos = try await client.searchThematic(
                 query: uniqueTopics.joined(separator: " "),
+                geo: geo,
                 limit: 10
             )
         } catch {
-            NSLog("[noto] Culture API error: \(error)")
+            logger.error("Culture API error: \(error)")
         }
+        logger.info("recos count: \(recos.count)")
 
         isLoading = false
         hasLoaded = true
-    }
-}
-
-// MARK: - API Key Setup Sheet
-
-struct APIKeySetupSheet: View {
-    let onSave: () async -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var apiKey: String = ""
-    @State private var isSaving = false
-    @State private var errorMessage: String?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    SecureField("Clé Bearer culture-api", text: $apiKey)
-                        .textContentType(.password)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("Clé API culture")
-                } footer: {
-                    Text("La clé est stockée de façon sécurisée sur l'appareil et n'est jamais transmise à un serveur tiers.")
-                }
-
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                            .font(NotoTheme.Typography.caption)
-                    }
-                }
-            }
-            .navigationTitle("Configurer Découvrir")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Sauvegarder") {
-                        Task { await save() }
-                    }
-                    .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
-                }
-            }
-        }
-    }
-
-    private func save() async {
-        let trimmed = apiKey.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        isSaving = true
-        do {
-            guard let data = trimmed.data(using: .utf8) else { throw KeychainError.saveFailed(0) }
-            try KeychainService.save(key: "culture_api_key", data: data)
-            dismiss()
-            await onSave()
-        } catch {
-            errorMessage = "Erreur lors de la sauvegarde: \(error.localizedDescription)"
-        }
-        isSaving = false
     }
 }
 

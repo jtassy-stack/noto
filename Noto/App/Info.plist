@@ -24,5 +24,7 @@
     </array>
     <key>NSFaceIDUsageDescription</key>
     <string>Authentification sécurisée pour accéder aux données scolaires.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Pour afficher les événements culturels proches de vous.</string>
 </dict>
 </plist>
