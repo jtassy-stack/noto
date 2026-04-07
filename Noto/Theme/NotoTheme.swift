@@ -3,37 +3,35 @@ import SwiftUI
 enum NotoTheme {
     // MARK: - Colors
     enum Colors {
-        static let brand = Color(hex: 0x4CAF50)        // 1-Up green accent
+        static let brand = Color(red: 0.31, green: 0.44, blue: 0.95)   // indigo/blue accent
         static let surface = Color(.systemBackground)
+        static let card = Color(.systemBackground)
         static let surfaceSecondary = Color(.secondarySystemBackground)
         static let textPrimary = Color(.label)
         static let textSecondary = Color(.secondaryLabel)
-        static let danger = Color(hex: 0xE53935)
-        static let warning = Color(hex: 0xFFA726)
-        static let success = Color(hex: 0x43A047)
+        static let danger = Color(red: 0.90, green: 0.22, blue: 0.21)
+        static let warning = Color(red: 1.00, green: 0.60, blue: 0.10)
+        static let success = Color(red: 0.20, green: 0.70, blue: 0.40)
 
         // Semantic
-        static let pronote = Color(hex: 0x2E7D32)   // vert Pronote
-        static let ent = Color(hex: 0x1565C0)        // bleu ENT
+        static let pronote = Color(red: 0.55, green: 0.27, blue: 0.90) // purple Pronote
+        static let ent = Color(red: 0.08, green: 0.40, blue: 0.75)     // bleu ENT
     }
 
     // MARK: - Typography
     enum Typography {
-        static let displayFont = "Inter"
-        static let monoFont = "SpaceMono-Regular"
-
         static func display(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            .custom(displayFont, size: size).weight(weight)
+            .system(size: size, weight: weight, design: .default)
         }
 
-        static func mono(_ size: CGFloat) -> Font {
-            .custom(monoFont, size: size)
+        static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+            .system(size: size, weight: weight, design: .monospaced)
         }
 
         static let largeTitle = display(28, weight: .bold)
         static let title = display(22, weight: .semibold)
         static let headline = display(17, weight: .semibold)
-        static let body = display(15)
+        static let body = display(15, weight: .regular)
         static let caption = display(13, weight: .medium)
         static let data = mono(15)
     }

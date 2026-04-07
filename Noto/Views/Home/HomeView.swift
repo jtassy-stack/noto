@@ -38,9 +38,11 @@ struct HomeView: View {
                                 card: card,
                                 showChildName: isFamilyMode
                             )
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
                 }
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: engine.cards)
                 .padding(NotoTheme.Spacing.md)
             }
             .navigationTitle(selectedChild?.firstName ?? "nōto.")
