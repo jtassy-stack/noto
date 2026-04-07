@@ -3,14 +3,14 @@ import SwiftUI
 enum NotoTheme {
     // MARK: - Colors
     enum Colors {
-        static let brand = Color("Brand")           // 1-Up green accent
-        static let surface = Color("Surface")
-        static let surfaceSecondary = Color("SurfaceSecondary")
-        static let textPrimary = Color("TextPrimary")
-        static let textSecondary = Color("TextSecondary")
-        static let danger = Color("Danger")
-        static let warning = Color("Warning")
-        static let success = Color("Success")
+        static let brand = Color(hex: 0x4CAF50)        // 1-Up green accent
+        static let surface = Color(.systemBackground)
+        static let surfaceSecondary = Color(.secondarySystemBackground)
+        static let textPrimary = Color(.label)
+        static let textSecondary = Color(.secondaryLabel)
+        static let danger = Color(hex: 0xE53935)
+        static let warning = Color(hex: 0xFFA726)
+        static let success = Color(hex: 0x43A047)
 
         // Semantic
         static let pronote = Color(hex: 0x2E7D32)   // vert Pronote

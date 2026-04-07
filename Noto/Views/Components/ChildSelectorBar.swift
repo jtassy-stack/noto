@@ -3,6 +3,7 @@ import SwiftUI
 struct ChildSelectorBar: View {
     let children: [Child]
     @Binding var selectedChild: Child?
+    var onAddChild: (() -> Void)?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -20,6 +21,18 @@ struct ChildSelectorBar: View {
                         isSelected: selectedChild?.id == child.id,
                         action: { selectedChild = child }
                     )
+                }
+
+                // Add child button
+                if let onAddChild {
+                    Button(action: onAddChild) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .frame(width: 32, height: 32)
+                            .overlay(Circle().stroke(NotoTheme.Colors.textSecondary.opacity(0.3)))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, NotoTheme.Spacing.md)

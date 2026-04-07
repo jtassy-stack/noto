@@ -5,6 +5,7 @@ struct MainTabView: View {
     @Query private var families: [Family]
     @State private var selectedTab: Tab = .home
     @State private var selectedChild: Child?
+    @State private var showAddChild = false
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
@@ -14,7 +15,8 @@ struct MainTabView: View {
             // Fratrie selector
             ChildSelectorBar(
                 children: children,
-                selectedChild: $selectedChild
+                selectedChild: $selectedChild,
+                onAddChild: { showAddChild = true }
             )
 
             // Tab content
@@ -44,6 +46,9 @@ struct MainTabView: View {
                     .tag(Tab.insights)
             }
             .tint(NotoTheme.Colors.brand)
+        }
+        .sheet(isPresented: $showAddChild) {
+            AddChildView()
         }
     }
 }
