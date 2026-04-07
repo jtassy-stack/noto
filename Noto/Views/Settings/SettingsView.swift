@@ -1,13 +1,17 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
     @Query private var families: [Family]
 
-    @State private var cultureAPIKeyMasked: String? = nil
-    @State private var showAPIKeySetup = false
     @State private var showClearDataConfirmation = false
+    @State private var notifAuthStatus: UNAuthorizationStatus = .notDetermined
+
+    @AppStorage("notif_homework") private var notifHomework: Bool = true
+    @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
 
     private var family: Family? { families.first }
 
@@ -16,7 +20,7 @@ struct SettingsView: View {
             List {
                 // MARK: Connexions
                 Section("Connexions") {
-                    if let children = family?.children, !children.isEmpty {
+                    if let children = family?.children, \!children.isEmpty {
                         ForEach(children) { child in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -40,27 +44,69 @@ struct SettingsView: View {
                     }
                 }
 
-                // MARK: Culture API
-                Section("Culture API") {
-                    HStack {
+                // MARK: Notifications
+                Section("Notifications") {
+                    Toggle(isOn: $notifHomework) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Clé API")
-                                .font(NotoTheme.Typography.body)
-                            if let masked = cultureAPIKeyMasked {
-                                Text("••••\(masked)")
-                                    .font(NotoTheme.Typography.caption)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                            } else {
-                                Text("Non configurée")
-                                    .font(NotoTheme.Typography.caption)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            Text("Rappel devoirs")
+                                .font(NotoTheme.Typography.headline)
+                            Text("Veille à 8h00")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    .disabled(notifAuthStatus == .denied)
+
+                    Toggle(isOn: $notifDifficulty) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Alerte difficulté détectée")
+                                .font(NotoTheme.Typography.headline)
+                            Text("Quand le ML repère une baisse")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    .disabled(notifAuthStatus == .denied)
+
+                    // Statut d'autorisation
+                    HStack {
+                        switch notifAuthStatus {
+                        case .authorized, .provisional, .ephemeral:
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(NotoTheme.Colors.success)
+                            Text("Notifications autorisées")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        case .denied:
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(NotoTheme.Colors.danger)
+                            Text("Désactivées dans Réglages iOS")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            Spacer()
+                            Button("Ouvrir Réglages") {
+                                if let url = URL(string: "app-settings:") {
+                                    openURL(url)
+                                }
                             }
+                            .font(NotoTheme.Typography.caption)
+                        case .notDetermined:
+                            Image(systemName: "questionmark.circle")
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            Text("Autorisation non demandée")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            Spacer()
+                            Button("Autoriser") {
+                                Task {
+                                    _ = await NotificationService.shared.requestAuthorization()
+                                    await refreshAuthStatus()
+                                }
+                            }
+                            .font(NotoTheme.Typography.caption)
+                        @unknown default:
+                            EmptyView()
                         }
-                        Spacer()
-                        Button("Modifier") {
-                            showAPIKeySetup = true
-                        }
-                        .font(NotoTheme.Typography.caption)
                     }
                 }
 
@@ -75,12 +121,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Réglages")
             .navigationBarTitleDisplayMode(.large)
-            .onAppear {
-                refreshCultureKeyStatus()
-            }
-            .sheet(isPresented: $showAPIKeySetup, onDismiss: refreshCultureKeyStatus) {
-                APIKeySetupSheet { }
-            }
             .confirmationDialog(
                 "Effacer toutes les données ?",
                 isPresented: $showClearDataConfirmation,
@@ -91,20 +131,20 @@ struct SettingsView: View {
             } message: {
                 Text("Toutes les données scolaires, notes et réglages seront supprimées de cet appareil. Cette action est irréversible.")
             }
+            .task {
+                await refreshAuthStatus()
+            }
         }
+    }
+
+    // MARK: - Helpers
+
+    @MainActor
+    private func refreshAuthStatus() async {
+        notifAuthStatus = await NotificationService.shared.authorizationStatus()
     }
 
     // MARK: - Actions
-
-    private func refreshCultureKeyStatus() {
-        guard let data = try? KeychainService.load(key: "culture_api_key"),
-              let key = String(data: data, encoding: .utf8),
-              !key.isEmpty else {
-            cultureAPIKeyMasked = nil
-            return
-        }
-        cultureAPIKeyMasked = String(key.suffix(4))
-    }
 
     private func disconnect(child: Child) {
         // Remove Pronote credentials from Keychain
@@ -125,7 +165,6 @@ struct SettingsView: View {
                 KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
             }
         }
-        KeychainService.delete(key: "culture_api_key")
         try? modelContext.save()
     }
 }
