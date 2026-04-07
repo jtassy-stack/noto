@@ -258,6 +258,12 @@ struct PronoteQRLoginView: View {
             // Store refresh token
             if let tokenData = try? JSONEncoder().encode(refreshToken) {
                 try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
+                // Track username list for auto-reconnect
+                var knownUsernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
+                if !knownUsernames.contains(refreshToken.username) {
+                    knownUsernames.append(refreshToken.username)
+                    UserDefaults.standard.set(knownUsernames, forKey: "pronote_known_usernames")
+                }
             }
 
             // Get children from pawnote session

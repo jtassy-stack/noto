@@ -36,6 +36,12 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: NotoTheme.Spacing.md) {
+                    // Auto-reconnect banner
+                    if pronoteService.isReconnecting {
+                        ReconnectingBanner()
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     // Greeting
                     if let name = family?.parentName {
                         GreetingHeader(parentName: name)
@@ -206,6 +212,22 @@ private struct BriefingSummaryView: View {
             .padding(NotoTheme.Spacing.md)
             .background(NotoTheme.Colors.brand.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+    }
+}
+
+private struct ReconnectingBanner: View {
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.xs) {
+            ProgressView()
+                .scaleEffect(0.8)
+            Text("Reconnexion automatique…")
+                .font(NotoTheme.Typography.caption)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, NotoTheme.Spacing.sm)
+        .background(NotoTheme.Colors.surfaceSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
     }
 }
 

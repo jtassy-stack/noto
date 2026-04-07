@@ -8,6 +8,7 @@ final class PronoteService: ObservableObject {
 
     @Published var isConnected = false
     @Published var isSyncing = false
+    @Published var isReconnecting = false
 
     private(set) var bridge: PawnoteBridge?
 
