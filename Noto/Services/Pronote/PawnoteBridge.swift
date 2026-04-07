@@ -26,6 +26,64 @@ final class PawnoteBridge {
         console.setObject(unsafeBitCast(error, to: AnyObject.self), forKeyedSubscript: "error" as NSString)
         context.setObject(console, forKeyedSubscript: "console" as NSString)
 
+        // Polyfill browser globals missing in JavaScriptCore
+        context.evaluateScript("""
+            if (typeof globalThis === 'undefined') var globalThis = this;
+            if (typeof self === 'undefined') var self = globalThis;
+            if (typeof window === 'undefined') var window = globalThis;
+            if (typeof navigator === 'undefined') var navigator = { userAgent: 'noto-ios' };
+            if (typeof setTimeout === 'undefined') {
+                var setTimeout = function(fn, ms) { fn(); return 0; };
+                var clearTimeout = function() {};
+                var setInterval = function(fn, ms) { return 0; };
+                var clearInterval = function() {};
+            }
+            if (typeof TextEncoder === 'undefined') {
+                class TextEncoder {
+                    encode(str) {
+                        const arr = [];
+                        for (let i = 0; i < str.length; i++) {
+                            let c = str.charCodeAt(i);
+                            if (c < 0x80) arr.push(c);
+                            else if (c < 0x800) { arr.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f)); }
+                            else { arr.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f)); }
+                        }
+                        return new Uint8Array(arr);
+                    }
+                }
+                globalThis.TextEncoder = TextEncoder;
+            }
+            if (typeof TextDecoder === 'undefined') {
+                class TextDecoder {
+                    decode(arr) {
+                        if (!arr) return '';
+                        const bytes = arr instanceof Uint8Array ? arr : new Uint8Array(arr);
+                        let str = '';
+                        for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+                        return str;
+                    }
+                }
+                globalThis.TextDecoder = TextDecoder;
+            }
+            if (typeof URLSearchParams === 'undefined') {
+                class URLSearchParams {
+                    constructor(init) {
+                        this._params = {};
+                        if (typeof init === 'string') {
+                            init.replace(/^\\?/, '').split('&').forEach(p => {
+                                const [k, v] = p.split('=');
+                                if (k) this._params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+                            });
+                        }
+                    }
+                    set(k, v) { this._params[k] = String(v); }
+                    get(k) { return this._params[k] ?? null; }
+                    toString() { return Object.entries(this._params).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&'); }
+                }
+                globalThis.URLSearchParams = URLSearchParams;
+            }
+        """)
+
         // Provide a fetch polyfill (pawnote needs HTTP)
         setupFetch(context)
 

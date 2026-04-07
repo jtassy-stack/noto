@@ -2,43 +2,40 @@ import Foundation
 import SwiftData
 
 /// Syncs Pronote data into SwiftData models.
-/// Runs on-device, fetches from Pronote, writes to local store.
+/// Uses PawnoteBridge (JSCore) for the Pronote protocol.
 @MainActor
 final class PronoteSyncService {
     private let modelContext: ModelContext
+    var lastSyncError: String?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
 
-    /// Full sync for a Pronote child: grades, schedule, homework.
-    /// Errors are caught per-resource so partial sync succeeds.
-    func sync(child: Child, client: PronoteClient) async throws {
-        NSLog("[noto] Starting sync for \(child.firstName)")
+    /// Full sync using PawnoteBridge (pawnote via JavaScriptCore).
+    func sync(child: Child, bridge: PawnoteBridge, childIndex: Int) async {
+        NSLog("[noto] Starting sync for \(child.firstName) (index \(childIndex))")
+        lastSyncError = nil
 
-        // Fetch all data in parallel, catch errors individually
-        async let gradesResult = fetchSafe("Grades") { try await client.fetchGrades() }
-        async let timetableResult = fetchSafe("Timetable") { try await client.fetchTimetable(from: .now) }
-        async let homeworkResult = fetchSafe("Homework") { try await client.fetchHomework(from: .now) }
-        async let messagesResult = fetchSafe("Messages") { try await client.fetchDiscussions() }
+        bridge.setActiveChild(index: childIndex)
 
-        let grades = await gradesResult
-        let lessons = await timetableResult
-        let homework = await homeworkResult
-        let discussions = await messagesResult
+        let grades = await fetchSafe("Grades") { try await bridge.fetchGrades() }
+        let today = Date.now
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: today)!
+        let twoWeeks = Calendar.current.date(byAdding: .day, value: 14, to: today)!
+        let lessons = await fetchSafe("Timetable") { try await bridge.fetchTimetable(from: today, to: nextWeek) }
+        let homework = await fetchSafe("Homework") { try await bridge.fetchHomework(from: today, to: twoWeeks) }
+        let discussions = await fetchSafe("Messages") { try await bridge.fetchDiscussions() }
 
         NSLog("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
 
-        // Clear existing data for this child (full refresh)
         clearExistingData(for: child)
-
-        // Insert new data
         syncGrades(grades, for: child)
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(discussions, for: child)
 
-        try modelContext.save()
+        try? modelContext.save()
         NSLog("[noto] Sync complete for \(child.firstName)")
     }
 
@@ -56,7 +53,6 @@ final class PronoteSyncService {
     private func syncGrades(_ pronoteGrades: [PronoteGrade], for child: Child) {
         for pg in pronoteGrades where pg.kind == .grade {
             guard let value = pg.value else { continue }
-
             let grade = Grade(
                 subject: pg.subjectName,
                 value: value,
@@ -76,7 +72,6 @@ final class PronoteSyncService {
     private func syncSchedule(_ lessons: [PronoteLesson], for child: Child) {
         for pl in lessons {
             guard let subject = pl.subject else { continue }
-
             let entry = ScheduleEntry(
                 subject: subject,
                 start: pl.startDate,
@@ -132,11 +127,8 @@ final class PronoteSyncService {
             return result
         } catch {
             NSLog("[noto] ❌ \(label) failed: \(error)")
-            // Store last error for debug display
             lastSyncError = "\(label): \(error)"
             return []
         }
     }
-
-    var lastSyncError: String?
 }

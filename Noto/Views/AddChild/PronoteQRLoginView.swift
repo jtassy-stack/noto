@@ -241,50 +241,54 @@ struct PronoteQRLoginView: View {
         errorMessage = nil
 
         let deviceUUID = getOrCreateDeviceUUID()
-        let serverURL = qrData["url"] as? String ?? ""
-
-        // Use a dummy URL for client init — the real URL is extracted inside loginWithQRCode
-        let client = PronoteClient(url: serverURL, deviceUUID: deviceUUID)
 
         do {
-            // Copy QR data to avoid Sendable issues with [String: Any]
+            // Use PawnoteBridge (pawnote via JavaScriptCore) for reliable Pronote protocol
+            let bridge = try PawnoteBridge()
+
             let qrCopy: [String: String] = [
                 "url": qrData["url"] as? String ?? "",
                 "login": qrData["login"] as? String ?? "",
                 "jeton": qrData["jeton"] as? String ?? "",
             ]
-            let refreshToken = try await client.loginWithQRCode(qrData: qrCopy, pin: pin)
+            let refreshToken = try await bridge.loginWithQRCode(
+                deviceUUID: deviceUUID, pin: pin, qrData: qrCopy
+            )
 
             // Store refresh token
             if let tokenData = try? JSONEncoder().encode(refreshToken) {
                 try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
             }
 
-            // Get children
-            let children = await client.children
+            // Get children from pawnote session
+            let pronoteChildren = bridge.getChildren()
 
             guard let family else { return }
 
-            for pc in children {
+            for (index, pc) in pronoteChildren.enumerated() {
+                let nameParts = pc.name.split(separator: " ")
+                let firstName = nameParts.count > 1
+                    ? String(nameParts.dropFirst().joined(separator: " "))
+                    : pc.name
+
                 let child = Child(
-                    firstName: pc.name.components(separatedBy: " ").first ?? pc.name,
+                    firstName: firstName,
                     level: inferLevel(from: pc.className),
                     grade: inferGrade(from: pc.className),
                     schoolType: .pronote,
-                    establishment: pc.establishment
+                    establishment: refreshToken.url
                 )
                 child.family = family
                 modelContext.insert(child)
             }
 
-            if children.isEmpty {
-                // Fallback: create child from QR login name
+            if pronoteChildren.isEmpty {
                 let child = Child(
                     firstName: refreshToken.username,
                     level: .college,
                     grade: "?",
                     schoolType: .pronote,
-                    establishment: serverURL
+                    establishment: refreshToken.url
                 )
                 child.family = family
                 modelContext.insert(child)
@@ -292,14 +296,12 @@ struct PronoteQRLoginView: View {
 
             try? modelContext.save()
 
-            // Sync school data with the authenticated session
+            // Sync school data with the authenticated bridge session
             let syncService = PronoteSyncService(modelContext: modelContext)
-            let addedChildren = family.children
-            for child in addedChildren where child.schoolType == .pronote {
-                try? await syncService.sync(child: child, client: client)
+            for (index, child) in family.children.enumerated() where child.schoolType == .pronote {
+                await syncService.sync(child: child, bridge: bridge, childIndex: index)
             }
 
-            // Show sync errors if any, otherwise dismiss
             if let syncError = syncService.lastSyncError {
                 errorMessage = "Sync: \(syncError)"
                 step = .pin
