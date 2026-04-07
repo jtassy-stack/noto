@@ -8,6 +8,7 @@ struct DiscoverView: View {
     @State private var recos: [CultureSearchResult] = []
     @State private var isLoading = false
     @State private var hasLoaded = false
+    @State private var showAPIKeySetup = false
 
     private var children: [Child] {
         if let child = selectedChild { return [child] }
@@ -20,11 +21,24 @@ struct DiscoverView: View {
                 if isLoading {
                     ProgressView("Chargement des recommandations…")
                 } else if recos.isEmpty && hasLoaded {
-                    ContentUnavailableView(
-                        "Pas de recommandations",
-                        systemImage: "safari",
-                        description: Text("Les recommandations culturelles apparaîtront quand des données scolaires sont disponibles.")
-                    )
+                    if !hasAPIKey {
+                        ContentUnavailableView {
+                            Label("Configurer Découvrir", systemImage: "key.fill")
+                        } description: {
+                            Text("Entrez votre clé API culture pour accéder aux recommandations.")
+                        } actions: {
+                            Button("Configurer") {
+                                showAPIKeySetup = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            "Pas de recommandations",
+                            systemImage: "safari",
+                            description: Text("Les recommandations culturelles apparaîtront quand des données scolaires sont disponibles.")
+                        )
+                    }
                 } else if !recos.isEmpty {
                     List(recos, id: \.id) { reco in
                         RecoRow(reco: reco)
@@ -46,7 +60,19 @@ struct DiscoverView: View {
             .refreshable {
                 await loadRecos()
             }
+            .sheet(isPresented: $showAPIKeySetup) {
+                APIKeySetupSheet {
+                    await loadRecos()
+                }
+            }
         }
+    }
+
+    private var hasAPIKey: Bool {
+        guard let data = try? KeychainService.load(key: "culture_api_key"),
+              let key = String(data: data, encoding: .utf8),
+              !key.isEmpty else { return false }
+        return true
     }
 
     private func loadRecos() async {
@@ -104,6 +130,69 @@ struct DiscoverView: View {
 
         isLoading = false
         hasLoaded = true
+    }
+}
+
+// MARK: - API Key Setup Sheet
+
+struct APIKeySetupSheet: View {
+    let onSave: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var apiKey: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("Clé Bearer culture-api", text: $apiKey)
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Clé API culture")
+                } footer: {
+                    Text("La clé est stockée de façon sécurisée sur l'appareil et n'est jamais transmise à un serveur tiers.")
+                }
+
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(NotoTheme.Typography.caption)
+                    }
+                }
+            }
+            .navigationTitle("Configurer Découvrir")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Sauvegarder") {
+                        Task { await save() }
+                    }
+                    .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        isSaving = true
+        do {
+            guard let data = trimmed.data(using: .utf8) else { throw KeychainError.saveFailed(0) }
+            try KeychainService.save(key: "culture_api_key", data: data)
+            dismiss()
+            await onSave()
+        } catch {
+            errorMessage = "Erreur lors de la sauvegarde: \(error.localizedDescription)"
+        }
+        isSaving = false
     }
 }
 

@@ -13,6 +13,7 @@ struct HomeView: View {
 
     @State private var isSyncing = false
     @State private var showNoConnectionAlert = false
+    @State private var showSettings = false
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
@@ -79,6 +80,18 @@ struct HomeView: View {
             }
             .navigationTitle(selectedChild?.firstName ?? "nōto.")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
             .refreshable {
                 await performFullRefresh()
             }
