@@ -1,0 +1,314 @@
+{
+  "version": "2025-2026",
+  "lastUpdated": "2025-09-01",
+  "programs": [
+    {
+      "level": "CP",
+      "cycle": 2,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Lecture et compréhension de l'écrit", "keywords": ["lecture", "alphabet", "syllabe", "déchiffrage", "compréhension"], "period": "Année" },
+            { "theme": "Écriture", "keywords": ["écriture", "graphisme", "copie", "dictée"], "period": "Année" },
+            { "theme": "Étude de la langue", "keywords": ["grammaire", "vocabulaire", "phrase", "nom", "verbe"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres et calculs", "keywords": ["nombres", "addition", "soustraction", "compter", "dizaine"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["mesure", "longueur", "heure", "monnaie"], "period": "Année" },
+            { "theme": "Espace et géométrie", "keywords": ["géométrie", "forme", "carré", "triangle", "symétrie"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Questionner le monde",
+          "themes": [
+            { "theme": "Le temps", "keywords": ["temps", "calendrier", "saisons", "passé", "présent"], "period": "Trimestre 1" },
+            { "theme": "L'espace", "keywords": ["espace", "plan", "quartier", "paysage", "carte"], "period": "Trimestre 2" },
+            { "theme": "Le vivant", "keywords": ["vivant", "animaux", "plantes", "croissance", "alimentation"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "CE1",
+      "cycle": 2,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Lecture et compréhension de l'écrit", "keywords": ["lecture", "récit", "conte", "compréhension", "inférence"], "period": "Année" },
+            { "theme": "Écriture et production d'écrits", "keywords": ["écriture", "rédaction", "texte", "histoire", "imagination"], "period": "Année" },
+            { "theme": "Étude de la langue", "keywords": ["grammaire", "conjugaison", "présent", "passé", "accord", "sujet"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres et calculs", "keywords": ["nombres", "addition", "soustraction", "multiplication", "centaine"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["mesure", "centimètre", "kilogramme", "litre", "heure", "minute"], "period": "Année" },
+            { "theme": "Espace et géométrie", "keywords": ["géométrie", "rectangle", "angle droit", "quadrillage", "repérage"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Questionner le monde",
+          "themes": [
+            { "theme": "La matière", "keywords": ["matière", "eau", "solide", "liquide", "gaz"], "period": "Trimestre 1" },
+            { "theme": "Le vivant", "keywords": ["vivant", "animaux", "insectes", "cycle de vie", "régime alimentaire"], "period": "Trimestre 2" },
+            { "theme": "Les objets techniques", "keywords": ["objet", "technique", "mécanisme", "engrenage", "électricité"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Enseignements artistiques",
+          "themes": [
+            { "theme": "Arts plastiques", "keywords": ["dessin", "peinture", "couleur", "collage", "sculpture", "artiste"], "period": "Année" },
+            { "theme": "Éducation musicale", "keywords": ["musique", "chant", "rythme", "instrument", "écoute musicale"], "period": "Année" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "CE2",
+      "cycle": 2,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Langage oral", "keywords": ["oral", "exposé", "débat", "récitation", "argumentation"], "period": "Année" },
+            { "theme": "Lecture et compréhension", "keywords": ["lecture", "roman", "documentaire", "poésie", "théâtre"], "period": "Année" },
+            { "theme": "Étude de la langue", "keywords": ["grammaire", "conjugaison", "imparfait", "futur", "adjectif", "complément"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres et calculs", "keywords": ["multiplication", "division", "millier", "problème", "calcul mental"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["périmètre", "durée", "euro", "conversion", "mesure"], "period": "Année" },
+            { "theme": "Espace et géométrie", "keywords": ["cercle", "polygone", "patron", "solide", "programme de construction"], "period": "Année" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "CM1",
+      "cycle": 3,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Lecture et compréhension de l'écrit", "keywords": ["roman", "récit", "nouvelle", "documentaire", "bande dessinée", "inférence"], "period": "Année" },
+            { "theme": "Écriture", "keywords": ["rédaction", "récit", "description", "dialogue", "paragraphe"], "period": "Année" },
+            { "theme": "Étude de la langue", "keywords": ["grammaire", "passé simple", "complément", "COD", "COI", "proposition"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres et calculs", "keywords": ["fraction", "décimal", "division", "proportionnalité", "multiple"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["aire", "périmètre", "volume", "conversion", "unité"], "period": "Année" },
+            { "theme": "Espace et géométrie", "keywords": ["parallèle", "perpendiculaire", "symétrie", "agrandissement", "réduction"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "Et avant la France ?", "keywords": ["préhistoire", "Gaule", "Gaulois", "Celtes", "Vercingétorix", "Rome"], "period": "Trimestre 1" },
+            { "theme": "Le temps des rois", "keywords": ["Moyen Âge", "Clovis", "Charlemagne", "croisades", "château fort", "seigneur"], "period": "Trimestre 2" },
+            { "theme": "Le temps de la Révolution et de l'Empire", "keywords": ["1789", "Révolution", "Louis XVI", "Napoléon", "République", "Déclaration des droits"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Découvrir les lieux où j'habite", "keywords": ["commune", "département", "région", "paysage urbain", "paysage rural"], "period": "Trimestre 1" },
+            { "theme": "Se loger, travailler, se cultiver", "keywords": ["habitat", "industrie", "agriculture", "tourisme", "transport"], "period": "Trimestre 2" },
+            { "theme": "Consommer en France", "keywords": ["consommation", "eau potable", "énergie", "alimentation", "circuit court"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Sciences et technologie",
+          "themes": [
+            { "theme": "Le vivant, sa diversité et ses fonctions", "keywords": ["classification", "nutrition", "respiration", "reproduction", "biodiversité"], "period": "Trimestre 1" },
+            { "theme": "La planète Terre", "keywords": ["Terre", "système solaire", "volcan", "séisme", "météo", "climat"], "period": "Trimestre 2" },
+            { "theme": "Matière, mouvement, énergie", "keywords": ["énergie", "mouvement", "vitesse", "circuit électrique", "matériaux"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "CM2",
+      "cycle": 3,
+      "subjects": [
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "L'âge industriel en France", "keywords": ["industrialisation", "usine", "ouvrier", "chemin de fer", "progrès technique", "XIX siècle"], "period": "Trimestre 1" },
+            { "theme": "La France, des guerres mondiales à l'Union européenne", "keywords": ["1914", "1918", "1939", "1945", "guerre mondiale", "Résistance", "Europe", "Union européenne"], "period": "Trimestre 2" },
+            { "theme": "La Ve République", "keywords": ["République", "De Gaulle", "constitution", "président", "démocratie", "élection"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Se déplacer", "keywords": ["transport", "mobilité", "autoroute", "TGV", "aéroport", "métro"], "period": "Trimestre 1" },
+            { "theme": "Communiquer d'un bout à l'autre du monde", "keywords": ["internet", "communication", "média", "numérique", "satellite"], "period": "Trimestre 2" },
+            { "theme": "Mieux habiter", "keywords": ["développement durable", "écoquartier", "recyclage", "environnement", "nature en ville"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "6e",
+      "cycle": 3,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Le monstre, aux limites de l'humain", "keywords": ["monstre", "Odyssée", "mythologie", "Ulysse", "Cyclope", "métamorphose"], "period": "Trimestre 1" },
+            { "theme": "Récits d'aventures", "keywords": ["aventure", "voyage", "Robinson", "île", "exploration", "naufrage"], "period": "Trimestre 2" },
+            { "theme": "Récits de création, création poétique", "keywords": ["création", "mythe", "Genèse", "cosmogonie", "poésie", "univers"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres et calculs", "keywords": ["fraction", "décimal", "pourcentage", "priorité des opérations", "divisibilité"], "period": "Année" },
+            { "theme": "Géométrie", "keywords": ["symétrie axiale", "triangle", "parallélogramme", "cercle", "médiatrice"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["aire", "volume", "durée", "conversion", "unité de mesure"], "period": "Année" },
+            { "theme": "Algorithmique et programmation", "keywords": ["Scratch", "algorithme", "boucle", "variable", "programme"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "La longue histoire de l'humanité", "keywords": ["préhistoire", "néolithique", "Mésopotamie", "écriture", "premiers États"], "period": "Trimestre 1" },
+            { "theme": "Récits fondateurs et citoyenneté dans le monde antique", "keywords": ["Athènes", "démocratie", "Rome", "République romaine", "mythologie", "Iliade"], "period": "Trimestre 2" },
+            { "theme": "L'Empire romain", "keywords": ["Empire romain", "César", "Auguste", "christianisme", "romanisation", "Pompéi"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Habiter une métropole", "keywords": ["métropole", "urbanisation", "ville", "mégapole", "banlieue"], "period": "Trimestre 1" },
+            { "theme": "Habiter un espace de faible densité", "keywords": ["campagne", "montagne", "désert", "espace rural", "contrainte naturelle"], "period": "Trimestre 2" },
+            { "theme": "Habiter les littoraux", "keywords": ["littoral", "côte", "port", "tourisme balnéaire", "pêche"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Sciences et technologie",
+          "themes": [
+            { "theme": "La Terre dans le système solaire", "keywords": ["Terre", "Lune", "Soleil", "planète", "saison", "éclipse"], "period": "Trimestre 1" },
+            { "theme": "Le vivant et son évolution", "keywords": ["cellule", "évolution", "espèce", "fossile", "adaptation", "Darwin"], "period": "Trimestre 2" },
+            { "theme": "Matière et énergie", "keywords": ["énergie", "électricité", "circuit", "signal", "mouvement"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Éducation musicale",
+          "themes": [
+            { "theme": "Musique et récit", "keywords": ["musique", "opéra", "conte musical", "Pierre et le Loup", "Prokofiev"], "period": "Trimestre 1" },
+            { "theme": "Musique et société", "keywords": ["orchestre", "jazz", "musique du monde", "tradition", "instrument"], "period": "Trimestre 2" }
+          ]
+        },
+        {
+          "name": "Arts plastiques",
+          "themes": [
+            { "theme": "La représentation", "keywords": ["dessin", "portrait", "paysage", "perspective", "couleur", "composition"], "period": "Trimestre 1" },
+            { "theme": "La matérialité", "keywords": ["sculpture", "installation", "matériau", "texture", "volume", "assemblage"], "period": "Trimestre 2" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "5e",
+      "cycle": 4,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Se chercher, se construire — Le voyage et l'aventure", "keywords": ["voyage", "aventure", "Marco Polo", "exploration", "découverte", "récit de voyage"], "period": "Trimestre 1" },
+            { "theme": "Vivre en société — Avec autrui : familles, amis, réseaux", "keywords": ["famille", "amitié", "conflit", "Molière", "comédie", "théâtre"], "period": "Trimestre 2" },
+            { "theme": "Regarder le monde — Imaginer des mondes nouveaux", "keywords": ["utopie", "science-fiction", "Jules Verne", "imaginaire", "futur"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "Chrétientés et islam (VIe-XIIIe siècle)", "keywords": ["Moyen Âge", "chrétienté", "islam", "croisade", "cathédrale", "mosquée", "Byzance"], "period": "Trimestre 1" },
+            { "theme": "Société, Église et pouvoir politique", "keywords": ["féodalité", "seigneur", "paysan", "Église", "monastère", "roi", "capétien"], "period": "Trimestre 2" },
+            { "theme": "Transformations de l'Europe (XVIe-XVIIe siècle)", "keywords": ["Renaissance", "Léonard de Vinci", "humanisme", "Réforme", "Luther", "grandes découvertes", "Christophe Colomb"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "4e",
+      "cycle": 4,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "La fiction pour interroger le réel", "keywords": ["réalisme", "naturalisme", "Zola", "Maupassant", "nouvelle", "roman"], "period": "Trimestre 1" },
+            { "theme": "Dire l'amour", "keywords": ["amour", "poésie lyrique", "sonnet", "romantisme", "Hugo", "Shakespeare", "Roméo"], "period": "Trimestre 2" },
+            { "theme": "Individu et société : confrontations de valeurs", "keywords": ["justice", "liberté", "égalité", "Les Misérables", "esclavage", "Lumières"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "Le XVIIIe siècle, expansions, Lumières et révolutions", "keywords": ["Lumières", "Voltaire", "Rousseau", "Encyclopédie", "traite négrière", "1789", "Révolution française", "Bastille", "Déclaration des droits de l'homme"], "period": "Trimestre 1" },
+            { "theme": "L'Europe et le monde au XIXe siècle", "keywords": ["industrialisation", "colonisation", "nation", "empire colonial", "ouvrier", "bourgeoisie", "suffrage universel"], "period": "Trimestre 2" },
+            { "theme": "Société, culture et politique dans la France du XIXe siècle", "keywords": ["République", "laïcité", "école", "Jules Ferry", "Dreyfus", "Commune de Paris", "impressionnisme"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "3e",
+      "cycle": 4,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "Se raconter, se représenter — autobiographie", "keywords": ["autobiographie", "journal intime", "mémoire", "identité", "Sartre", "Annie Ernaux"], "period": "Trimestre 1" },
+            { "theme": "Dénoncer les travers de la société", "keywords": ["satire", "ironie", "dystopie", "Orwell", "caricature", "engagement"], "period": "Trimestre 2" },
+            { "theme": "Agir dans la cité — Poésie engagée", "keywords": ["engagement", "résistance", "Eluard", "Aragon", "Prévert", "poésie", "guerre"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "L'Europe, un théâtre majeur des guerres totales (1914-1945)", "keywords": ["1914-1918", "tranchée", "Verdun", "génocide arménien", "1939-1945", "Shoah", "Résistance", "débarquement", "bombe atomique"], "period": "Trimestre 1" },
+            { "theme": "Le monde depuis 1945", "keywords": ["guerre froide", "décolonisation", "construction européenne", "mondialisation", "mur de Berlin", "ONU"], "period": "Trimestre 2" },
+            { "theme": "Françaises et Français dans une République repensée", "keywords": ["Ve République", "De Gaulle", "mai 68", "féminisme", "immigration", "laïcité", "droit de vote des femmes"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "2nde",
+      "cycle": 5,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "La poésie du Moyen Âge au XVIIIe siècle", "keywords": ["poésie", "sonnet", "Ronsard", "Du Bellay", "Pléiade", "baroque", "fable", "La Fontaine"], "period": "Trimestre 1" },
+            { "theme": "Le roman et le récit du XVIIIe au XXIe siècle", "keywords": ["roman", "réalisme", "Balzac", "Flaubert", "Stendhal", "récit"], "period": "Trimestre 2" },
+            { "theme": "Le théâtre du XVIIe au XXIe siècle", "keywords": ["théâtre", "tragédie", "comédie", "Racine", "Molière", "Marivaux"], "period": "Trimestre 3" },
+            { "theme": "La littérature d'idées du XVIe au XVIIIe siècle", "keywords": ["essai", "Montaigne", "Lumières", "Voltaire", "Candide", "argumentation"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "Le monde méditerranéen : empreintes de l'Antiquité et du Moyen Âge", "keywords": ["Athènes", "Rome", "Méditerranée", "chrétienté", "islam", "al-Andalus"], "period": "Trimestre 1" },
+            { "theme": "XVe-XVIe siècles : un nouveau rapport au monde", "keywords": ["Renaissance", "humanisme", "imprimerie", "Gutenberg", "grandes découvertes", "Magellan"], "period": "Trimestre 2" },
+            { "theme": "L'État à l'époque moderne", "keywords": ["monarchie absolue", "Louis XIV", "Versailles", "Ancien Régime", "parlements"], "period": "Trimestre 2" },
+            { "theme": "Dynamiques et ruptures dans les sociétés des XVIIe et XVIIIe siècles", "keywords": ["révolution scientifique", "Lumières", "esclavage", "Révolution française", "1789"], "period": "Trimestre 3" }
+          ]
+        }
+      ]
+    }
+  ]
+}
