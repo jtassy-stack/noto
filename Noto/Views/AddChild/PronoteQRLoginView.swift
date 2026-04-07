@@ -302,6 +302,9 @@ struct PronoteQRLoginView: View {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
             }
 
+            // Store bridge for pull-to-refresh
+            PronoteService.shared.setBridge(bridge)
+
             if let syncError = syncService.lastSyncError {
                 errorMessage = "Sync: \(syncError)"
                 step = .pin

@@ -426,7 +426,9 @@ final class PawnoteBridge {
 
     private func parseISO(_ string: String?) -> Date? {
         guard let string else { return nil }
-        return ISO8601DateFormatter().date(from: string)
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: string) ?? ISO8601DateFormatter().date(from: string)
     }
 }
 
