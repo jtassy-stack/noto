@@ -31,6 +31,16 @@ final class PronoteClient: Sendable {
         )
     }
 
+    /// Login with QR code data + PIN.
+    func loginWithQRCode(qrData: [String: Any], pin: String) async throws -> PronoteRefreshToken {
+        try await PronoteAuth.loginWithQRCode(
+            session: session,
+            qrData: qrData,
+            pin: pin,
+            deviceUUID: deviceUUID
+        )
+    }
+
     /// Reconnect using a stored refresh token.
     func reconnect(username: String, token: String) async throws -> PronoteRefreshToken {
         try await PronoteAuth.loginWithToken(

@@ -95,22 +95,21 @@ enum PronoteAuthTests {
         // 3. Solve it
         // 4. Verify the solution matches expected output
 
-        let key = Data(repeating: 0xAB, count: 32) // AES-256
-        let iv = Data(repeating: 0x00, count: 16)
+        let key = Data(repeating: 0xAB, count: 32)
+        let iv = Data(repeating: 0xCD, count: 16)
 
-        // Original challenge string (what server generates)
+        // Create a challenge: encrypt plaintext with Pronote's MD5-hashed AES
         let challengePlaintext = "A1B2C3D4E5F6G7H8"
-        let challengeData = challengePlaintext.data(using: .utf8)!
-        let encryptedChallenge = try! PronoteCrypto.aesEncrypt(data: challengeData, key: key, iv: iv)
+        let challengeHex = try! PronoteCrypto.pronoteEncrypt(data: Data(challengePlaintext.utf8), key: key, iv: iv)
 
-        // Solve: decrypt → keep even indices → re-encrypt
-        let solved = try! PronoteCrypto.solveChallenge(encrypted: encryptedChallenge, key: key, iv: iv)
+        // Solve: pronoteDecrypt → keep even indices → pronoteEncrypt
+        let solvedHex = try! PronoteCrypto.solveChallenge(challengeHex: challengeHex, key: key, iv: iv)
 
         // Verify by decrypting the solution
-        let solvedDecrypted = try! PronoteCrypto.aesDecrypt(data: solved, key: key, iv: iv)
+        let solvedDecrypted = try! PronoteCrypto.pronoteDecrypt(hex: solvedHex, key: key, iv: iv)
         let solvedString = String(data: solvedDecrypted, encoding: .utf8)!
 
-        // Even indices of "A1B2C3D4E5F6G7H8" → "ABCDEFGH" (indices 0,2,4,6,8,10,12,14)
+        // Even indices of "A1B2C3D4E5F6G7H8" → "ABCDEFGH"
         assert(solvedString == "ABCDEFGH", "Challenge resolution failed: got '\(solvedString)', expected 'ABCDEFGH'")
 
         print("  ✓ Challenge resolution")

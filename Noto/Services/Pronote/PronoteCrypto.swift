@@ -54,6 +54,37 @@ enum PronoteCrypto {
         return buffer.prefix(bytesWritten)
     }
 
+    // MARK: - Pronote AES (MD5-hashed key and IV)
+    // Pronote's custom AES: key=MD5(rawKey), iv=MD5(rawIV) or zeros if empty
+
+    static func pronoteEncrypt(data: Data, key: Data, iv: Data) throws -> String {
+        let hashedKey = md5(key)
+        let hashedIV = iv.isEmpty ? Data(count: 16) : md5(iv)
+        let encrypted = try aesEncrypt(data: data, key: hashedKey, iv: hashedIV)
+        return encrypted.hexString
+    }
+
+    static func pronoteDecrypt(hex: String, key: Data, iv: Data) throws -> Data {
+        guard let cipherData = Data(hexString: hex) else {
+            throw PronoteError.encryptionFailed("Invalid hex for decryption")
+        }
+        let hashedKey = md5(key)
+        let hashedIV = iv.isEmpty ? Data(count: 16) : md5(iv)
+        return try aesDecrypt(data: cipherData, key: hashedKey, iv: hashedIV)
+    }
+
+    // MARK: - MD5
+
+    static func md5(_ data: Data) -> Data {
+        var hash = Data(count: Int(CC_MD5_DIGEST_LENGTH))
+        data.withUnsafeBytes { dataPtr in
+            hash.withUnsafeMutableBytes { hashPtr in
+                _ = CC_MD5(dataPtr.baseAddress, CC_LONG(data.count), hashPtr.baseAddress?.assumingMemoryBound(to: UInt8.self))
+            }
+        }
+        return hash
+    }
+
     // MARK: - SHA-256
 
     static func sha256(_ string: String) -> String {
@@ -83,28 +114,26 @@ enum PronoteCrypto {
     }
 
     /// Solve the Pronote authentication challenge.
-    /// 1. Decrypt challenge with derived key
-    /// 2. Keep every other character (indices 0, 2, 4, ...)
-    /// 3. Re-encrypt with same key/IV
-    static func solveChallenge(encrypted: Data, key: Data, iv: Data) throws -> Data {
-        // Decrypt
-        let decrypted = try aesDecrypt(data: encrypted, key: key, iv: iv)
+    /// Uses Pronote's MD5-hashed AES: decrypt challenge hex → keep even chars → re-encrypt
+    static func solveChallenge(challengeHex: String, key: Data, iv: Data) throws -> String {
+        // Decrypt (pronoteDecrypt handles MD5 hashing of key/iv)
+        let decryptedBytes = try pronoteDecrypt(hex: challengeHex, key: key, iv: iv)
 
-        guard let decryptedString = String(data: decrypted, encoding: .utf8) else {
+        // node-forge decodeUtf8 on the raw bytes
+        guard let decryptedString = String(data: decryptedBytes, encoding: .utf8) else {
             throw PronoteError.encryptionFailed("Challenge decryption produced invalid UTF-8")
         }
 
         // Keep every other character (even indices: 0, 2, 4, ...)
-        let filtered = String(decryptedString.enumerated()
-            .filter { $0.offset.isMultiple(of: 2) }
-            .map(\.element))
-
-        // Re-encrypt
-        guard let filteredData = filtered.data(using: .utf8) else {
-            throw PronoteError.encryptionFailed("Challenge filter produced invalid UTF-8")
+        var filtered: [Character] = []
+        for (index, char) in decryptedString.enumerated() where index.isMultiple(of: 2) {
+            filtered.append(char)
         }
+        let filteredString = String(filtered)
 
-        return try aesEncrypt(data: filteredData, key: key, iv: iv)
+        // Re-encrypt (pronoteEncrypt handles MD5 hashing)
+        let filteredData = Data(filteredString.utf8)
+        return try pronoteEncrypt(data: filteredData, key: key, iv: iv)
     }
 
     /// Parse session key from comma-separated ASCII decimal codes.

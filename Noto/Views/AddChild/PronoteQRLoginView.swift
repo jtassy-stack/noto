@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import AVFoundation
 import PhotosUI
-import Vision
+import CoreImage
 
 /// Pronote QR Code login flow:
 /// 1. Scan QR from Pronote app (contains JSON with server URL + token)
@@ -117,12 +117,19 @@ struct PronoteQRLoginView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, NotoTheme.Spacing.xl)
 
-            // PIN dots display
+            // PIN digit display
             HStack(spacing: NotoTheme.Spacing.md) {
                 ForEach(0..<4, id: \.self) { index in
-                    Circle()
-                        .fill(index < pin.count ? NotoTheme.Colors.pronote : NotoTheme.Colors.textSecondary.opacity(0.3))
-                        .frame(width: 16, height: 16)
+                    let digit = index < pin.count ? String(pin[pin.index(pin.startIndex, offsetBy: index)]) : ""
+                    Text(digit)
+                        .font(NotoTheme.Typography.data)
+                        .frame(width: 48, height: 56)
+                        .background(NotoTheme.Colors.surfaceSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: NotoTheme.Radius.sm)
+                                .stroke(index == pin.count ? NotoTheme.Colors.pronote : Color.clear, lineWidth: 2)
+                        )
                 }
             }
             .padding(.vertical, NotoTheme.Spacing.md)
@@ -134,12 +141,9 @@ struct PronoteQRLoginView: View {
                 .opacity(0.01)
                 .focused($pinFieldFocused)
                 .onChange(of: pin) { _, newValue in
-                    // Limit to 4 digits
-                    if newValue.count > 4 {
-                        pin = String(newValue.prefix(4))
-                    }
-                    // Auto-submit on 4 digits
-                    if newValue.count == 4 {
+                    let filtered = String(newValue.filter(\.isNumber).prefix(4))
+                    if filtered != newValue { pin = filtered }
+                    if filtered.count == 4 {
                         Task { await authenticate() }
                     }
                 }
@@ -185,45 +189,46 @@ struct PronoteQRLoginView: View {
         guard let item else { return }
         errorMessage = nil
 
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let uiImage = UIImage(data: data),
-              let cgImage = uiImage.cgImage else {
-            errorMessage = "Impossible de charger l'image."
+        // Load image data from PhotosPicker
+        let cgImage: CGImage
+        do {
+            guard let data = try await item.loadTransferable(type: PhotoQRImage.self) else {
+                errorMessage = "Impossible de charger l'image."
+                return
+            }
+            cgImage = data.cgImage
+        } catch {
+            errorMessage = "Erreur de chargement : \(error.localizedDescription)"
             return
         }
 
-        // Use Vision framework to detect QR codes
-        let request = VNDetectBarcodesRequest()
-        request.symbologies = [.qr]
-
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-
-        do {
-            try handler.perform([request])
-
-            guard let results = request.results, !results.isEmpty else {
-                errorMessage = "Aucun QR code trouvé dans cette image. Assurez-vous que le QR code Pronote est bien visible."
-                return
-            }
-
-            // Take the first QR code found
-            guard let payload = results.first?.payloadStringValue else {
-                errorMessage = "QR code illisible."
-                return
-            }
-
-            // Parse JSON from QR payload
-            guard let jsonData = payload.data(using: .utf8),
-                  let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-                errorMessage = "QR code invalide. Utilisez le QR code généré par l'app Pronote."
-                return
-            }
-
-            qrData = parsed
-            step = .pin
-        } catch {
-            errorMessage = "Erreur de lecture du QR code."
+        // Use CIDetector (works on simulator, no Neural Engine needed)
+        let ciImage = CIImage(cgImage: cgImage)
+        guard let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]) else {
+            errorMessage = "Impossible d'initialiser le détecteur QR."
+            return
         }
+
+        let features = detector.features(in: ciImage)
+        let qrFeatures = features.compactMap { $0 as? CIQRCodeFeature }
+
+        guard let payload = qrFeatures.first?.messageString else {
+            errorMessage = "Aucun QR code trouvé dans cette image. Assurez-vous que le QR code Pronote est bien visible."
+            return
+        }
+
+        print("[noto] QR payload: \(payload)")
+
+        // Parse JSON from QR payload
+        guard let jsonData = payload.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            errorMessage = "QR code détecté mais format inattendu. Contenu : \(String(payload.prefix(100)))"
+            return
+        }
+
+        qrData = parsed
+        errorMessage = nil
+        step = .pin
     }
 
     // MARK: - Auth
@@ -236,24 +241,23 @@ struct PronoteQRLoginView: View {
         errorMessage = nil
 
         let deviceUUID = getOrCreateDeviceUUID()
-
-        // Extract URL from QR data
         let serverURL = qrData["url"] as? String ?? ""
+
+        // Use a dummy URL for client init — the real URL is extracted inside loginWithQRCode
         let client = PronoteClient(url: serverURL, deviceUUID: deviceUUID)
 
         do {
-            // QR login uses the token from QR + PIN as password
-            let qrToken = qrData["jeton"] as? String ?? ""
-            let qrLogin = qrData["login"] as? String ?? ""
-
-            let refreshToken = try await client.login(
-                username: qrLogin,
-                password: pin + qrToken  // PIN prepended to QR token
-            )
+            // Copy QR data to avoid Sendable issues with [String: Any]
+            let qrCopy: [String: String] = [
+                "url": qrData["url"] as? String ?? "",
+                "login": qrData["login"] as? String ?? "",
+                "jeton": qrData["jeton"] as? String ?? "",
+            ]
+            let refreshToken = try await client.loginWithQRCode(qrData: qrCopy, pin: pin)
 
             // Store refresh token
             if let tokenData = try? JSONEncoder().encode(refreshToken) {
-                try? KeychainService.save(key: "pronote_token_\(qrLogin)", data: tokenData)
+                try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
             }
 
             // Get children
@@ -276,7 +280,7 @@ struct PronoteQRLoginView: View {
             if children.isEmpty {
                 // Fallback: create child from QR login name
                 let child = Child(
-                    firstName: qrLogin,
+                    firstName: refreshToken.username,
                     level: .college,
                     grade: "?",
                     schoolType: .pronote,
@@ -289,7 +293,7 @@ struct PronoteQRLoginView: View {
             try? modelContext.save()
             dismiss()
         } catch {
-            errorMessage = "Code PIN incorrect ou QR code expiré."
+            errorMessage = "Erreur : \(error)"
             pin = ""
             step = .pin
         }
@@ -327,4 +331,38 @@ private enum QRStep {
     case scan
     case pin
     case loading
+}
+
+// MARK: - PhotosPicker Transferable
+
+// MARK: - PIN to AES Key
+
+extension Data {
+    /// Pad PIN bytes (4 bytes) to a valid AES key size (16 bytes) with zeros.
+    /// Matches node-forge createBuffer behavior.
+    func pinPaddedToAESKey() -> Data {
+        var padded = Data(count: 16)
+        let copyCount = Swift.min(self.count, 16)
+        padded.replaceSubrange(0..<copyCount, with: self.prefix(copyCount))
+        return padded
+    }
+}
+
+// MARK: - PhotosPicker Transferable
+
+struct PhotoQRImage: Transferable {
+    let cgImage: CGImage
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { data in
+            guard let uiImage = UIImage(data: data), let cg = uiImage.cgImage else {
+                throw TransferError.importFailed
+            }
+            return PhotoQRImage(cgImage: cg)
+        }
+    }
+
+    enum TransferError: Error {
+        case importFailed
+    }
 }
