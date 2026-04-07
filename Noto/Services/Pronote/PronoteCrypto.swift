@@ -174,22 +174,47 @@ enum PronoteCrypto {
         return encrypted as Data
     }
 
-    // MARK: - Compression (zlib via NSData)
+    // MARK: - Compression
 
-    static func compress(_ data: Data) throws -> Data {
+    /// Raw deflate (no zlib/gzip header) — matches pako.deflateRaw(data, {level: 6})
+    static func deflateRaw(_ data: Data) throws -> Data {
         let nsData = data as NSData
         guard let compressed = try? nsData.compressed(using: .zlib) as Data else {
             throw PronoteError.encryptionFailed("Compression failed")
         }
-        return compressed
+        // NSData.compressed uses zlib format (header+data+checksum)
+        // Strip 2-byte zlib header and 4-byte checksum for raw deflate
+        guard compressed.count > 6 else { return compressed }
+        return compressed.subdata(in: 2..<(compressed.count - 4))
     }
 
-    static func decompress(_ data: Data) throws -> Data {
-        let nsData = data as NSData
+    /// Raw inflate — inverse of deflateRaw
+    static func inflateRaw(_ data: Data) throws -> Data {
+        // Add zlib header (78 01 = default compression) and dummy checksum for NSData
+        var zlibData = Data([0x78, 0x01])
+        zlibData.append(data)
+        // Compute Adler-32 checksum
+        let checksum = adler32(data)
+        zlibData.append(UInt8((checksum >> 24) & 0xFF))
+        zlibData.append(UInt8((checksum >> 16) & 0xFF))
+        zlibData.append(UInt8((checksum >> 8) & 0xFF))
+        zlibData.append(UInt8(checksum & 0xFF))
+
+        let nsData = zlibData as NSData
         guard let decompressed = try? nsData.decompressed(using: .zlib) as Data else {
             throw PronoteError.encryptionFailed("Decompression failed")
         }
         return decompressed
+    }
+
+    private static func adler32(_ data: Data) -> UInt32 {
+        var a: UInt32 = 1
+        var b: UInt32 = 0
+        for byte in data {
+            a = (a + UInt32(byte)) % 65521
+            b = (b + a) % 65521
+        }
+        return (b << 16) | a
     }
 
     // MARK: - DER Key Builder
