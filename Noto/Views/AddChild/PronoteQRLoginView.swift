@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
+import PhotosUI
+import Vision
 
 /// Pronote QR Code login flow:
 /// 1. Scan QR from Pronote app (contains JSON with server URL + token)
@@ -16,6 +18,7 @@ struct PronoteQRLoginView: View {
     @State private var pin = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedPhoto: PhotosPickerItem?
 
     private var family: Family? { families.first }
 
@@ -55,10 +58,16 @@ struct PronoteQRLoginView: View {
 
             Spacer()
 
+            if let error = errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.danger)
+                    .padding(.horizontal, NotoTheme.Spacing.xl)
+            }
+
             VStack(spacing: NotoTheme.Spacing.md) {
                 Button {
-                    step = .scan
-                    // Open camera — use QRScannerView
+                    // TODO: Open live camera scanner (requires real device)
                 } label: {
                     Label("Scanner avec la caméra", systemImage: "camera")
                         .font(NotoTheme.Typography.headline)
@@ -68,22 +77,21 @@ struct PronoteQRLoginView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.pronote)
 
-                // For simulator testing: paste JSON
-                #if DEBUG
-                Button {
-                    // Fake QR data for testing
-                    qrData = [
-                        "url": "https://demo.index-education.net/pronote",
-                        "jeton": "test-token-123",
-                        "login": "demo-parent",
-                    ]
-                    step = .pin
-                } label: {
-                    Text("Mode démo (simulateur)")
-                        .font(NotoTheme.Typography.caption)
+                PhotosPicker(
+                    selection: $selectedPhoto,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Label("Choisir depuis la galerie", systemImage: "photo.on.rectangle")
+                        .font(NotoTheme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
                 }
-                .tint(NotoTheme.Colors.textSecondary)
-                #endif
+                .buttonStyle(.bordered)
+                .tint(NotoTheme.Colors.pronote)
+                .onChange(of: selectedPhoto) { _, newItem in
+                    Task { await processSelectedPhoto(newItem) }
+                }
             }
             .padding(.horizontal, NotoTheme.Spacing.xl)
             .padding(.bottom, NotoTheme.Spacing.xl)
@@ -168,6 +176,53 @@ struct PronoteQRLoginView: View {
                 .font(NotoTheme.Typography.body)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
             Spacer()
+        }
+    }
+
+    // MARK: - Photo QR Detection
+
+    private func processSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        errorMessage = nil
+
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let uiImage = UIImage(data: data),
+              let cgImage = uiImage.cgImage else {
+            errorMessage = "Impossible de charger l'image."
+            return
+        }
+
+        // Use Vision framework to detect QR codes
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = [.qr]
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+
+        do {
+            try handler.perform([request])
+
+            guard let results = request.results, !results.isEmpty else {
+                errorMessage = "Aucun QR code trouvé dans cette image. Assurez-vous que le QR code Pronote est bien visible."
+                return
+            }
+
+            // Take the first QR code found
+            guard let payload = results.first?.payloadStringValue else {
+                errorMessage = "QR code illisible."
+                return
+            }
+
+            // Parse JSON from QR payload
+            guard let jsonData = payload.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+                errorMessage = "QR code invalide. Utilisez le QR code généré par l'app Pronote."
+                return
+            }
+
+            qrData = parsed
+            step = .pin
+        } catch {
+            errorMessage = "Erreur de lecture du QR code."
         }
     }
 
