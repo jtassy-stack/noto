@@ -291,6 +291,14 @@ struct PronoteQRLoginView: View {
             }
 
             try? modelContext.save()
+
+            // Sync school data with the authenticated session
+            let syncService = PronoteSyncService(modelContext: modelContext)
+            let addedChildren = family.children
+            for child in addedChildren where child.schoolType == .pronote {
+                try? await syncService.sync(child: child, client: client)
+            }
+
             dismiss()
         } catch {
             errorMessage = "Erreur : \(error)"
