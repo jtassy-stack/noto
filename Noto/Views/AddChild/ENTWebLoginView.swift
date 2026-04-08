@@ -11,6 +11,7 @@ struct ENTWebLoginView: View {
 
     @State private var isLoggedIn = false
     @State private var isFetching = false
+    @State private var statusMessage = ""
     @StateObject private var webViewHolder = WebViewHolder()
 
     var body: some View {
@@ -41,9 +42,10 @@ struct ENTWebLoginView: View {
             if isFetching {
                 VStack(spacing: NotoTheme.Spacing.md) {
                     ProgressView()
-                    Text("Récupération des données…")
+                    Text(statusMessage.isEmpty ? "Récupération des données…" : statusMessage)
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(NotoTheme.Colors.shadow.opacity(0.8))
@@ -58,58 +60,46 @@ struct ENTWebLoginView: View {
             return
         }
         isFetching = true
+        statusMessage = "Récupération du profil…"
 
-        // MonLycée's psn.monlycee.net is behind an OAuth2 proxy that serves the SPA for all paths.
-        // Try multiple approaches to find user/children data:
-        // 1. Try /userbook/api/person (standard ENTCore)
-        // 2. Try extracting user info from the SPA's JS context (window.__session, etc.)
-        // 3. Scrape the greeting text ("Bonjour Julien!")
+        // Multi-step flow:
+        // 1. Fetch /user/profile, /user/services, /logbook, /news/messages
+        // 2. If Pronote found in services → navigate to Pronote SSO
+        // 3. Extract Pronote session from the loaded page
+        // Step 1: Fetch profile, services, logbook from the ENT
         webView.callAsyncJavaScript(
             """
-            // Try ENTCore API endpoints
-            async function tryFetch(url) {
+            async function tryJSON(url) {
                 try {
                     let r = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-                    let text = await r.text();
-                    if (r.ok && !text.startsWith('<!DOCTYPE')) return { url: url, status: r.status, body: text.substring(0, 3000) };
-                } catch(e) {}
-                return null;
+                    let ct = r.headers.get('content-type') || '';
+                    if (!ct.includes('json')) return null;
+                    return await r.json();
+                } catch(e) { return null; }
             }
 
             let base = location.origin;
-            let endpoints = [
-                base + '/userbook/api/person',
-                base + '/directory/user/find',
-                base + '/auth/oauth2/userinfo',
-                base + '/conversation/count/INBOX'
-            ];
+            let profile = await tryJSON(base + '/user/profile');
+            let services = await tryJSON(base + '/user/services?matchingFilterProfile=web');
+            let logbook = await tryJSON(base + '/logbook');
+            let news = await tryJSON(base + '/news/messages');
 
-            let results = {};
-            for (let ep of endpoints) {
-                let r = await tryFetch(ep);
-                if (r) results[ep] = r;
+            // Find Pronote service
+            let pronoteService = null;
+            if (Array.isArray(services)) {
+                pronoteService = services.find(s => s.title === 'pronote' || (s.link || '').includes('pronote'));
             }
 
-            // Also try to extract user data from the page's JS context
-            let sessionData = null;
-            try { sessionData = JSON.stringify(window.__session || window.__USER__ || window.user || null); } catch(e) {}
-
-            // Extract greeting text
+            // Extract greeting
             let greeting = '';
-            let greetEl = document.querySelector('.greeting, [class*=greeting], [class*=user-name], h1, h2');
-            if (greetEl) greeting = greetEl.textContent.trim();
-            // Try broader search
-            if (!greeting) {
-                let all = document.querySelectorAll('*');
-                for (let el of all) {
-                    if (el.textContent.includes('Bonjour') && el.children.length < 3) {
-                        greeting = el.textContent.trim();
-                        break;
-                    }
+            for (let el of document.querySelectorAll('*')) {
+                let t = el.textContent || '';
+                if (t.includes('Bonjour') && el.children.length < 5 && t.length < 50) {
+                    greeting = t.trim(); break;
                 }
             }
 
-            return { endpoints: results, session: sessionData, greeting: greeting, url: location.href };
+            return { profile, services, logbook, news, pronoteService, greeting };
             """,
             arguments: [:],
             in: nil,
@@ -122,63 +112,115 @@ struct ENTWebLoginView: View {
                     return
                 }
 
-                #if DEBUG
-                NSLog("[noto] MonLycée probe: \(raw)")
-                #endif
+                // Transfer cookies
+                webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                    ENTClient.importCookies(cookies)
 
-                // Check if any endpoint returned JSON
-                if let endpoints = raw["endpoints"] as? [String: Any] {
-                    for (_, epResult) in endpoints {
-                        guard let ep = epResult as? [String: Any],
-                              let body = ep["body"] as? String,
-                              let data = body.data(using: .utf8),
-                              let json = try? JSONSerialization.jsonObject(with: data) else { continue }
-
-                        // Found JSON! Transfer cookies and return
-                        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-                            ENTClient.importCookies(cookies)
-                            DispatchQueue.main.async {
-                                if let dict = json as? [String: Any] {
-                                    self.onSuccess(dict)
-                                } else if let array = json as? [[String: Any]] {
-                                    self.onSuccess(["result": array])
-                                }
-                            }
-                        }
-                        return
-                    }
-                }
-
-                // No API worked — try to create child from greeting text
-                let greeting = raw["greeting"] as? String ?? ""
-                let currentURL = raw["url"] as? String ?? ""
-                let sessionData = raw["session"] as? String
-
-                if !greeting.isEmpty {
-                    // "Bonjour Julien !" → extract name
-                    let name = greeting
-                        .replacingOccurrences(of: "Bonjour ", with: "")
-                        .replacingOccurrences(of: " !", with: "")
-                        .replacingOccurrences(of: "!", with: "")
-                        .trimmingCharacters(in: .whitespaces)
-
-                    webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-                        ENTClient.importCookies(cookies)
-                        // Return with the parent name — we'll create child manually
+                    // Check if Pronote was found
+                    if let pronoteService = raw["pronoteService"] as? [String: Any],
+                       let pronoteLink = pronoteService["link"] as? String {
+                        // Step 2: Navigate to Pronote via SSO
                         DispatchQueue.main.async {
-                            self.onSuccess(["_parentName": name, "_greeting": greeting, "_url": currentURL, "_session": sessionData ?? ""])
+                            self.statusMessage = "Connexion Pronote via SSO…"
+                            self.navigateToPronoteSSO(pronoteURL: pronoteLink, entData: raw)
                         }
-                    }
-                } else {
-                    let endpointInfo = (raw["endpoints"] as? [String: Any])?.keys.joined(separator: ", ") ?? "none"
-                    DispatchQueue.main.async {
-                        self.onError("Aucune API n'a répondu en JSON. URL: \(currentURL)\nEndpoints testés: \(endpointInfo)\nSession: \(sessionData ?? "null")")
+                    } else {
+                        // No Pronote — return ENT data only
+                        DispatchQueue.main.async {
+                            self.onSuccess(raw)
+                        }
                     }
                 }
 
             case .failure(let error):
-                DispatchQueue.main.async { self.onError("Erreur JS : \(error.localizedDescription)") }
+                DispatchQueue.main.async { self.onError("Erreur : \(error.localizedDescription)") }
             }
+        }
+    }
+
+    /// Step 2: Navigate the WKWebView to Pronote — CAS SSO will auto-authenticate
+    private func navigateToPronoteSSO(pronoteURL: String, entData: [String: Any]) {
+        guard let webView = webViewHolder.webView else {
+            onError("WebView non disponible")
+            return
+        }
+
+        // Pronote's mobile parent page — this is where we can extract session data
+        let mobileURL = pronoteURL.hasSuffix("/")
+            ? "\(pronoteURL)mobile.parent.html"
+            : "\(pronoteURL)/mobile.parent.html"
+
+        #if DEBUG
+        NSLog("[noto] Navigating to Pronote SSO: \(mobileURL)")
+        #endif
+
+        // Load Pronote — the MonLycée CAS session will auto-authenticate
+        webView.load(URLRequest(url: URL(string: mobileURL)!))
+
+        // Wait for Pronote page to load, then extract session
+        // We use a polling approach since we can't easily add another didFinish handler
+        var attempts = 0
+        func checkPronoteLoaded() {
+            attempts += 1
+            guard attempts < 20 else { // 10 seconds max
+                // Timeout — return ENT data only, Pronote SSO failed
+                DispatchQueue.main.async {
+                    self.statusMessage = "Pronote SSO timeout — données ENT uniquement"
+                    var result = entData
+                    result["_pronoteSSO"] = "timeout"
+                    self.onSuccess(result)
+                }
+                return
+            }
+
+            webView.evaluateJavaScript("document.documentElement.outerHTML.substring(0, 500)") { [self] htmlResult, _ in
+                let html = htmlResult as? String ?? ""
+                let currentURL = webView.url?.absoluteString ?? ""
+
+                #if DEBUG
+                if attempts % 5 == 0 {
+                    NSLog("[noto] Pronote SSO check #\(attempts): url=\(currentURL) html=\(String(html.prefix(100)))")
+                }
+                #endif
+
+                // Check if we landed on a Pronote page with Start() data
+                if html.contains("Start (") || html.contains("Start(") || currentURL.contains("parent.html") {
+                    // Extract the full HTML to parse Start() data
+                    webView.evaluateJavaScript("document.documentElement.outerHTML") { fullHTML, _ in
+                        guard let fullHTML = fullHTML as? String else {
+                            var result = entData
+                            result["_pronoteSSO"] = "no_html"
+                            DispatchQueue.main.async { self.onSuccess(result) }
+                            return
+                        }
+
+                        var result = entData
+                        result["_pronoteSSO"] = "success"
+                        result["_pronoteHTML"] = String(fullHTML.prefix(10000))
+                        result["_pronoteURL"] = pronoteURL
+
+                        DispatchQueue.main.async {
+                            self.statusMessage = "Pronote connecté !"
+                            self.onSuccess(result)
+                        }
+                    }
+                } else if html.contains("<!DOCTYPE") && !currentURL.contains("auth.monlycee") {
+                    // Still loading or redirecting — wait more
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        checkPronoteLoaded()
+                    }
+                } else {
+                    // Still on auth redirect — wait more
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        checkPronoteLoaded()
+                    }
+                }
+            }
+        }
+
+        // Start checking after 1 second delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            checkPronoteLoaded()
         }
     }
 }
@@ -233,6 +275,27 @@ private struct ENTWebViewWrapper: UIViewRepresentable {
             let isOnENT = url.contains(providerDomain)
             if isOnENT && !isOnKeycloak {
                 detected = true
+
+                // Inject XHR/fetch interceptor to discover what API calls the SPA makes
+                webView.evaluateJavaScript("""
+                (function() {
+                    if (window.__notoIntercepted) return;
+                    window.__notoIntercepted = true;
+                    window.__notoXHRLog = [];
+                    var origOpen = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(method, url) {
+                        window.__notoXHRLog.push(method + ' ' + url);
+                        return origOpen.apply(this, arguments);
+                    };
+                    var origFetch = window.fetch;
+                    window.fetch = function(url, opts) {
+                        var u = typeof url === 'string' ? url : (url.url || '');
+                        window.__notoXHRLog.push(((opts||{}).method||'GET') + ' ' + u);
+                        return origFetch.apply(this, arguments);
+                    };
+                })();
+                """) { _, _ in }
+
                 DispatchQueue.main.async { self.onLoginDetected() }
             }
         }

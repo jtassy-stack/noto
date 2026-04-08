@@ -103,56 +103,115 @@ struct ENTLoginView: View {
         isLoading = true
         errorMessage = nil
 
-        NSLog("[noto] Web login JSON keys: \(json.keys.sorted())")
+        #if DEBUG
+        NSLog("[noto] Web login data keys: \(json.keys.sorted())")
+        #endif
 
-        // Parse children from the JSON response
-        let results: [[String: Any]]
-        if let r = json["result"] as? [[String: Any]] {
-            results = r
-        } else {
-            // The response itself might be the result array wrapped in a dict
-            results = [json]
-        }
-
-        var seen = Set<String>()
+        // Extract children from /logbook response
         var entChildren: [ENTChildInfo] = []
-
-        for entry in results {
-            // Try relatedName/relatedId first (parent account → children)
-            if let relatedName = entry["relatedName"] as? String,
-               let relatedId = entry["relatedId"] as? String,
-               !relatedName.isEmpty, !seen.contains(relatedName) {
-                seen.insert(relatedName)
-                NSLog("[noto] Found child: \(relatedName) (id=\(relatedId))")
-                entChildren.append(ENTChildInfo(id: relatedId, displayName: relatedName, className: ""))
-            }
-        }
-
-        // Fallback: displayName (might be the user profile)
-        if entChildren.isEmpty {
-            for entry in results {
-                if let name = entry["displayName"] as? String, let id = entry["id"] as? String {
-                    NSLog("[noto] Fallback child from displayName: \(name)")
-                    entChildren.append(ENTChildInfo(id: id, displayName: name, className: ""))
+        if let logbook = json["logbook"] as? [String: Any],
+           let structures = logbook["structures"] as? [[String: Any]] {
+            for structure in structures {
+                if let individuals = structure["individuals"] as? [[String: Any]] {
+                    for individual in individuals {
+                        guard let firstName = individual["firstName"] as? String,
+                              let lastName = individual["lastName"] as? String,
+                              let id = individual["id"] as? String else { continue }
+                        let displayName = "\(lastName) \(firstName)"
+                        // Skip the parent entry (first one with no work data)
+                        let hasWork = individual["work"] != nil && !(individual["work"] is NSNull)
+                        if hasWork {
+                            entChildren.append(ENTChildInfo(id: id, displayName: displayName, className: ""))
+                        }
+                    }
                 }
             }
         }
 
-        // Fallback: parent name extracted from greeting (MonLycée proxy blocks API)
-        if entChildren.isEmpty, let parentName = json["_parentName"] as? String, !parentName.isEmpty {
-            NSLog("[noto] No API data — using greeting name: \(parentName). Creating placeholder child for manual setup.")
-            // For MonLycée, we create the parent account link — the actual child name will come from
-            // the user or from the messages/schoolbook data later
-            entChildren.append(ENTChildInfo(id: "monlycee-\(parentName)", displayName: parentName, className: ""))
+        // Fallback: profile greeting
+        if entChildren.isEmpty {
+            let greeting = json["greeting"] as? String ?? ""
+            let parentName = greeting
+                .replacingOccurrences(of: "Bonjour ", with: "")
+                .replacingOccurrences(of: " !", with: "")
+                .replacingOccurrences(of: "!", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if !parentName.isEmpty {
+                entChildren.append(ENTChildInfo(id: "monlycee-\(parentName)", displayName: parentName, className: ""))
+            }
         }
 
-        NSLog("[noto] \(provider.name) found \(entChildren.count) children after web auth")
-        if entChildren.isEmpty {
-            errorMessage = "Connexion réussie mais aucun enfant trouvé."
-        } else {
-            createChildren(entChildren)
-            dismiss()
+        // Check if Pronote SSO succeeded
+        let pronoteSSO = json["_pronoteSSO"] as? String
+        let pronoteURL = json["_pronoteURL"] as? String
+        let pronoteHTML = json["_pronoteHTML"] as? String
+        let hasPronote = pronoteSSO == "success" && pronoteHTML != nil
+
+        #if DEBUG
+        NSLog("[noto] MonLycée: \(entChildren.count) children, pronoteSSO=\(pronoteSSO ?? "nil"), pronoteURL=\(pronoteURL ?? "nil")")
+        if let html = pronoteHTML {
+            NSLog("[noto] Pronote HTML prefix: \(String(html.prefix(300)))")
         }
+        #endif
+
+        // Store logbook + news for ENT data sync
+        if let logbook = json["logbook"] {
+            if let data = try? JSONSerialization.data(withJSONObject: logbook),
+               let str = String(data: data, encoding: .utf8) {
+                UserDefaults.standard.set(str, forKey: "monlycee_logbook")
+            }
+        }
+        if let news = json["news"] {
+            if let data = try? JSONSerialization.data(withJSONObject: news),
+               let str = String(data: data, encoding: .utf8) {
+                UserDefaults.standard.set(str, forKey: "monlycee_news")
+            }
+        }
+
+        NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(hasPronote)")
+
+        guard let family, !entChildren.isEmpty else {
+            errorMessage = "Connexion réussie mais aucun enfant trouvé."
+            isLoading = false
+            return
+        }
+
+        // Create children — as Pronote type if SSO succeeded, ENT type otherwise
+        for ec in entChildren {
+            let nameParts = ec.displayName.components(separatedBy: " ")
+            let firstName = nameParts.count > 1
+                ? nameParts.drop(while: { $0 == $0.uppercased() }).first ?? nameParts.last ?? ec.displayName
+                : ec.displayName
+
+            let child = Child(
+                firstName: firstName,
+                level: .lycee,
+                grade: inferGrade(from: ""),
+                schoolType: hasPronote ? .pronote : .ent,
+                establishment: pronoteURL ?? provider.name
+            )
+            child.entChildId = ec.id
+            child.entProvider = provider
+            child.family = family
+            modelContext.insert(child)
+        }
+
+        do { try modelContext.save() }
+        catch { NSLog("[noto] Failed to save children: \(error)") }
+
+        // If Pronote SSO succeeded, store the HTML for PawnoteBridge to parse later
+        if hasPronote, let html = pronoteHTML, let url = pronoteURL {
+            UserDefaults.standard.set(html, forKey: "monlycee_pronote_html")
+            UserDefaults.standard.set(url, forKey: "monlycee_pronote_url")
+        }
+
+        // Immediately sync data from the logbook we captured
+        let syncService = MonLyceeSyncService(modelContext: modelContext)
+        for child in family.children where child.entProvider == provider {
+            syncService.syncFromStoredLogbook(for: child)
+        }
+
+        dismiss()
 
         isLoading = false
     }
