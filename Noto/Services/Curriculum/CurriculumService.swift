@@ -120,6 +120,24 @@ final class CurriculumService {
         }
     }
 
+    /// Convert app grade to celyn.io API format.
+    /// Collège: "3e" → "3eme". Lycée: "2nde", "1re" → "1ere", "Tle" → "terminale". Primaire: passed through.
+    func apiGrade(for grade: String) -> String {
+        let g = grade.lowercased().trimmingCharacters(in: .whitespaces)
+        // Already in API format
+        if g.hasSuffix("eme") || g.hasSuffix("ème") { return g.replacingOccurrences(of: "ème", with: "eme") }
+        // Short collège format: "6e" → "6eme", "3e" → "3eme"
+        if let match = g.wholeMatch(of: /(\d)e/) {
+            return "\(match.1)eme"
+        }
+        // Lycée
+        if g == "2nde" || g == "seconde" { return "2nde" }
+        if g == "1re" || g == "1ère" || g == "1ere" || g == "première" { return "1ere" }
+        if g == "tle" || g == "terminale" { return "terminale" }
+        // Primaire: CP, CE1, CE2, CM1, CM2 — already correct
+        return g
+    }
+
     /// Get all available levels.
     var levels: [String] {
         programs.map(\.level)
