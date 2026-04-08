@@ -26,5 +26,13 @@
     <string>Authentification sécurisée pour accéder aux données scolaires.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Pour afficher les événements culturels proches de vous.</string>
+    <key>UIAppFonts</key>
+    <array>
+        <string>SpaceMono-Regular.ttf</string>
+        <string>SpaceMono-Bold.ttf</string>
+        <string>InstrumentSerif-Regular.ttf</string>
+        <string>InstrumentSerif-Italic.ttf</string>
+        <string>PixelifySans-Bold.ttf</string>
+    </array>
 </dict>
 </plist>

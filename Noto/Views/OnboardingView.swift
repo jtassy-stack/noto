@@ -11,26 +11,32 @@ struct OnboardingView: View {
             VStack(spacing: NotoTheme.Spacing.xl) {
                 Spacer()
 
-                Text("nōto.")
-                    .font(.system(size: 48, weight: .bold, design: .serif))
+                NotoLogo(size: 48)
 
-                Text("Le suivi scolaire\npensé pour les parents.")
-                    .font(NotoTheme.Typography.body)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                Text("l'essentiel de la scolarité,\nen un coup d'œil.")
+                    .font(NotoTheme.Typography.serif(18))
+                    .foregroundStyle(NotoTheme.Colors.mist)
                     .multilineTextAlignment(.center)
 
                 Spacer()
 
                 VStack(spacing: NotoTheme.Spacing.md) {
                     TextField("Votre prénom", text: $parentName)
-                        .textFieldStyle(.roundedBorder)
                         .font(NotoTheme.Typography.body)
+                        .padding(NotoTheme.Spacing.md)
+                        .background(NotoTheme.Colors.card)
+                        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: NotoTheme.Radius.sm)
+                                .stroke(NotoTheme.Colors.border, lineWidth: 0.5)
+                        )
 
                     Button {
                         createFamilyAndAddChild()
                     } label: {
                         Text("Commencer")
                             .font(NotoTheme.Typography.headline)
+                            .foregroundStyle(NotoTheme.Colors.shadow)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, NotoTheme.Spacing.sm)
                     }

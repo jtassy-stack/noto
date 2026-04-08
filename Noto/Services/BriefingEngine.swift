@@ -12,20 +12,14 @@ final class BriefingEngine: ObservableObject {
     private let modelContext: ModelContext
     private let curriculumService: CurriculumService
     private let insightEngine: InsightEngine
-    private let cultureClient: CultureAPIClient?
+    private let cultureClient: CultureAPIClient
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         self.curriculumService = CurriculumService()
         self.insightEngine = InsightEngine(modelContext: modelContext)
 
-        // Load API key from Keychain
-        if let keyData = try? KeychainService.load(key: "culture_api_key"),
-           let key = String(data: keyData, encoding: .utf8) {
-            self.cultureClient = CultureAPIClient(apiKey: key)
-        } else {
-            self.cultureClient = nil
-        }
+        self.cultureClient = CultureAPIClient()
     }
 
     /// Build briefing for a specific child.
@@ -50,7 +44,7 @@ final class BriefingEngine: ObservableObject {
         )
 
         // 4. Query culture-api for recommendations
-        if !cultureQuery.topics.isEmpty, let cultureClient = cultureClient {
+        if !cultureQuery.topics.isEmpty {
             let recos = try? await cultureClient.recommendations(
                 topics: cultureQuery.topics,
                 ageMin: cultureQuery.ageRange.min,
@@ -97,57 +91,53 @@ final class BriefingEngine: ObservableObject {
         }
 
         // Batch culture-api query for all children
-        if let cultureClient {
-            let matcher = CurriculumMatcher(curriculumService: curriculumService)
-            var batchQueries: [BatchQuery] = []
-            var childNames: [String] = []
+        let matcher = CurriculumMatcher(curriculumService: curriculumService)
+        var batchQueries: [BatchQuery] = []
+        var childNames: [String] = []
 
-            for child in children {
-                let chapters = insightEngine.chapterContexts(for: child)
-                let diffs = insightEngine.difficultyContexts(for: child)
-                let q = matcher.buildCultureQuery(level: child.grade, recentChapters: chapters, difficulties: diffs)
-                guard !q.topics.isEmpty else { continue }
-                batchQueries.append(BatchQuery(
-                    topics: q.topics,
-                    ageMin: q.ageRange.min,
-                    ageMax: q.ageRange.max,
-                    context: q.context,
-                    limit: 3
-                ))
-                childNames.append(child.firstName)
-            }
+        for child in children {
+            let chapters = insightEngine.chapterContexts(for: child)
+            let diffs = insightEngine.difficultyContexts(for: child)
+            let q = matcher.buildCultureQuery(level: child.grade, recentChapters: chapters, difficulties: diffs)
+            guard !q.topics.isEmpty else { continue }
+            batchQueries.append(BatchQuery(
+                topics: q.topics,
+                ageMin: q.ageRange.min,
+                ageMax: q.ageRange.max,
+                context: q.context,
+                limit: 3
+            ))
+            childNames.append(child.firstName)
+        }
 
-            if !batchQueries.isEmpty {
-                let batchResult = try? await cultureClient.batchRecommendations(queries: batchQueries)
+        if !batchQueries.isEmpty {
+            let batchResult = try? await cultureClient.batchRecommendations(queries: batchQueries)
 
-                // Per-child recos
-                for (index, recos) in (batchResult?.perQuery ?? []).enumerated() where index < childNames.count {
-                    for reco in recos.prefix(2) {
-                        allCards.append(BriefingCard(
-                            type: .cultureReco,
-                            childName: childNames[index],
-                            title: reco.title,
-                            subtitle: reco.topics.prefix(3).joined(separator: ", "),
-                            priority: .normal,
-                            icon: reco.type == "podcast" ? "headphones" : "calendar"
-                        ))
-                    }
-                }
-
-                // Shared family recos (match multiple children)
-                for shared in batchResult?.shared ?? [] {
-                    let names = shared.matchedQueryIndices
-                        .compactMap { $0 < childNames.count ? childNames[$0] : nil }
-                        .joined(separator: " et ")
+            for (index, recos) in (batchResult?.perQuery ?? []).enumerated() where index < childNames.count {
+                for reco in recos.prefix(2) {
                     allCards.append(BriefingCard(
-                        type: .familyReco,
-                        childName: "Famille",
-                        title: shared.result.title,
-                        subtitle: "Pour \(names)",
-                        priority: .positive,
-                        icon: "figure.2.and.child.holdinghands"
+                        type: .cultureReco,
+                        childName: childNames[index],
+                        title: reco.title,
+                        subtitle: reco.topics.prefix(3).joined(separator: ", "),
+                        priority: .normal,
+                        icon: reco.type == "podcast" ? "headphones" : "calendar"
                     ))
                 }
+            }
+
+            for shared in batchResult?.shared ?? [] {
+                let names = shared.matchedQueryIndices
+                    .compactMap { $0 < childNames.count ? childNames[$0] : nil }
+                    .joined(separator: " et ")
+                allCards.append(BriefingCard(
+                    type: .familyReco,
+                    childName: "Famille",
+                    title: shared.result.title,
+                    subtitle: "Pour \(names)",
+                    priority: .positive,
+                    icon: "figure.2.and.child.holdinghands"
+                ))
             }
         }
 
@@ -241,7 +231,7 @@ final class BriefingEngine: ObservableObject {
 
 // MARK: - Briefing Card
 
-struct BriefingCard: Identifiable {
+struct BriefingCard: Identifiable, Equatable {
     let id = UUID()
     let type: BriefingCardType
     let childName: String

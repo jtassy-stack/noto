@@ -20,7 +20,7 @@ struct SettingsView: View {
             List {
                 // MARK: Connexions
                 Section("Connexions") {
-                    if let children = family?.children, \!children.isEmpty {
+                    if let children = family?.children, !children.isEmpty {
                         ForEach(children) { child in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {

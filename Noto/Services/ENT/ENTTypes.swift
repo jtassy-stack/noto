@@ -2,8 +2,49 @@ import Foundation
 
 // MARK: - ENT Provider
 
-enum ENTProvider: String, Codable, Sendable {
-    case pcn  // Paris Classe Numérique
+enum ENTProvider: String, Codable, Sendable, CaseIterable, Identifiable {
+    case pcn        // Paris Classe Numérique — élémentaire/collège Paris
+    case monlycee   // MonLycée.net — lycées Île-de-France
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .pcn: "Paris Classe Numérique"
+        case .monlycee: "MonLycée.net"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .pcn: "Élémentaire, collège — Paris"
+        case .monlycee: "Lycées — Île-de-France"
+        }
+    }
+
+    var baseURL: URL {
+        switch self {
+        case .pcn: URL(string: "https://ent.parisclassenumerique.fr")!
+        case .monlycee: URL(string: "https://psn.monlycee.net")!
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .pcn: "#E30613"
+        case .monlycee: "#1B3A6B"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .pcn: "building.columns"
+        case .monlycee: "graduationcap"
+        }
+    }
+
+    /// MonLycée uses Zimbra for email, not the Conversation REST API
+    var usesZimbraMail: Bool { self == .monlycee }
 }
 
 // MARK: - Conversation

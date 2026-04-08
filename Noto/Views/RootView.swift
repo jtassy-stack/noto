@@ -46,6 +46,7 @@ struct RootView: View {
                 MainTabView()
             }
         }
+        .preferredColorScheme(.dark)
         .task {
             // Attempt silent reconnect on every launch using stored refresh tokens.
             // Runs in background — UI is not blocked.

@@ -36,19 +36,19 @@ final class LocationService: NSObject, ObservableObject {
 extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
-        Task { @MainActor in
-            self.location = loc
-            manager.stopUpdatingLocation()
+        Task { @MainActor [weak self] in
+            self?.location = loc
+            self?.manager.stopUpdatingLocation()
             logger.info("Location acquired: \(loc.coordinate.latitude), \(loc.coordinate.longitude)")
         }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        Task { @MainActor in
-            self.authStatus = manager.authorizationStatus
-            if manager.authorizationStatus == .authorizedWhenInUse ||
-               manager.authorizationStatus == .authorizedAlways {
-                manager.startUpdatingLocation()
+        let status = manager.authorizationStatus
+        Task { @MainActor [weak self] in
+            self?.authStatus = status
+            if status == .authorizedWhenInUse || status == .authorizedAlways {
+                self?.manager.startUpdatingLocation()
             }
         }
     }

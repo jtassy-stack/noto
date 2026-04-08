@@ -17,9 +17,7 @@ struct BriefingCardView: View {
             // Content
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                 if showChildName {
-                    Text(card.childName)
-                        .font(NotoTheme.Typography.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    ChildTag(name: card.childName)
                 }
 
                 Text(card.title)
@@ -41,8 +39,7 @@ struct BriefingCardView: View {
             Spacer(minLength: 0)
         }
         .padding(NotoTheme.Spacing.md)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+        .notoCard()
     }
 
     private var iconColor: Color {

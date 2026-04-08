@@ -2,38 +2,71 @@ import SwiftUI
 
 enum NotoTheme {
     // MARK: - Colors
+    // Source: Notion — nōto. Moodboard & Design System
+    // Dark-mode-first. Retro/anime 90s aesthetic.
     enum Colors {
-        static let brand = Color(red: 0.31, green: 0.44, blue: 0.95)   // indigo/blue accent
-        static let surface = Color(.systemBackground)
-        static let card = Color(.systemBackground)
-        static let surfaceSecondary = Color(.secondarySystemBackground)
-        static let textPrimary = Color(.label)
-        static let textSecondary = Color(.secondaryLabel)
-        static let danger = Color(red: 0.90, green: 0.22, blue: 0.21)
-        static let warning = Color(red: 1.00, green: 0.60, blue: 0.10)
-        static let success = Color(red: 0.20, green: 0.70, blue: 0.40)
+        // Core palette
+        static let shadow = Color(hex: 0x0A0A08)           // fond principal (dark)
+        static let paper = Color(hex: 0xF5F3EE)            // fond clair, texte sur sombre
+        static let brand = Color(hex: 0x5BD45B)             // 1-Up green — accent principal
+
+        // Secondary
+        static let indigo = Color(hex: 0x2B2B6E)           // Super Famicom, surfaces secondaires sombres
+        static let dmg = Color(hex: 0x9BBB0F)              // Game Boy green, état vigilance
+        static let mist = Color(hex: 0xB0B0D0)             // texte secondaire sur sombre, bordures
+        static let graphite = Color(hex: 0x555555)          // texte tertiaire, éléments désactivés
 
         // Semantic
-        static let pronote = Color(red: 0.55, green: 0.27, blue: 0.90) // purple Pronote
-        static let ent = Color(red: 0.08, green: 0.40, blue: 0.75)     // bleu ENT
+        static let crimson = Color(hex: 0xDC2626)           // alertes, danger (rouge pur, JAMAIS orange)
+        static let cobalt = Color(hex: 0x2563EB)            // liens, interactif, info
+        static let amber = Color(hex: 0xD4A017)             // avertissements
+        static let forest = Color(hex: 0x0F380F)            // Game Boy easter egg
+
+        // Semantic aliases (used by existing views)
+        static let background = shadow
+        static let surface = shadow                          // cards on dark bg use slightly lighter
+        static let surfaceSecondary = indigo
+        static let card = Color(hex: 0x141414)              // card bg — slightly lifted from shadow
+        static let border = Color.white.opacity(0.1)
+        static let textPrimary = paper
+        static let textSecondary = mist
+        static let textTertiary = graphite
+        static let success = brand
+        static let warning = amber
+        static let danger = crimson
+
+        // Service colors
+        static let pronote = Color(hex: 0x8b46e6)
+        static let ent = cobalt
     }
 
     // MARK: - Typography
+    // Space Mono (body, data) + Instrument Serif (accents) + Pixelify Sans (logo)
     enum Typography {
-        static func display(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            .system(size: size, weight: weight, design: .default)
-        }
-
+        /// Space Mono — body text, data, UI (retro monospace)
         static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            .system(size: size, weight: weight, design: .monospaced)
+            .custom(weight == .bold ? "SpaceMono-Bold" : "SpaceMono-Regular", size: size)
         }
 
-        static let largeTitle = display(28, weight: .bold)
-        static let title = display(22, weight: .semibold)
-        static let headline = display(17, weight: .semibold)
-        static let body = display(15, weight: .regular)
-        static let caption = display(13, weight: .medium)
-        static let data = mono(15)
+        /// Instrument Serif — taglines, accents, elegance
+        static func serif(_ size: CGFloat, italic: Bool = true) -> Font {
+            .custom(italic ? "InstrumentSerif-Italic" : "InstrumentSerif-Regular", size: size)
+        }
+
+        /// Pixelify Sans — logo only
+        static func pixel(_ size: CGFloat) -> Font {
+            .custom("PixelifySans-Bold", size: size)
+        }
+
+        // Semantic type scale — all Space Mono
+        static let largeTitle   = mono(24, weight: .bold)
+        static let title        = mono(20, weight: .bold)
+        static let headline     = mono(16, weight: .bold)
+        static let body         = mono(14)
+        static let caption      = mono(12)
+        static let data         = mono(16, weight: .bold)       // grade numbers
+        static let dataLarge    = mono(36, weight: .bold)       // big stat cards
+        static let dataSmall    = mono(11)
     }
 
     // MARK: - Spacing
@@ -47,10 +80,11 @@ enum NotoTheme {
 
     // MARK: - Radius
     enum Radius {
-        static let sm: CGFloat = 8
-        static let md: CGFloat = 12
-        static let lg: CGFloat = 16
-        static let card: CGFloat = 16
+        static let sm: CGFloat = 6
+        static let md: CGFloat = 10
+        static let lg: CGFloat = 14
+        static let pill: CGFloat = 20
+        static let card: CGFloat = 10
     }
 }
 
@@ -65,5 +99,20 @@ extension Color {
             blue: Double(hex & 0xFF) / 255,
             opacity: alpha
         )
+    }
+}
+
+// MARK: - View Modifiers
+
+extension View {
+    /// Standard nōto card style — dark surface with subtle border
+    func notoCard() -> some View {
+        self
+            .background(NotoTheme.Colors.card)
+            .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+            .overlay(
+                RoundedRectangle(cornerRadius: NotoTheme.Radius.card)
+                    .stroke(NotoTheme.Colors.border, lineWidth: 0.5)
+            )
     }
 }

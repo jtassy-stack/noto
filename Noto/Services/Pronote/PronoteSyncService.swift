@@ -62,6 +62,16 @@ final class PronoteSyncService {
                 chapter: pg.chapter
             )
             grade.comment = pg.comment
+            // Normalize class stats to /20 like normalizedValue
+            if let ca = pg.classAverage, pg.outOf > 0 {
+                grade.classAverage = (ca / pg.outOf) * 20
+            }
+            if let mn = pg.classMin, pg.outOf > 0 {
+                grade.classMin = (mn / pg.outOf) * 20
+            }
+            if let mx = pg.classMax, pg.outOf > 0 {
+                grade.classMax = (mx / pg.outOf) * 20
+            }
             grade.child = child
             modelContext.insert(grade)
         }

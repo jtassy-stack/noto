@@ -21,6 +21,10 @@ final class ENTSyncService {
             conversationsResult, schoolbookResult, homeworkResult, timelineResult
         )
 
+        // Clear existing data before re-sync
+        for msg in child.messages { modelContext.delete(msg) }
+        for hw in child.homework { modelContext.delete(hw) }
+
         syncMessages(conversations, for: child)
         syncSchoolbook(words, for: child)
         syncHomework(homework, for: child)
@@ -54,7 +58,8 @@ final class ENTSyncService {
                 subject: word.title,
                 body: word.text,
                 date: word.date,
-                source: .ent
+                source: .ent,
+                kind: .schoolbook
             )
             msg.read = word.acknowledged
             msg.child = child

@@ -5,7 +5,7 @@ struct SchoolView: View {
     let selectedChild: Child?
 
     @Query private var families: [Family]
-    @State private var selectedSection: SchoolSection = .grades
+    @State private var selectedSection: SchoolSection?
 
     private var children: [Child] {
         if let child = selectedChild { return [child] }
@@ -13,15 +13,43 @@ struct SchoolView: View {
     }
 
     private var hasData: Bool {
-        children.contains { !$0.grades.isEmpty || !$0.schedule.isEmpty || !$0.homework.isEmpty }
+        children.contains {
+            !$0.grades.isEmpty || !$0.schedule.isEmpty || !$0.homework.isEmpty || !$0.messages.isEmpty
+        }
+    }
+
+    /// Available sections depend on child type
+    private var availableSections: [SchoolSection] {
+        if let child = selectedChild {
+            return child.schoolType == .pronote
+                ? [.grades, .schedule, .homework, .messages]
+                : [.schoolbook, .homework, .messages]  // PCN: no grades, no schedule
+        }
+        // Famille mode: union of both
+        let hasPronote = children.contains { $0.schoolType == .pronote }
+        let hasENT = children.contains { $0.schoolType == .ent }
+        var sections: [SchoolSection] = []
+        if hasPronote { sections.append(contentsOf: [.grades, .schedule]) }
+        if hasENT { sections.append(.schoolbook) }
+        sections.append(contentsOf: [.homework, .messages])
+        return sections
+    }
+
+    /// Ensure selectedSection is valid for current child
+    private var activeSection: SchoolSection {
+        if let s = selectedSection, availableSections.contains(s) { return s }
+        return availableSections.first ?? .homework
     }
 
     var body: some View {
         NavigationStack {
             if hasData {
                 VStack(spacing: 0) {
-                    Picker("Section", selection: $selectedSection) {
-                        ForEach(SchoolSection.allCases, id: \.self) { section in
+                    Picker("Section", selection: Binding(
+                        get: { activeSection },
+                        set: { selectedSection = $0 }
+                    )) {
+                        ForEach(availableSections, id: \.self) { section in
                             Text(section.title).tag(section)
                         }
                     }
@@ -29,15 +57,20 @@ struct SchoolView: View {
                     .padding(.horizontal, NotoTheme.Spacing.md)
                     .padding(.vertical, NotoTheme.Spacing.sm)
 
-                    switch selectedSection {
+                    switch activeSection {
                     case .grades:
-                        GradesListView(children: children)
+                        GradesListView(children: children.filter { $0.schoolType == .pronote })
                     case .schedule:
-                        ScheduleListView(children: children)
+                        ScheduleListView(children: children.filter { $0.schoolType == .pronote })
+                    case .schoolbook:
+                        SchoolbookListView(children: children.filter { $0.schoolType == .ent })
                     case .homework:
                         HomeworkListView(children: children)
+                    case .messages:
+                        MessagesListView(children: children)
                     }
                 }
+                .background(NotoTheme.Colors.background)
                 .navigationTitle("École")
                 .navigationBarTitleDisplayMode(.large)
             } else {
@@ -50,16 +83,22 @@ struct SchoolView: View {
                 .navigationBarTitleDisplayMode(.large)
             }
         }
+        .onChange(of: selectedChild?.id) { _, _ in
+            // Reset section when switching child
+            selectedSection = nil
+        }
     }
 }
 
 enum SchoolSection: String, CaseIterable {
-    case grades, schedule, homework
+    case grades, schedule, schoolbook, homework, messages
     var title: String {
         switch self {
         case .grades: "Notes"
         case .schedule: "EDT"
+        case .schoolbook: "Carnet"
         case .homework: "Devoirs"
+        case .messages: "Messages"
         }
     }
 }
@@ -292,8 +331,8 @@ private struct DayChip: View {
                     .font(NotoTheme.Typography.headline)
             }
             .frame(width: 48, height: 52)
-            .background(isSelected ? NotoTheme.Colors.brand : Color.clear)
-            .foregroundStyle(isSelected ? .white : NotoTheme.Colors.textSecondary)
+            .background(isSelected ? NotoTheme.Colors.brand : NotoTheme.Colors.card)
+            .foregroundStyle(isSelected ? NotoTheme.Colors.shadow : NotoTheme.Colors.textSecondary)
             .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
             .overlay(
                 RoundedRectangle(cornerRadius: NotoTheme.Radius.sm)
@@ -353,6 +392,81 @@ private struct ScheduleRow: View {
             }
             Spacer()
         }
+    }
+}
+
+// MARK: - Schoolbook List (Carnet de liaison — PCN)
+
+private struct SchoolbookListView: View {
+    let children: [Child]
+    @State private var selectedWord: Message?
+
+    private var allWords: [(child: Child, msg: Message)] {
+        children.flatMap { child in
+            child.messages
+                .filter { $0.kind == .schoolbook }
+                .map { (child: child, msg: $0) }
+        }.sorted { $0.msg.date > $1.msg.date }
+    }
+
+    var body: some View {
+        if allWords.isEmpty {
+            ContentUnavailableView(
+                "Pas de mots",
+                systemImage: "text.book.closed",
+                description: Text("Le carnet de liaison apparaîtra après synchronisation.")
+            )
+        } else {
+            List(allWords, id: \.msg.id) { item in
+                SchoolbookRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedWord = item.msg }
+            }
+            .listStyle(.plain)
+            .sheet(item: $selectedWord) { msg in
+                MessageDetailView(msg: msg)
+            }
+        }
+    }
+}
+
+private struct SchoolbookRow: View {
+    let msg: Message
+    let showChild: Bool
+    let childName: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
+            // Acknowledged indicator
+            Circle()
+                .fill(msg.read ? NotoTheme.Colors.brand : NotoTheme.Colors.amber)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                HStack {
+                    if showChild {
+                        ChildTag(name: childName)
+                    }
+                    Spacer()
+                    Text(msg.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Text(msg.sender)
+                    .font(NotoTheme.Typography.headline)
+                Text(msg.subject)
+                    .font(NotoTheme.Typography.body)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .lineLimit(2)
+                if !msg.read {
+                    Text("À signer")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.amber)
+                }
+            }
+        }
+        .padding(.vertical, NotoTheme.Spacing.xs)
     }
 }
 
@@ -473,7 +587,129 @@ private struct HomeworkDetailView: View {
     }
 }
 
+// MARK: - Messages List
+
+private struct MessagesListView: View {
+    let children: [Child]
+    @State private var selectedMessage: Message?
+
+    private var allMessages: [(child: Child, msg: Message)] {
+        children.flatMap { child in
+            child.messages.map { (child: child, msg: $0) }
+        }.sorted { $0.msg.date > $1.msg.date }
+    }
+
+    var body: some View {
+        if allMessages.isEmpty {
+            ContentUnavailableView("Pas de messages", systemImage: "envelope", description: Text("Les messages apparaîtront après synchronisation."))
+        } else {
+            List(allMessages, id: \.msg.id) { item in
+                MessageRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedMessage = item.msg }
+            }
+            .listStyle(.plain)
+            .sheet(item: $selectedMessage) { msg in
+                MessageDetailView(msg: msg)
+            }
+        }
+    }
+}
+
+private struct MessageRow: View {
+    let msg: Message
+    let showChild: Bool
+    let childName: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
+            Circle()
+                .fill(msg.read ? Color.clear : NotoTheme.Colors.brand)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                HStack {
+                    if showChild {
+                        Text(childName)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Text(msg.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Text(msg.sender)
+                    .font(NotoTheme.Typography.headline)
+                    .fontWeight(msg.read ? .regular : .semibold)
+                Text(msg.subject)
+                    .font(NotoTheme.Typography.body)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, NotoTheme.Spacing.xs)
+    }
+}
+
+private struct MessageDetailView: View {
+    let msg: Message
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.md) {
+                    Text(msg.subject)
+                        .font(NotoTheme.Typography.title)
+
+                    HStack {
+                        Label(msg.sender, systemImage: "person")
+                        Spacer()
+                        Text(msg.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "fr_FR"))))
+                    }
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+
+                    Divider()
+
+                    Text(msg.body)
+                        .font(NotoTheme.Typography.body)
+                        .textSelection(.enabled)
+                }
+                .padding(NotoTheme.Spacing.md)
+            }
+            .navigationTitle("Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fermer") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Child Tag
+
+struct ChildTag: View {
+    let name: String
+    var color: Color = NotoTheme.Colors.brand
+
+    var body: some View {
+        Text(name)
+            .font(NotoTheme.Typography.dataSmall)
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15))
+            .clipShape(Capsule())
+    }
+}
+
 // MARK: - Identifiable conformances for sheet
 
 extension Grade: Identifiable {}
 extension Homework: Identifiable {}
+extension Message: Identifiable {}

@@ -19,6 +19,7 @@ struct ChildSelectorBar: View {
                     SelectorChip(
                         label: child.firstName,
                         isSelected: selectedChild?.id == child.id,
+                        hasAlert: childHasAlert(child),
                         action: { selectedChild = child }
                     )
                 }
@@ -38,7 +39,23 @@ struct ChildSelectorBar: View {
             .padding(.horizontal, NotoTheme.Spacing.md)
             .padding(.vertical, NotoTheme.Spacing.sm)
         }
-        .background(.ultraThinMaterial)
+        .background(NotoTheme.Colors.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(NotoTheme.Colors.border)
+                .frame(height: 0.5)
+        }
+    }
+
+    private func childHasAlert(_ child: Child) -> Bool {
+        let now = Date.now
+        let in24h = now.addingTimeInterval(86_400)
+        let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
+        let urgentHomework = child.homework.contains { !$0.done && $0.dueDate <= in24h }
+        let recentLowGrade = child.grades.contains {
+            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
+        }
+        return urgentHomework || recentLowGrade
     }
 }
 
@@ -47,6 +64,7 @@ struct ChildSelectorBar: View {
 private struct SelectorChip: View {
     let label: String
     let isSelected: Bool
+    var hasAlert: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -55,13 +73,21 @@ private struct SelectorChip: View {
                 .font(NotoTheme.Typography.caption)
                 .padding(.horizontal, NotoTheme.Spacing.md)
                 .padding(.vertical, NotoTheme.Spacing.sm)
-                .background(isSelected ? NotoTheme.Colors.brand : Color.clear)
-                .foregroundStyle(isSelected ? .white : NotoTheme.Colors.textSecondary)
+                .background(isSelected ? NotoTheme.Colors.brand : NotoTheme.Colors.card)
+                .foregroundStyle(isSelected ? NotoTheme.Colors.shadow : NotoTheme.Colors.textPrimary)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? Color.clear : NotoTheme.Colors.textSecondary.opacity(0.3))
+                        .stroke(isSelected ? Color.clear : NotoTheme.Colors.border, lineWidth: 1)
                 )
+                .overlay(alignment: .topTrailing) {
+                    if hasAlert {
+                        Circle()
+                            .fill(NotoTheme.Colors.danger)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 2, y: -2)
+                    }
+                }
         }
         .buttonStyle(.plain)
     }

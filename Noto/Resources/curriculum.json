@@ -227,17 +227,48 @@
         {
           "name": "Français",
           "themes": [
-            { "theme": "Se chercher, se construire — Le voyage et l'aventure", "keywords": ["voyage", "aventure", "Marco Polo", "exploration", "découverte", "récit de voyage"], "period": "Trimestre 1" },
-            { "theme": "Vivre en société — Avec autrui : familles, amis, réseaux", "keywords": ["famille", "amitié", "conflit", "Molière", "comédie", "théâtre"], "period": "Trimestre 2" },
-            { "theme": "Regarder le monde — Imaginer des mondes nouveaux", "keywords": ["utopie", "science-fiction", "Jules Verne", "imaginaire", "futur"], "period": "Trimestre 3" }
+            { "theme": "Récit de voyage et exploration", "keywords": ["voyage", "aventure", "Marco Polo", "exploration", "découverte", "récit de voyage"], "period": "Trimestre 1" },
+            { "theme": "Comédie et société — Molière", "keywords": ["Molière", "comédie", "théâtre", "famille", "satire sociale", "farce"], "period": "Trimestre 2" },
+            { "theme": "Utopie et science-fiction — Jules Verne", "keywords": ["utopie", "science-fiction", "Jules Verne", "imaginaire", "futur", "aventure scientifique"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Nombres relatifs et calculs", "keywords": ["nombres relatifs", "entiers", "opérations", "calcul", "opposé", "valeur absolue"], "period": "Trimestre 1" },
+            { "theme": "Géométrie dans l'espace — solides", "keywords": ["solide", "patron", "prisme", "cylindre", "volume", "géométrie dans l'espace"], "period": "Trimestre 2" },
+            { "theme": "Proportionnalité et graphiques", "keywords": ["proportionnalité", "pourcentage", "graphique", "tableau de valeurs", "vitesse moyenne"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "themes": [
+            { "theme": "L'eau et ses propriétés", "keywords": ["eau", "état de la matière", "changement d'état", "fusion", "vaporisation", "pression"], "period": "Trimestre 1" },
+            { "theme": "Mélanges et solutions", "keywords": ["mélange", "solution", "soluté", "solvant", "dissolution", "filtration"], "period": "Trimestre 2" },
+            { "theme": "Signaux et information — son et lumière", "keywords": ["son", "lumière", "signal", "vibration", "onde", "spectre lumineux"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "themes": [
+            { "theme": "La biodiversité et l'évolution", "keywords": ["biodiversité", "évolution", "adaptation", "espèce", "milieu de vie", "classification"], "period": "Trimestre 1" },
+            { "theme": "Le fonctionnement du corps humain", "keywords": ["digestion", "respiration", "circulation", "muscles", "énergie", "nutrition"], "period": "Trimestre 2" },
+            { "theme": "La planète Terre — géologie", "keywords": ["Terre", "roche", "volcan", "séisme", "lithosphère", "tectonique"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Histoire",
           "themes": [
-            { "theme": "Chrétientés et islam (VIe-XIIIe siècle)", "keywords": ["Moyen Âge", "chrétienté", "islam", "croisade", "cathédrale", "mosquée", "Byzance"], "period": "Trimestre 1" },
-            { "theme": "Société, Église et pouvoir politique", "keywords": ["féodalité", "seigneur", "paysan", "Église", "monastère", "roi", "capétien"], "period": "Trimestre 2" },
-            { "theme": "Transformations de l'Europe (XVIe-XVIIe siècle)", "keywords": ["Renaissance", "Léonard de Vinci", "humanisme", "Réforme", "Luther", "grandes découvertes", "Christophe Colomb"], "period": "Trimestre 3" }
+            { "theme": "Chrétientés et islam au Moyen Âge", "keywords": ["Moyen Âge", "islam", "croisade", "cathédrale", "mosquée", "Byzance"], "period": "Trimestre 1" },
+            { "theme": "Société féodale et pouvoir politique", "keywords": ["féodalité", "seigneur", "château fort", "Église", "roi", "capétien"], "period": "Trimestre 2" },
+            { "theme": "Renaissance, humanisme et grandes découvertes", "keywords": ["Renaissance", "Léonard de Vinci", "humanisme", "Christophe Colomb", "imprimerie", "Réforme"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "themes": [
+            { "theme": "Voyages et rencontres — monde anglophone", "keywords": ["voyage", "exploration", "culture anglophone", "échange interculturel", "découverte"], "period": "Trimestre 1" },
+            { "theme": "Sciences et technologie — innovations", "keywords": ["invention", "science", "technologie", "innovation", "espace", "robots"], "period": "Trimestre 2" }
           ]
         }
       ]
@@ -249,17 +280,55 @@
         {
           "name": "Français",
           "themes": [
-            { "theme": "La fiction pour interroger le réel", "keywords": ["réalisme", "naturalisme", "Zola", "Maupassant", "nouvelle", "roman"], "period": "Trimestre 1" },
-            { "theme": "Dire l'amour", "keywords": ["amour", "poésie lyrique", "sonnet", "romantisme", "Hugo", "Shakespeare", "Roméo"], "period": "Trimestre 2" },
-            { "theme": "Individu et société : confrontations de valeurs", "keywords": ["justice", "liberté", "égalité", "Les Misérables", "esclavage", "Lumières"], "period": "Trimestre 3" }
+            { "theme": "Réalisme et naturalisme — Zola, Maupassant", "keywords": ["réalisme", "naturalisme", "Zola", "Maupassant", "roman", "société du XIXe"], "period": "Trimestre 1" },
+            { "theme": "Poésie romantique — amour et lyrisme", "keywords": ["romantisme", "Hugo", "Lamartine", "sonnet", "lyrisme", "mélancolie"], "period": "Trimestre 2" },
+            { "theme": "Littérature et justice — Les Misérables", "keywords": ["justice", "liberté", "Hugo", "Les Misérables", "esclavage", "engagement"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Calcul littéral et équations", "keywords": ["équation", "calcul littéral", "développement", "factorisation", "algèbre"], "period": "Trimestre 1" },
+            { "theme": "Géométrie — triangles et cercles", "keywords": ["triangle", "cercle", "Pythagore", "théorème", "construction géométrique"], "period": "Trimestre 2" },
+            { "theme": "Proportionnalité et statistiques", "keywords": ["proportionnalité", "pourcentage", "statistiques", "diagramme", "données"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "themes": [
+            { "theme": "Lumière et optique", "keywords": ["lumière", "optique", "réfraction", "spectre", "couleur", "laser"], "period": "Trimestre 1" },
+            { "theme": "Chimie des solutions et réactions", "keywords": ["solution", "acide", "base", "réaction chimique", "dissolution", "concentration"], "period": "Trimestre 2" },
+            { "theme": "Électricité — circuits et lois", "keywords": ["circuit électrique", "résistance", "tension", "Ohm", "courant", "énergie électrique"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "themes": [
+            { "theme": "Reproduction et évolution du vivant", "keywords": ["reproduction", "évolution", "Darwin", "sélection naturelle", "espèce", "fossile"], "period": "Trimestre 1" },
+            { "theme": "Corps humain et santé — microbiologie", "keywords": ["microbe", "virus", "bactérie", "système immunitaire", "vaccin", "infection"], "period": "Trimestre 2" },
+            { "theme": "Géologie — roches et paysages", "keywords": ["roche", "minéral", "paysage géologique", "érosion", "sédimentation", "volcanisme"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Histoire",
           "themes": [
-            { "theme": "Le XVIIIe siècle, expansions, Lumières et révolutions", "keywords": ["Lumières", "Voltaire", "Rousseau", "Encyclopédie", "traite négrière", "1789", "Révolution française", "Bastille", "Déclaration des droits de l'homme"], "period": "Trimestre 1" },
-            { "theme": "L'Europe et le monde au XIXe siècle", "keywords": ["industrialisation", "colonisation", "nation", "empire colonial", "ouvrier", "bourgeoisie", "suffrage universel"], "period": "Trimestre 2" },
-            { "theme": "Société, culture et politique dans la France du XIXe siècle", "keywords": ["République", "laïcité", "école", "Jules Ferry", "Dreyfus", "Commune de Paris", "impressionnisme"], "period": "Trimestre 3" }
+            { "theme": "Les Lumières et la Révolution française", "keywords": ["Lumières", "Voltaire", "Rousseau", "Encyclopédie", "1789", "Révolution française", "Déclaration des droits de l'homme"], "period": "Trimestre 1" },
+            { "theme": "L'Europe industrielle et coloniale au XIXe siècle", "keywords": ["industrialisation", "colonisation", "empire colonial", "ouvrier", "suffrage universel"], "period": "Trimestre 2" },
+            { "theme": "La France républicaine au XIXe siècle", "keywords": ["République", "laïcité", "Jules Ferry", "Dreyfus", "impressionnisme", "Commune de Paris"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "themes": [
+            { "theme": "Lieux et formes du pouvoir — monde anglophone", "keywords": ["démocratie", "pouvoir", "États-Unis", "Royaume-Uni", "élection", "médias"], "period": "Trimestre 1" },
+            { "theme": "Fictions et réalités — cinéma et littérature", "keywords": ["cinema", "Hollywood", "littérature anglaise", "roman", "adaptation", "fiction"], "period": "Trimestre 2" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Urbanisation et métropolisation dans le monde", "keywords": ["mégapole", "urbanisation", "New York", "Tokyo", "Mumbai", "ville mondiale"], "period": "Trimestre 1" },
+            { "theme": "Les inégalités de développement", "keywords": ["développement", "inégalités mondiales", "pauvreté", "IDH", "pays émergents"], "period": "Trimestre 2" }
           ]
         }
       ]
@@ -271,17 +340,64 @@
         {
           "name": "Français",
           "themes": [
-            { "theme": "Se raconter, se représenter — autobiographie", "keywords": ["autobiographie", "journal intime", "mémoire", "identité", "Sartre", "Annie Ernaux"], "period": "Trimestre 1" },
-            { "theme": "Dénoncer les travers de la société", "keywords": ["satire", "ironie", "dystopie", "Orwell", "caricature", "engagement"], "period": "Trimestre 2" },
-            { "theme": "Agir dans la cité — Poésie engagée", "keywords": ["engagement", "résistance", "Eluard", "Aragon", "Prévert", "poésie", "guerre"], "period": "Trimestre 3" }
+            { "theme": "Autobiographie et récit de soi", "keywords": ["autobiographie", "journal intime", "mémoire", "identité", "Annie Ernaux"], "period": "Trimestre 1" },
+            { "theme": "Littérature engagée et satire", "keywords": ["satire", "dystopie", "Orwell", "caricature", "engagement", "Prévert"], "period": "Trimestre 2" },
+            { "theme": "Poésie de la Résistance", "keywords": ["résistance", "Eluard", "Aragon", "poésie", "guerre", "liberté"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Algèbre et équations — Pythagore, Thalès", "keywords": ["équation", "algèbre", "Pythagore", "Thalès", "démonstration", "théorème"], "period": "Trimestre 1" },
+            { "theme": "Fonctions et représentations graphiques", "keywords": ["fonction", "graphique", "coordonnées", "courbe", "variation", "proportionnalité"], "period": "Trimestre 2" },
+            { "theme": "Statistiques et probabilités", "keywords": ["statistiques", "probabilité", "fréquence", "données", "hasard", "échantillon"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "themes": [
+            { "theme": "Constitution de la matière — atomes et molécules", "keywords": ["atome", "molécule", "tableau périodique", "électron", "ion", "chimie"], "period": "Trimestre 1" },
+            { "theme": "Électricité et énergie électrique", "keywords": ["électricité", "tension", "intensité", "circuit électrique", "énergie", "puissance"], "period": "Trimestre 2" },
+            { "theme": "Mécanique et forces", "keywords": ["force", "mouvement", "vitesse", "gravité", "interaction", "Newton"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "themes": [
+            { "theme": "Génétique et hérédité — l'ADN", "keywords": ["ADN", "gène", "hérédité", "chromosome", "mutation", "génétique", "Mendel"], "period": "Trimestre 1" },
+            { "theme": "Corps humain, santé et comportements", "keywords": ["système nerveux", "cerveau", "addiction", "alimentation", "immunité", "santé"], "period": "Trimestre 2" },
+            { "theme": "Tectonique des plaques et géologie", "keywords": ["tectonique", "séisme", "volcan", "dérive des continents", "Terre", "géologie"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Histoire",
           "themes": [
-            { "theme": "L'Europe, un théâtre majeur des guerres totales (1914-1945)", "keywords": ["1914-1918", "tranchée", "Verdun", "génocide arménien", "1939-1945", "Shoah", "Résistance", "débarquement", "bombe atomique"], "period": "Trimestre 1" },
-            { "theme": "Le monde depuis 1945", "keywords": ["guerre froide", "décolonisation", "construction européenne", "mondialisation", "mur de Berlin", "ONU"], "period": "Trimestre 2" },
-            { "theme": "Françaises et Français dans une République repensée", "keywords": ["Ve République", "De Gaulle", "mai 68", "féminisme", "immigration", "laïcité", "droit de vote des femmes"], "period": "Trimestre 3" }
+            { "theme": "Les deux guerres mondiales (1914-1945)", "keywords": ["1914-1918", "tranchée", "Verdun", "1939-1945", "Shoah", "Résistance", "débarquement"], "period": "Trimestre 1" },
+            { "theme": "Le monde depuis 1945 — guerre froide et décolonisation", "keywords": ["guerre froide", "décolonisation", "mur de Berlin", "ONU", "mondialisation"], "period": "Trimestre 2" },
+            { "theme": "La Ve République et la société française contemporaine", "keywords": ["Ve République", "De Gaulle", "mai 68", "immigration", "laïcité"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "themes": [
+            { "theme": "Identités et échanges — culture anglophone", "keywords": ["culture anglophone", "États-Unis", "Royaume-Uni", "échange", "identité", "diversité"], "period": "Trimestre 1" },
+            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovation", "technologie", "intelligence artificielle", "environnement", "futur"], "period": "Trimestre 2" },
+            { "theme": "Arts et littérature du monde anglophone", "keywords": ["Shakespeare", "littérature anglaise", "cinema américain", "musique", "pop culture"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Dynamiques territoriales de la France", "keywords": ["aménagement du territoire", "métropole", "rural", "inégalités territoriales", "région"], "period": "Trimestre 1" },
+            { "theme": "La France et l'Union européenne", "keywords": ["Union européenne", "frontière", "intégration", "citoyenneté européenne", "Schengen"], "period": "Trimestre 2" },
+            { "theme": "Défis mondiaux — énergie et développement durable", "keywords": ["énergie renouvelable", "climatique", "développement durable", "ressources naturelles", "empreinte carbone"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "themes": [
+            { "theme": "La démocratie et ses institutions", "keywords": ["démocratie", "citoyenneté", "vote", "élection", "droits de l'homme", "constitution"], "period": "Trimestre 1" },
+            { "theme": "Égalité et discrimination", "keywords": ["égalité", "discrimination", "racisme", "sexisme", "laïcité", "tolérance"], "period": "Trimestre 2" }
           ]
         }
       ]

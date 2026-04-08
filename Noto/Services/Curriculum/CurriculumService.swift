@@ -93,6 +93,33 @@ final class CurriculumService {
         return program.subjects.map(\.name)
     }
 
+    /// Returns BO theme names for a given level and subject, suitable as culture-api search topics.
+    /// Falls back to all themes for the level if the subject isn't found.
+    func cultureTopics(for level: String, subject: String, maxPerSubject: Int = 2) -> [String] {
+        let themes = themes(for: level, subject: subject)
+        // Use theme names directly — they're rich BO phrases that match podcast content
+        return Array(themes.map(\.theme).prefix(maxPerSubject))
+    }
+
+    /// Age range (min, max) for a given grade level.
+    func ageRange(for level: String) -> (min: Int, max: Int) {
+        switch level {
+        case "CP": return (6, 7)
+        case "CE1": return (7, 8)
+        case "CE2": return (8, 9)
+        case "CM1": return (9, 10)
+        case "CM2": return (10, 11)
+        case "6e": return (11, 12)
+        case "5e": return (12, 13)
+        case "4e": return (13, 14)
+        case "3e": return (14, 15)
+        case "2nde": return (15, 16)
+        case "1re", "1ère": return (16, 17)
+        case "Tle", "Terminale": return (17, 18)
+        default: return (10, 18)
+        }
+    }
+
     /// Get all available levels.
     var levels: [String] {
         programs.map(\.level)

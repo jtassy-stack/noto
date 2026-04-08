@@ -31,6 +31,8 @@ struct PronoteQRLoginView: View {
                 pinView
             case .loading:
                 loadingView
+            case .success(let childName):
+                successView(childName: childName)
             }
         }
         .navigationTitle("QR Code Pronote")
@@ -168,6 +170,58 @@ struct PronoteQRLoginView: View {
     }
 
     @FocusState private var pinFieldFocused: Bool
+
+    // MARK: - Success
+
+    private func successView(childName: String) -> some View {
+        VStack(spacing: NotoTheme.Spacing.xl) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(NotoTheme.Colors.success)
+
+            Text("\(childName) connecté·e ✓")
+                .font(NotoTheme.Typography.title)
+
+            Text("Les données scolaires seront synchronisées automatiquement.")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, NotoTheme.Spacing.xl)
+
+            Spacer()
+
+            VStack(spacing: NotoTheme.Spacing.md) {
+                Button {
+                    step = .scan
+                    pin = ""
+                    qrData = nil
+                    errorMessage = nil
+                } label: {
+                    Label("Ajouter un autre enfant", systemImage: "person.badge.plus")
+                        .font(NotoTheme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                }
+                .buttonStyle(.bordered)
+                .tint(NotoTheme.Colors.pronote)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Terminer")
+                        .font(NotoTheme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NotoTheme.Colors.pronote)
+            }
+            .padding(.horizontal, NotoTheme.Spacing.xl)
+            .padding(.bottom, NotoTheme.Spacing.xl)
+        }
+    }
 
     // MARK: - Loading
 
@@ -315,7 +369,8 @@ struct PronoteQRLoginView: View {
                 errorMessage = "Sync: \(syncError)"
                 step = .pin
             } else {
-                dismiss()
+                let addedName = family.children.last?.firstName ?? refreshToken.username
+                step = .success(childName: addedName)
             }
         } catch {
             errorMessage = "Erreur : \(error)"
@@ -356,6 +411,7 @@ private enum QRStep {
     case scan
     case pin
     case loading
+    case success(childName: String)
 }
 
 // MARK: - PhotosPicker Transferable

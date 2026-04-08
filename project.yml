@@ -18,8 +18,6 @@ targets:
     platform: iOS
     sources:
       - path: Noto
-    resources:
-      - path: Noto/Resources
     settings:
       base:
         INFOPLIST_FILE: Noto/App/Info.plist

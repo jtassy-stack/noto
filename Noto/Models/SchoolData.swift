@@ -13,6 +13,9 @@ final class Grade {
     var date: Date
     var chapter: String?
     var comment: String?
+    var classAverage: Double?  // Moyenne de la classe (normalisée /20)
+    var classMin: Double?
+    var classMax: Double?
 
     var normalizedValue: Double {
         guard outOf > 0 else { return 0 }
@@ -77,6 +80,11 @@ enum MessageSource: String, Codable {
     case imap
 }
 
+enum MessageKind: String, Codable {
+    case conversation  // regular messages
+    case schoolbook    // carnet de liaison (PCN)
+}
+
 @Model
 final class Message {
     var child: Child?
@@ -85,14 +93,16 @@ final class Message {
     var body: String
     var date: Date
     var source: MessageSource
+    var kind: MessageKind
     var read: Bool
 
-    init(sender: String, subject: String, body: String, date: Date, source: MessageSource) {
+    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation) {
         self.sender = sender
         self.subject = subject
         self.body = body
         self.date = date
         self.source = source
+        self.kind = kind
         self.read = false
     }
 }

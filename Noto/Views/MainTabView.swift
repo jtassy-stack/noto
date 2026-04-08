@@ -10,6 +10,17 @@ struct MainTabView: View {
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
 
+    private var urgentHomeworkBadge: Int {
+        let in24h = Date.now.addingTimeInterval(86_400)
+        let scope = selectedChild.map { [$0] } ?? children
+        return scope.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
+    }
+
+    private var unreadMessagesBadge: Int {
+        let scope = selectedChild.map { [$0] } ?? children
+        return scope.flatMap(\.messages).filter { !$0.read }.count
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Fratrie selector
@@ -31,6 +42,7 @@ struct MainTabView: View {
                     .tabItem {
                         Label("École", systemImage: "book")
                     }
+                    .badge(urgentHomeworkBadge)
                     .tag(Tab.school)
 
                 DiscoverView(selectedChild: selectedChild)
@@ -59,9 +71,20 @@ struct MainTabView: View {
             }
             .tint(NotoTheme.Colors.brand)
         }
+        .background(NotoTheme.Colors.background.ignoresSafeArea())
         .sheet(isPresented: $showAddChild) {
             AddChildView()
         }
+        .onAppear { configureTabBarAppearance() }
+    }
+
+    private func configureTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(NotoTheme.Colors.shadow)
+        appearance.shadowColor = UIColor(white: 1, alpha: 0.08)
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 

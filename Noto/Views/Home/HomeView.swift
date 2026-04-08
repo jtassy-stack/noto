@@ -48,6 +48,9 @@ struct HomeView: View {
                         GreetingHeader(parentName: name)
                     }
 
+                    // Global status banner
+                    GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
+
                     // Sync status row
                     SyncStatusRow(
                         isSyncing: isSyncing,
@@ -78,8 +81,9 @@ struct HomeView: View {
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: engine.cards)
                 .padding(NotoTheme.Spacing.md)
             }
-            .navigationTitle(selectedChild?.firstName ?? "nōto.")
-            .navigationBarTitleDisplayMode(.large)
+            .background(NotoTheme.Colors.background)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -110,25 +114,79 @@ struct HomeView: View {
     // MARK: - Refresh Logic
 
     private func performFullRefresh() async {
-        guard let bridge = pronoteService.bridge else {
-            showNoConnectionAlert = true
-            // Still rebuild briefing from cached data
-            await refreshBriefing()
-            return
-        }
-
         isSyncing = true
         defer { isSyncing = false }
 
-        let syncService = PronoteSyncService(modelContext: modelContext)
         let targetChildren = selectedChild.map { [$0] } ?? children
+        let pronoteChildren = targetChildren.filter { $0.schoolType == .pronote }
+        let entChildren = targetChildren.filter { $0.schoolType == .ent }
 
-        for (index, child) in targetChildren.enumerated() {
-            await syncService.sync(child: child, bridge: bridge, childIndex: index)
+        // Pronote sync
+        if !pronoteChildren.isEmpty {
+            if let bridge = pronoteService.bridge {
+                let syncService = PronoteSyncService(modelContext: modelContext)
+                for (index, child) in pronoteChildren.enumerated() {
+                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                }
+            } else if entChildren.isEmpty {
+                // Only show alert if there are no ENT children to sync either
+                showNoConnectionAlert = true
+            }
+        }
+
+        // ENT/PCN sync
+        if !entChildren.isEmpty {
+            await syncENTChildren(entChildren)
         }
 
         lastSyncDateInterval = Date.now.timeIntervalSince1970
         await refreshBriefing()
+    }
+
+    private func syncENTChildren(_ entChildren: [Child]) async {
+        // Group children by provider so we login once per provider
+        var byProvider: [ENTProvider: [Child]] = [:]
+        for child in entChildren {
+            let provider = child.entProvider.flatMap { ENTProvider(rawValue: $0) } ?? .pcn
+            byProvider[provider, default: []].append(child)
+        }
+
+        let syncService = ENTSyncService(modelContext: modelContext)
+
+        for (provider, children) in byProvider {
+            // Re-login from Keychain
+            let key = "ent_credentials_\(provider.rawValue)"
+            let fallbackKey = "ent_credentials"
+            guard let credsData = (try? KeychainService.load(key: key)) ?? (try? KeychainService.load(key: fallbackKey)),
+                  let creds = String(data: credsData, encoding: .utf8) else {
+                NSLog("[noto] No ENT credentials for \(provider.name)")
+                continue
+            }
+
+            let parts = creds.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+
+            let client = ENTClient(provider: provider)
+            do {
+                try await client.login(email: String(parts[0]), password: String(parts[1]))
+            } catch {
+                NSLog("[noto] ENT re-login failed for \(provider.name): \(error)")
+                continue
+            }
+
+            for child in children {
+                do {
+                    try await syncService.sync(
+                        child: child,
+                        client: client,
+                        entChildId: child.entChildId ?? child.firstName
+                    )
+                    NSLog("[noto] ENT sync complete for \(child.firstName) (\(provider.name))")
+                } catch {
+                    NSLog("[noto] ENT sync failed for \(child.firstName): \(error)")
+                }
+            }
+        }
     }
 
     private func refreshBriefing() async {
@@ -193,9 +251,11 @@ private struct GreetingHeader: View {
     let parentName: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            NotoLogo()
             Text(greeting)
                 .font(NotoTheme.Typography.largeTitle)
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
             Text(dateString)
                 .font(NotoTheme.Typography.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
@@ -223,8 +283,7 @@ private struct BriefingSummaryView: View {
             .foregroundStyle(NotoTheme.Colors.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(NotoTheme.Spacing.md)
-            .background(NotoTheme.Colors.brand.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+            .notoCard()
     }
 }
 
@@ -241,6 +300,69 @@ private struct ReconnectingBanner: View {
         .padding(.vertical, NotoTheme.Spacing.sm)
         .background(NotoTheme.Colors.surfaceSecondary)
         .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+    }
+}
+
+private struct GlobalStatusBanner: View {
+    let children: [Child]
+
+    private var urgentHomeworkCount: Int {
+        let in24h = Date.now.addingTimeInterval(86_400)
+        return children.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
+    }
+
+    private var recentLowGrades: [Grade] {
+        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
+        return children.flatMap(\.grades).filter {
+            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
+        }
+    }
+
+    private var alertMessages: [String] {
+        var msgs: [String] = []
+        if urgentHomeworkCount > 0 {
+            msgs.append("\(urgentHomeworkCount) devoir\(urgentHomeworkCount > 1 ? "s" : "") à rendre demain")
+        }
+        if !recentLowGrades.isEmpty {
+            msgs.append("\(recentLowGrades.count) note\(recentLowGrades.count > 1 ? "s" : "") sous 10 cette semaine")
+        }
+        return msgs
+    }
+
+    var body: some View {
+        if alertMessages.isEmpty {
+            HStack(spacing: NotoTheme.Spacing.xs) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(NotoTheme.Colors.success)
+                    .font(.system(size: 13))
+                Text("Tout va bien")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+            .background(NotoTheme.Colors.success.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+        } else {
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                ForEach(alertMessages, id: \.self) { msg in
+                    HStack(spacing: NotoTheme.Spacing.xs) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(NotoTheme.Colors.warning)
+                            .font(.system(size: 12))
+                        Text(msg)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+            .background(NotoTheme.Colors.warning.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+        }
     }
 }
 

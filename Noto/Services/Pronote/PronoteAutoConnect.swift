@@ -22,7 +22,6 @@ enum PronoteAutoConnect {
         for username in usernames {
             guard
                 let tokenData = try? KeychainService.load(key: "pronote_token_\(username)"),
-                let tokenData,
                 let refreshToken = try? JSONDecoder().decode(PronoteRefreshToken.self, from: tokenData)
             else { continue }
 
@@ -56,8 +55,7 @@ enum PronoteAutoConnect {
 
     private static func getOrCreateDeviceUUID() -> String {
         if let data = try? KeychainService.load(key: "device_uuid"),
-           let uuidData = data,
-           let uuid = String(data: uuidData, encoding: .utf8) {
+           let uuid = String(data: data, encoding: .utf8) {
             return uuid
         }
         let uuid = UUID().uuidString

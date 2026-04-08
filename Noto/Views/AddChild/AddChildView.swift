@@ -6,12 +6,12 @@ struct AddChildView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var families: [Family]
 
-    @State private var selectedType: SchoolType?
-
     var body: some View {
         NavigationStack {
             VStack(spacing: NotoTheme.Spacing.xl) {
                 Spacer()
+
+                NotoLogo(size: 32)
 
                 Text("Ajouter un enfant")
                     .font(NotoTheme.Typography.title)
@@ -25,6 +25,7 @@ struct AddChildView: View {
                 Spacer()
 
                 VStack(spacing: NotoTheme.Spacing.md) {
+                    // Pronote
                     NavigationLink {
                         PronoteQRLoginView()
                     } label: {
@@ -37,17 +38,20 @@ struct AddChildView: View {
                     }
                     .buttonStyle(.plain)
 
-                    NavigationLink {
-                        ENTLoginView()
-                    } label: {
-                        ServiceCard(
-                            title: "ENT / Paris Classe Numérique",
-                            subtitle: "Élémentaire, maternelle — cahier de liaison, blog, messagerie",
-                            color: NotoTheme.Colors.ent,
-                            icon: "building.columns"
-                        )
+                    // ENT providers
+                    ForEach(ENTProvider.allCases) { provider in
+                        NavigationLink {
+                            ENTLoginView(provider: provider)
+                        } label: {
+                            ServiceCard(
+                                title: provider.name,
+                                subtitle: provider.subtitle,
+                                color: Color(hex: UInt(provider.color.dropFirst(), radix: 16) ?? 0x2563EB),
+                                icon: provider.icon
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
 

@@ -254,6 +254,11 @@ struct CultureSearchResult: Sendable, Identifiable {
     let author: String?
     let year: Int?
     let genres: [String]
+
+    // Context metadata (set by caller, not from API)
+    var linkedSubject: String? = nil
+    var linkedChildName: String? = nil
+    var linkedLevel: String? = nil
 }
 
 struct BatchQuery {

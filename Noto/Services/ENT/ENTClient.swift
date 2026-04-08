@@ -9,25 +9,69 @@ final class ENTClient: Sendable {
     /// Session cache: re-login after 10 minutes
     private let sessionTimeout: TimeInterval = 600
 
-    init(baseURL: URL = URL(string: "https://ent.parisclassenumerique.fr")!) {
-        self.baseURL = baseURL
-        // Ephemeral session with cookie storage (no disk persistence)
-        let config = URLSessionConfiguration.ephemeral
+    init(provider: ENTProvider = .pcn) {
+        self.baseURL = provider.baseURL
+        // Use default config so cookies from WKWebView (copied to .shared) are available
+        let config = URLSessionConfiguration.default
         config.httpCookieStorage = HTTPCookieStorage.shared
         config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
         self.session = URLSession(configuration: config)
     }
 
     // MARK: - Auth
 
-    func login(email: String, password: String) async throws {
-        let url = baseURL.appendingPathComponent("/auth/login")
-        var request = URLRequest(url: url)
+    func login(email login: String, password: String) async throws {
+        // Step 1: GET the login page to find the form action and hidden fields (CAS tokens)
+        let loginPageURL = URL(string: "\(baseURL.absoluteString)/auth/login")!
+        let (pageData, _) = try await session.data(for: URLRequest(url: loginPageURL))
+        let pageHTML = String(data: pageData, encoding: .utf8) ?? ""
+
+        // Extract CAS hidden fields (lt, execution, _eventId) if present
+        var formFields: [(String, String)] = [
+            ("email", login),
+            ("password", password),
+        ]
+
+        // Parse hidden inputs from the login form
+        let hiddenPattern = #"<input[^>]+type=["\']hidden["\'][^>]*>"#
+        if let regex = try? NSRegularExpression(pattern: hiddenPattern, options: .caseInsensitive) {
+            let matches = regex.matches(in: pageHTML, range: NSRange(pageHTML.startIndex..., in: pageHTML))
+            for match in matches {
+                let tag = String(pageHTML[Range(match.range, in: pageHTML)!])
+                if let name = extractAttr(tag, "name"), let value = extractAttr(tag, "value") {
+                    formFields.append((name, value))
+                }
+            }
+        }
+
+        // Detect form action URL (may differ from /auth/login for CAS)
+        var postURL = loginPageURL
+        let formPattern = #"<form[^>]+action=["\']([^"\']+)["\']"#
+        if let formRegex = try? NSRegularExpression(pattern: formPattern, options: .caseInsensitive),
+           let formMatch = formRegex.firstMatch(in: pageHTML, range: NSRange(pageHTML.startIndex..., in: pageHTML)),
+           let actionRange = Range(formMatch.range(at: 1), in: pageHTML) {
+            let action = String(pageHTML[actionRange])
+            if action.hasPrefix("http") {
+                postURL = URL(string: action) ?? postURL
+            } else if action.hasPrefix("/") {
+                postURL = URL(string: "\(baseURL.absoluteString)\(action)") ?? postURL
+            }
+        }
+
+        // Also try "username" field name (CAS standard) alongside "email" (Edifice standard)
+        if pageHTML.contains("name=\"username\"") {
+            formFields = formFields.map { ($0.0 == "email" ? "username" : $0.0, $0.1) }
+        }
+
+        // Step 2: POST credentials
+        let body = formFields.map { "\($0.0)=\($0.1.urlEncoded)" }.joined(separator: "&")
+        var request = URLRequest(url: postURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-
-        let body = "email=\(email.urlEncoded)&password=\(password.urlEncoded)"
         request.httpBody = body.data(using: .utf8)
+
+        NSLog("[noto] ENT login POST → \(postURL.absoluteString) fields=\(formFields.map(\.0))")
 
         let (data, response) = try await session.data(for: request)
 
@@ -35,15 +79,27 @@ final class ENTClient: Sendable {
             throw ENTError.invalidResponse("Not HTTP")
         }
 
-        // PCN returns 200 on success, 401 on bad credentials
-        // Also check for HTML response (indicates redirect/session issue)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        let finalURL = http.url?.absoluteString ?? postURL.absoluteString
+        NSLog("[noto] ENT login response: \(http.statusCode), finalURL=\(finalURL), body prefix: \(String(text.prefix(300)))")
+
         if http.statusCode == 401 {
             throw ENTError.badCredentials
         }
 
-        if let text = String(data: data, encoding: .utf8), text.contains("<html") {
+        // If we landed back on a login form, credentials were wrong
+        if text.contains("name=\"password\"") && (text.contains("auth/login") || text.contains("cas/login")) {
             throw ENTError.badCredentials
         }
+    }
+
+    /// Extract an HTML attribute value from a tag string
+    private func extractAttr(_ tag: String, _ attr: String) -> String? {
+        let pattern = "\(attr)=[\"']([^\"']*)[\"']"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: tag, range: NSRange(tag.startIndex..., in: tag)),
+              let range = Range(match.range(at: 1), in: tag) else { return nil }
+        return String(tag[range])
     }
 
     // MARK: - Children
@@ -51,17 +107,53 @@ final class ENTClient: Sendable {
     func fetchChildren() async throws -> [ENTChildInfo] {
         let data = try await get("/userbook/api/person")
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let results = json["result"] as? [[String: Any]] else {
+        let preview = String(data: data.prefix(500), encoding: .utf8) ?? "?"
+        NSLog("[noto] ENT fetchChildren response: \(preview)")
+
+        let results: [[String: Any]]
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let r = json["result"] as? [[String: Any]] {
+            results = r
+        } else if let arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            results = arr
+        } else {
+            NSLog("[noto] ENT fetchChildren: unexpected JSON structure")
             return []
         }
 
-        return results.compactMap { person in
-            guard let id = person["id"] as? String,
-                  let displayName = person["displayName"] as? String else { return nil }
-            let className = person["classes"] as? String ?? ""
-            return ENTChildInfo(id: id, displayName: displayName, className: className)
+        // Each entry has relatedName (child's full name) and relatedId (child's ENT user ID)
+        var seen = Set<String>()
+        var children: [ENTChildInfo] = []
+
+        for entry in results {
+            guard let relatedName = entry["relatedName"] as? String,
+                  let relatedId = entry["relatedId"] as? String,
+                  !relatedName.isEmpty,
+                  !seen.contains(relatedName) else { continue }
+            seen.insert(relatedName)
+
+            // Fetch child's class info
+            var className = ""
+            do {
+                let childData = try await get("/userbook/api/person?id=\(relatedId)")
+                if let childJson = try JSONSerialization.jsonObject(with: childData) as? [String: Any],
+                   let childResults = childJson["result"] as? [[String: Any]],
+                   let childEntry = childResults.first,
+                   let schools = childEntry["schools"] as? [[String: Any]],
+                   let school = schools.first,
+                   let classes = school["classes"] as? [String],
+                   let firstClass = classes.first {
+                    className = firstClass
+                }
+            } catch {
+                NSLog("[noto] ENT failed to fetch class for \(relatedName): \(error)")
+            }
+
+            NSLog("[noto] ENT child: \(relatedName) (id=\(relatedId), class=\(className))")
+            children.append(ENTChildInfo(id: relatedId, displayName: relatedName, className: className))
         }
+
+        return children
     }
 
     // MARK: - Conversation
@@ -202,22 +294,29 @@ final class ENTClient: Sendable {
     // MARK: - Private
 
     private func get(_ path: String) async throws -> Data {
-        let url = baseURL.appendingPathComponent(path)
+        let url = URL(string: "\(baseURL.absoluteString)\(path)")!
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
+        NSLog("[noto] ENT GET \(url.absoluteString)")
         let (data, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }
 
+        let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+        NSLog("[noto] ENT GET \(path) → \(http.statusCode), \(data.count) bytes, type=\(contentType)")
+
         if http.statusCode == 401 {
             throw ENTError.sessionExpired
         }
 
-        // HTML response means session expired (redirect to login page)
-        if let text = String(data: data, encoding: .utf8), text.hasPrefix("<!DOCTYPE") || text.hasPrefix("<html") {
+        // Any HTML response means the API didn't return JSON (session issue or wrong endpoint)
+        if contentType.contains("text/html") {
+            let text = String(data: data.prefix(300), encoding: .utf8) ?? ""
+            NSLog("[noto] ENT GET \(path) returned HTML: \(text)")
             throw ENTError.sessionExpired
         }
 
