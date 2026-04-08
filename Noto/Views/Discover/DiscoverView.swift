@@ -196,7 +196,13 @@ struct DiscoverView: View {
         }
 
         let uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).shuffled().prefix(6)
-        logger.info("BO topics for \(children.first?.grade ?? "?"): \(uniqueTopics.joined(separator: " | "))")
+        // Build API-format grade for curriculum tag filtering
+        let apiGrade: String? = if let refChild = selectedChild ?? children.first {
+            curriculumService.apiGrade(for: refChild.grade)
+        } else {
+            nil
+        }
+        logger.info("BO topics for \(children.first?.grade ?? "?") (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
         guard !uniqueTopics.isEmpty else {
             isLoading = false
@@ -214,6 +220,7 @@ struct DiscoverView: View {
             var results = try await client.searchThematic(
                 query: uniqueTopics.joined(separator: " "),
                 types: ["event", "podcast", "oeuvre"],
+                grade: apiGrade,
                 ageMin: ageMin,
                 ageMax: ageMax,
                 geo: geo,
@@ -319,6 +326,21 @@ private struct RecoRow: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
 
+            // Curriculum tags (e.g. "3eme-histoire", "3eme-francais")
+            if !reco.curriculumTags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(reco.curriculumTags.prefix(3), id: \.self) { tag in
+                        Text(Self.formatCurriculumTag(tag))
+                            .font(NotoTheme.Typography.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(NotoTheme.Colors.brand.opacity(0.1))
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
             // Child / level context tag
             if let child = reco.linkedChildName, let level = reco.linkedLevel {
                 HStack(spacing: 4) {
@@ -361,5 +383,16 @@ private struct RecoRow: View {
         case "event": "Événement"
         default: reco.type.capitalized
         }
+    }
+
+    /// Formats "3eme-histoire" → "Histoire · 3e"
+    private static func formatCurriculumTag(_ tag: String) -> String {
+        let parts = tag.split(separator: "-", maxSplits: 1)
+        guard parts.count == 2 else { return tag }
+        let grade = String(parts[0])
+            .replacingOccurrences(of: "eme", with: "e")
+            .replacingOccurrences(of: "ere", with: "re")
+        let subject = String(parts[1]).prefix(1).uppercased() + String(parts[1]).dropFirst()
+        return "\(subject) · \(grade)"
     }
 }

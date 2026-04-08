@@ -20,6 +20,7 @@ final class CultureAPIClient: Sendable {
     func searchThematic(
         query: String,
         types: [String] = ["event", "podcast", "oeuvre"],
+        grade: String? = nil,
         ageMin: Int? = nil,
         ageMax: Int? = nil,
         geo: (lat: Double, lng: Double)? = nil,
@@ -30,6 +31,7 @@ final class CultureAPIClient: Sendable {
             URLQueryItem(name: "type", value: types.joined(separator: ",")),
             URLQueryItem(name: "limit", value: "\(limit)"),
         ]
+        if let grade { params.append(URLQueryItem(name: "grade", value: grade)) }
         if let ageMin { params.append(URLQueryItem(name: "age_min", value: "\(ageMin)")) }
         if let ageMax { params.append(URLQueryItem(name: "age_max", value: "\(ageMax)")) }
         if let geo {
@@ -214,7 +216,8 @@ final class CultureAPIClient: Sendable {
             director: json["director"] as? String,
             author: json["author"] as? String,
             year: json["year"] as? Int,
-            genres: json["genres"] as? [String] ?? []
+            genres: json["genres"] as? [String] ?? [],
+            curriculumTags: json["curriculum_tags"] as? [String] ?? json["curriculumTags"] as? [String] ?? []
         )
     }
 }
@@ -254,6 +257,7 @@ struct CultureSearchResult: Sendable, Identifiable {
     let author: String?
     let year: Int?
     let genres: [String]
+    let curriculumTags: [String]
 
     // Context metadata (set by caller, not from API)
     var linkedSubject: String? = nil
