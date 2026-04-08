@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var isSyncing = false
     @State private var showNoConnectionAlert = false
     @State private var showSettings = false
+    @State private var syncError: String?
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
@@ -54,7 +55,8 @@ struct HomeView: View {
                     // Sync status row
                     SyncStatusRow(
                         isSyncing: isSyncing,
-                        lastSyncLabel: lastSyncLabel
+                        lastSyncLabel: lastSyncLabel,
+                        syncError: syncError
                     )
 
                     // Briefing text summary
@@ -115,8 +117,10 @@ struct HomeView: View {
 
     private func performFullRefresh() async {
         isSyncing = true
+        syncError = nil
         defer { isSyncing = false }
 
+        var errors: [String] = []
         let targetChildren = selectedChild.map { [$0] } ?? children
         let pronoteChildren = targetChildren.filter { $0.schoolType == .pronote }
         let entChildren = targetChildren.filter { $0.schoolType == .ent }
@@ -129,48 +133,55 @@ struct HomeView: View {
                     await syncService.sync(child: child, bridge: bridge, childIndex: index)
                 }
             } else if entChildren.isEmpty {
-                // Only show alert if there are no ENT children to sync either
                 showNoConnectionAlert = true
+            } else {
+                errors.append("Pronote : reconnexion requise")
             }
         }
 
         // ENT/PCN sync
         if !entChildren.isEmpty {
-            await syncENTChildren(entChildren)
+            let entErrors = await syncENTChildren(entChildren)
+            errors.append(contentsOf: entErrors)
         }
 
+        syncError = errors.isEmpty ? nil : errors.joined(separator: "\n")
         lastSyncDateInterval = Date.now.timeIntervalSince1970
         await refreshBriefing()
     }
 
-    private func syncENTChildren(_ entChildren: [Child]) async {
+    @discardableResult
+    private func syncENTChildren(_ entChildren: [Child]) async -> [String] {
+        var errors: [String] = []
+
         // Group children by provider so we login once per provider
         var byProvider: [ENTProvider: [Child]] = [:]
         for child in entChildren {
-            let provider = child.entProvider.flatMap { ENTProvider(rawValue: $0) } ?? .pcn
+            let provider = child.entProvider ?? .pcn
             byProvider[provider, default: []].append(child)
         }
 
         let syncService = ENTSyncService(modelContext: modelContext)
 
         for (provider, children) in byProvider {
-            // Re-login from Keychain
             let key = "ent_credentials_\(provider.rawValue)"
-            let fallbackKey = "ent_credentials"
-            guard let credsData = (try? KeychainService.load(key: key)) ?? (try? KeychainService.load(key: fallbackKey)),
+            guard let credsData = try? KeychainService.load(key: key),
                   let creds = String(data: credsData, encoding: .utf8) else {
-                NSLog("[noto] No ENT credentials for \(provider.name)")
+                errors.append("\(provider.name) : identifiants manquants")
                 continue
             }
 
             let parts = creds.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else { continue }
+            guard parts.count == 2 else {
+                errors.append("\(provider.name) : identifiants corrompus")
+                continue
+            }
 
             let client = ENTClient(provider: provider)
             do {
                 try await client.login(email: String(parts[0]), password: String(parts[1]))
             } catch {
-                NSLog("[noto] ENT re-login failed for \(provider.name): \(error)")
+                errors.append("\(provider.name) : reconnexion échouée")
                 continue
             }
 
@@ -181,12 +192,13 @@ struct HomeView: View {
                         client: client,
                         entChildId: child.entChildId ?? child.firstName
                     )
-                    NSLog("[noto] ENT sync complete for \(child.firstName) (\(provider.name))")
                 } catch {
-                    NSLog("[noto] ENT sync failed for \(child.firstName): \(error)")
+                    errors.append("\(child.firstName) : sync échouée")
                 }
             }
         }
+
+        return errors
     }
 
     private func refreshBriefing() async {
@@ -224,22 +236,30 @@ final class BriefingEngineWrapper: ObservableObject {
 private struct SyncStatusRow: View {
     let isSyncing: Bool
     let lastSyncLabel: String?
+    var syncError: String?
 
     var body: some View {
-        HStack(spacing: NotoTheme.Spacing.xs) {
-            if isSyncing {
-                ProgressView()
-                    .scaleEffect(0.75)
-                Text("Synchronisation...")
+        VStack(alignment: .trailing, spacing: NotoTheme.Spacing.xs) {
+            HStack(spacing: NotoTheme.Spacing.xs) {
+                if isSyncing {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                    Text("Synchronisation...")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                } else if let label = lastSyncLabel {
+                    Image(systemName: syncError != nil ? "exclamationmark.triangle" : "checkmark.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(syncError != nil ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary)
+                    Text(label)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
+            if let error = syncError {
+                Text(error)
                     .font(NotoTheme.Typography.caption)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-            } else if let label = lastSyncLabel {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                Text(label)
-                    .font(NotoTheme.Typography.caption)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .foregroundStyle(NotoTheme.Colors.danger)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)

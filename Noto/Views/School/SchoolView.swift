@@ -595,7 +595,9 @@ private struct MessagesListView: View {
 
     private var allMessages: [(child: Child, msg: Message)] {
         children.flatMap { child in
-            child.messages.map { (child: child, msg: $0) }
+            child.messages
+                .filter { $0.kind == .conversation }
+                .map { (child: child, msg: $0) }
         }.sorted { $0.msg.date > $1.msg.date }
     }
 

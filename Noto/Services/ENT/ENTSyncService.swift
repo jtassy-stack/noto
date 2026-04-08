@@ -11,17 +11,31 @@ final class ENTSyncService {
     }
 
     /// Full sync for an ENT child: schoolbook, messages, homework, timeline.
+    /// Fetches all data first, then deletes old data and inserts new — no data loss on partial failure.
     func sync(child: Child, client: ENTClient, entChildId: String) async throws {
-        async let conversationsResult = client.fetchConversations()
-        async let schoolbookResult = client.fetchSchoolbook(childId: entChildId)
-        async let homeworkResult = client.fetchHomework()
-        async let timelineResult = client.fetchTimeline()
+        // Fetch all data BEFORE deleting anything — partial failure keeps old data intact
+        var conversations: [ENTConversation] = []
+        var words: [ENTSchoolbookWord] = []
+        var homework: [ENTHomework] = []
+        var fetchErrors: [String] = []
 
-        let (conversations, words, homework, _) = try await (
-            conversationsResult, schoolbookResult, homeworkResult, timelineResult
-        )
+        do { conversations = try await client.fetchConversations() }
+        catch { fetchErrors.append("messages: \(error.localizedDescription)") }
 
-        // Clear existing data before re-sync
+        do { words = try await client.fetchSchoolbook(childId: entChildId) }
+        catch { fetchErrors.append("carnet: \(error.localizedDescription)") }
+
+        do { homework = try await client.fetchHomework() }
+        catch { fetchErrors.append("devoirs: \(error.localizedDescription)") }
+
+        // Only proceed if we got at least some data
+        let hasData = !conversations.isEmpty || !words.isEmpty || !homework.isEmpty
+        guard hasData || fetchErrors.isEmpty else {
+            // All fetches failed — don't delete old data, throw
+            throw ENTError.invalidResponse("Aucune donnée récupérée (\(fetchErrors.joined(separator: ", ")))")
+        }
+
+        // Now safe to delete old data and insert new
         for msg in child.messages { modelContext.delete(msg) }
         for hw in child.homework { modelContext.delete(hw) }
 
@@ -49,7 +63,7 @@ final class ENTSyncService {
         }
     }
 
-    // MARK: - Schoolbook → Messages (treated as messages in the UI)
+    // MARK: - Schoolbook
 
     private func syncSchoolbook(_ words: [ENTSchoolbookWord], for child: Child) {
         for word in words {

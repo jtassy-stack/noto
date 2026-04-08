@@ -43,6 +43,7 @@ struct ENTLoginView: View {
                         // Show the web login view inline
                         ENTWebLoginView(
                             loginURL: URL(string: "\(provider.baseURL.absoluteString)/auth/login")!,
+                            providerDomain: provider.baseURL.host ?? "monlycee.net",
                             onSuccess: { json in Task { await handleWebLoginSuccess(json: json) } },
                             onError: { msg in errorMessage = msg }
                         )
@@ -161,8 +162,12 @@ struct ENTLoginView: View {
             try await client.login(email: login, password: password)
 
             let creds = "\(login):\(password)"
-            try? KeychainService.save(key: "ent_credentials_\(provider.rawValue)", data: Data(creds.utf8))
-            try? KeychainService.save(key: "ent_credentials", data: Data(creds.utf8))
+            do {
+                try KeychainService.save(key: "ent_credentials_\(provider.rawValue)", data: Data(creds.utf8))
+            } catch {
+                errorMessage = "Impossible de sauvegarder les identifiants. La synchronisation automatique ne fonctionnera pas."
+                NSLog("[noto] Keychain save failed: \(error)")
+            }
 
             let entChildren = try await client.fetchChildren()
             NSLog("[noto] \(provider.name) found \(entChildren.count) children: \(entChildren.map(\.displayName))")
@@ -190,7 +195,7 @@ struct ENTLoginView: View {
                 schoolType: .ent,
                 establishment: provider.name
             )
-            child.entProvider = provider.rawValue
+            child.entProvider = provider
             child.family = family
             modelContext.insert(child)
         } else {
@@ -207,13 +212,17 @@ struct ENTLoginView: View {
                     establishment: provider.name
                 )
                 child.entChildId = ec.id
-                child.entProvider = provider.rawValue
+                child.entProvider = provider
                 child.family = family
                 modelContext.insert(child)
             }
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            NSLog("[noto] Failed to save children: \(error)")
+        }
     }
 
     /// Parse children from the raw JSON returned by /userbook/api/person

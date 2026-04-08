@@ -1,22 +1,39 @@
 import Foundation
 
+/// Debug-only logging — no PII in production
+@inline(__always)
+private func entLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    NSLog("%@", message())
+    #endif
+}
+
 /// Client for ENT/PCN (Paris Classe Numérique) REST API.
 /// Session managed via cookie jar — credentials stay on-device.
 final class ENTClient: Sendable {
     let baseURL: URL
     private let session: URLSession
-
-    /// Session cache: re-login after 10 minutes
-    private let sessionTimeout: TimeInterval = 600
+    /// Dedicated in-memory cookie storage — never persisted to disk
+    static let cookieStorage: HTTPCookieStorage = {
+        let storage = HTTPCookieStorage()
+        storage.cookieAcceptPolicy = .always
+        return storage
+    }()
 
     init(provider: ENTProvider = .pcn) {
         self.baseURL = provider.baseURL
-        // Use default config so cookies from WKWebView (copied to .shared) are available
-        let config = URLSessionConfiguration.default
-        config.httpCookieStorage = HTTPCookieStorage.shared
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = ENTClient.cookieStorage
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         self.session = URLSession(configuration: config)
+    }
+
+    /// Import cookies from WKWebView into our ephemeral session
+    static func importCookies(_ cookies: [HTTPCookie]) {
+        for cookie in cookies {
+            cookieStorage.setCookie(cookie)
+        }
     }
 
     // MARK: - Auth
@@ -71,7 +88,7 @@ final class ENTClient: Sendable {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = body.data(using: .utf8)
 
-        NSLog("[noto] ENT login POST → \(postURL.absoluteString) fields=\(formFields.map(\.0))")
+        entLog("[noto] ENT login POST → \(postURL.absoluteString) fields=\(formFields.map(\.0))")
 
         let (data, response) = try await session.data(for: request)
 
@@ -81,7 +98,7 @@ final class ENTClient: Sendable {
 
         let text = String(data: data, encoding: .utf8) ?? ""
         let finalURL = http.url?.absoluteString ?? postURL.absoluteString
-        NSLog("[noto] ENT login response: \(http.statusCode), finalURL=\(finalURL), body prefix: \(String(text.prefix(300)))")
+        entLog("[noto] ENT login response: \(http.statusCode), finalURL=\(finalURL), body prefix: \(String(text.prefix(300)))")
 
         if http.statusCode == 401 {
             throw ENTError.badCredentials
@@ -108,7 +125,7 @@ final class ENTClient: Sendable {
         let data = try await get("/userbook/api/person")
 
         let preview = String(data: data.prefix(500), encoding: .utf8) ?? "?"
-        NSLog("[noto] ENT fetchChildren response: \(preview)")
+        entLog("[noto] ENT fetchChildren response: \(preview)")
 
         let results: [[String: Any]]
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -117,8 +134,7 @@ final class ENTClient: Sendable {
         } else if let arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             results = arr
         } else {
-            NSLog("[noto] ENT fetchChildren: unexpected JSON structure")
-            return []
+            throw ENTError.invalidResponse("Format JSON inattendu pour /userbook/api/person")
         }
 
         // Each entry has relatedName (child's full name) and relatedId (child's ENT user ID)
@@ -146,10 +162,10 @@ final class ENTClient: Sendable {
                     className = firstClass
                 }
             } catch {
-                NSLog("[noto] ENT failed to fetch class for \(relatedName): \(error)")
+                entLog("[noto] ENT failed to fetch class for \(relatedName): \(error)")
             }
 
-            NSLog("[noto] ENT child: \(relatedName) (id=\(relatedId), class=\(className))")
+            entLog("[noto] ENT child: \(relatedName) (id=\(relatedId), class=\(className))")
             children.append(ENTChildInfo(id: relatedId, displayName: relatedName, className: className))
         }
 
@@ -299,7 +315,7 @@ final class ENTClient: Sendable {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        NSLog("[noto] ENT GET \(url.absoluteString)")
+        entLog("[noto] ENT GET \(url.absoluteString)")
         let (data, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse else {
@@ -307,7 +323,7 @@ final class ENTClient: Sendable {
         }
 
         let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
-        NSLog("[noto] ENT GET \(path) → \(http.statusCode), \(data.count) bytes, type=\(contentType)")
+        entLog("[noto] ENT GET \(path) → \(http.statusCode), \(data.count) bytes, type=\(contentType)")
 
         if http.statusCode == 401 {
             throw ENTError.sessionExpired
@@ -316,7 +332,7 @@ final class ENTClient: Sendable {
         // Any HTML response means the API didn't return JSON (session issue or wrong endpoint)
         if contentType.contains("text/html") {
             let text = String(data: data.prefix(300), encoding: .utf8) ?? ""
-            NSLog("[noto] ENT GET \(path) returned HTML: \(text)")
+            entLog("[noto] ENT GET \(path) returned HTML: \(text)")
             throw ENTError.sessionExpired
         }
 

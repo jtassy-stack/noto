@@ -21,8 +21,8 @@ final class Child {
     var grade: String // "6e", "CE1", "PS", etc.
     var schoolType: SchoolType
     var establishment: String
-    var entChildId: String?      // ENT user ID for schoolbook API
-    var entProvider: String?     // "pcn" or "monlycee" — raw value of ENTProvider
+    var entChildId: String?        // ENT user ID for schoolbook API
+    var entProvider: ENTProvider?   // pcn or monlycee
     var family: Family?
     var createdAt: Date
 
