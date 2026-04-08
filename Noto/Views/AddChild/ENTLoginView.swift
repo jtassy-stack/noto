@@ -138,9 +138,17 @@ struct ENTLoginView: View {
             }
         }
 
+        // Fallback: parent name extracted from greeting (MonLycée proxy blocks API)
+        if entChildren.isEmpty, let parentName = json["_parentName"] as? String, !parentName.isEmpty {
+            NSLog("[noto] No API data — using greeting name: \(parentName). Creating placeholder child for manual setup.")
+            // For MonLycée, we create the parent account link — the actual child name will come from
+            // the user or from the messages/schoolbook data later
+            entChildren.append(ENTChildInfo(id: "monlycee-\(parentName)", displayName: parentName, className: ""))
+        }
+
         NSLog("[noto] \(provider.name) found \(entChildren.count) children after web auth")
         if entChildren.isEmpty {
-            errorMessage = "Connexion réussie mais aucun enfant trouvé. Vérifiez que votre compte est un compte parent."
+            errorMessage = "Connexion réussie mais aucun enfant trouvé."
         } else {
             createChildren(entChildren)
             dismiss()

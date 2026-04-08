@@ -2,154 +2,239 @@ import SwiftUI
 import WebKit
 
 /// Web-based login for ENT providers that use Keycloak/OIDC (e.g. MonLycée).
-/// Wraps a UIViewController containing WKWebView for stable delegate lifecycle.
-struct ENTWebLoginView: UIViewControllerRepresentable {
+/// Shows a WKWebView with a floating "Continuer" button once the user is logged in.
+struct ENTWebLoginView: View {
     let loginURL: URL
-    let providerDomain: String  // e.g. "monlycee.net"
+    let providerDomain: String
     let onSuccess: ([String: Any]) -> Void
     let onError: (String) -> Void
 
-    func makeUIViewController(context: Context) -> ENTWebLoginController {
-        ENTWebLoginController(
-            loginURL: loginURL,
-            providerDomain: providerDomain,
-            onSuccess: onSuccess,
-            onError: onError
-        )
-    }
+    @State private var isLoggedIn = false
+    @State private var isFetching = false
+    @StateObject private var webViewHolder = WebViewHolder()
 
-    func updateUIViewController(_ uiViewController: ENTWebLoginController, context: Context) {}
-}
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            ENTWebViewWrapper(
+                loginURL: loginURL,
+                providerDomain: providerDomain,
+                onWebViewReady: { webViewHolder.webView = $0 },
+                onLoginDetected: { isLoggedIn = true }
+            )
 
-class ENTWebLoginController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
-    private let loginURL: URL
-    private let providerDomain: String
-    private let onSuccess: ([String: Any]) -> Void
-    private let onError: (String) -> Void
-    private var webView: WKWebView!
-    private var hasCompleted = false
-    private var urlObservation: NSKeyValueObservation?
+            if isLoggedIn && !isFetching {
+                Button {
+                    fetchChildren()
+                } label: {
+                    Text("Continuer")
+                        .font(NotoTheme.Typography.headline)
+                        .foregroundStyle(NotoTheme.Colors.shadow)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, NotoTheme.Spacing.md)
+                        .background(NotoTheme.Colors.brand)
+                        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.md))
+                }
+                .padding(NotoTheme.Spacing.lg)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
 
-    init(loginURL: URL, providerDomain: String, onSuccess: @escaping ([String: Any]) -> Void, onError: @escaping (String) -> Void) {
-        self.loginURL = loginURL
-        self.providerDomain = providerDomain
-        self.onSuccess = onSuccess
-        self.onError = onError
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
-        config.userContentController.add(self, name: "notoCallback")
-
-        webView = WKWebView(frame: view.bounds, configuration: config)
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        webView.navigationDelegate = self
-        view.addSubview(webView)
-
-        urlObservation = webView.observe(\.url, options: .new) { [weak self] webView, _ in
-            guard let self, !self.hasCompleted else { return }
-            let url = webView.url?.absoluteString ?? ""
-            #if DEBUG
-            NSLog("[noto] WebView URL: \(url)")
-            #endif
-            self.checkIfLoggedIn(url: url)
+            if isFetching {
+                VStack(spacing: NotoTheme.Spacing.md) {
+                    ProgressView()
+                    Text("Récupération des données…")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(NotoTheme.Colors.shadow.opacity(0.8))
+            }
         }
-
-        webView.load(URLRequest(url: loginURL))
+        .animation(.easeInOut, value: isLoggedIn)
     }
 
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        // Break retain cycle: WKUserContentController → self
-        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "notoCallback")
-    }
-
-    deinit {
-        urlObservation?.invalidate()
-    }
-
-    // MARK: - WKScriptMessageHandler
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "notoCallback", !hasCompleted else { return }
-
-        if let body = message.body as? [String: Any] {
-            hasCompleted = true
-            transferCookiesAndComplete(json: body)
-        } else if let errorStr = message.body as? String {
-            hasCompleted = true
-            DispatchQueue.main.async { self.onError(errorStr) }
+    private func fetchChildren() {
+        guard let webView = webViewHolder.webView else {
+            onError("WebView non disponible")
+            return
         }
-    }
+        isFetching = true
 
-    // MARK: - WKNavigationDelegate
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        checkIfLoggedIn(url: webView.url?.absoluteString ?? "")
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        guard !hasCompleted else { return }
-        hasCompleted = true
-        onError(error.localizedDescription)
-    }
-
-    // MARK: - Login detection
-
-    private func checkIfLoggedIn(url: String) {
-        guard !hasCompleted else { return }
-
-        let isOnENT = url.contains(providerDomain)
-        let isOnAuth = url.contains("/auth/") || url.contains("openid-connect") ||
-                       url.contains("/realms/") || url.contains("cas/login") ||
-                       url.contains("/oauth2/callback")
-
-        guard isOnENT && !isOnAuth else { return }
-
-        hasCompleted = true
-
-        // Build API URL safely — no string interpolation into JS
-        let apiBase = "https://\(providerDomain.hasPrefix("psn.") ? providerDomain : "psn.\(providerDomain)")"
-
+        // MonLycée's psn.monlycee.net is behind an OAuth2 proxy that serves the SPA for all paths.
+        // Try multiple approaches to find user/children data:
+        // 1. Try /userbook/api/person (standard ENTCore)
+        // 2. Try extracting user info from the SPA's JS context (window.__session, etc.)
+        // 3. Scrape the greeting text ("Bonjour Julien!")
         webView.callAsyncJavaScript(
             """
-            let response = await fetch(apiURL, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-            let text = await response.text();
-            try { return JSON.parse(text); }
-            catch(e) { return { error: text.substring(0, 200) }; }
+            // Try ENTCore API endpoints
+            async function tryFetch(url) {
+                try {
+                    let r = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+                    let text = await r.text();
+                    if (r.ok && !text.startsWith('<!DOCTYPE')) return { url: url, status: r.status, body: text.substring(0, 3000) };
+                } catch(e) {}
+                return null;
+            }
+
+            let base = location.origin;
+            let endpoints = [
+                base + '/userbook/api/person',
+                base + '/directory/user/find',
+                base + '/auth/oauth2/userinfo',
+                base + '/conversation/count/INBOX'
+            ];
+
+            let results = {};
+            for (let ep of endpoints) {
+                let r = await tryFetch(ep);
+                if (r) results[ep] = r;
+            }
+
+            // Also try to extract user data from the page's JS context
+            let sessionData = null;
+            try { sessionData = JSON.stringify(window.__session || window.__USER__ || window.user || null); } catch(e) {}
+
+            // Extract greeting text
+            let greeting = '';
+            let greetEl = document.querySelector('.greeting, [class*=greeting], [class*=user-name], h1, h2');
+            if (greetEl) greeting = greetEl.textContent.trim();
+            // Try broader search
+            if (!greeting) {
+                let all = document.querySelectorAll('*');
+                for (let el of all) {
+                    if (el.textContent.includes('Bonjour') && el.children.length < 3) {
+                        greeting = el.textContent.trim();
+                        break;
+                    }
+                }
+            }
+
+            return { endpoints: results, session: sessionData, greeting: greeting, url: location.href };
             """,
-            arguments: ["apiURL": "\(apiBase)/userbook/api/person"],
+            arguments: [:],
             in: nil,
             in: .page
-        ) { [weak self] result in
-            guard let self else { return }
+        ) { [self] result in
             switch result {
             case .success(let value):
-                if let dict = value as? [String: Any] {
-                    self.transferCookiesAndComplete(json: dict)
-                } else {
-                    DispatchQueue.main.async { self.onError("Réponse inattendue du serveur") }
+                guard let raw = value as? [String: Any] else {
+                    DispatchQueue.main.async { self.onError("Réponse inattendue") }
+                    return
                 }
-            case .failure(let error):
+
                 #if DEBUG
-                NSLog("[noto] callAsyncJavaScript failed: \(error)")
+                NSLog("[noto] MonLycée probe: \(raw)")
                 #endif
-                DispatchQueue.main.async { self.onError("Erreur de récupération des données : \(error.localizedDescription)") }
+
+                // Check if any endpoint returned JSON
+                if let endpoints = raw["endpoints"] as? [String: Any] {
+                    for (_, epResult) in endpoints {
+                        guard let ep = epResult as? [String: Any],
+                              let body = ep["body"] as? String,
+                              let data = body.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) else { continue }
+
+                        // Found JSON! Transfer cookies and return
+                        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                            ENTClient.importCookies(cookies)
+                            DispatchQueue.main.async {
+                                if let dict = json as? [String: Any] {
+                                    self.onSuccess(dict)
+                                } else if let array = json as? [[String: Any]] {
+                                    self.onSuccess(["result": array])
+                                }
+                            }
+                        }
+                        return
+                    }
+                }
+
+                // No API worked — try to create child from greeting text
+                let greeting = raw["greeting"] as? String ?? ""
+                let currentURL = raw["url"] as? String ?? ""
+                let sessionData = raw["session"] as? String
+
+                if !greeting.isEmpty {
+                    // "Bonjour Julien !" → extract name
+                    let name = greeting
+                        .replacingOccurrences(of: "Bonjour ", with: "")
+                        .replacingOccurrences(of: " !", with: "")
+                        .replacingOccurrences(of: "!", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+
+                    webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                        ENTClient.importCookies(cookies)
+                        // Return with the parent name — we'll create child manually
+                        DispatchQueue.main.async {
+                            self.onSuccess(["_parentName": name, "_greeting": greeting, "_url": currentURL, "_session": sessionData ?? ""])
+                        }
+                    }
+                } else {
+                    let endpointInfo = (raw["endpoints"] as? [String: Any])?.keys.joined(separator: ", ") ?? "none"
+                    DispatchQueue.main.async {
+                        self.onError("Aucune API n'a répondu en JSON. URL: \(currentURL)\nEndpoints testés: \(endpointInfo)\nSession: \(sessionData ?? "null")")
+                    }
+                }
+
+            case .failure(let error):
+                DispatchQueue.main.async { self.onError("Erreur JS : \(error.localizedDescription)") }
             }
         }
     }
+}
 
-    private func transferCookiesAndComplete(json: [String: Any]) {
-        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-            ENTClient.importCookies(cookies)
-            DispatchQueue.main.async { self.onSuccess(json) }
+// MARK: - WKWebView wrapper
+
+private class WebViewHolder: ObservableObject {
+    var webView: WKWebView?
+}
+
+private struct ENTWebViewWrapper: UIViewRepresentable {
+    let loginURL: URL
+    let providerDomain: String
+    let onWebViewReady: (WKWebView) -> Void
+    let onLoginDetected: () -> Void
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.navigationDelegate = context.coordinator
+        onWebViewReady(wv)
+        wv.load(URLRequest(url: loginURL))
+        return wv
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(providerDomain: providerDomain, onLoginDetected: onLoginDetected)
+    }
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        let providerDomain: String
+        let onLoginDetected: () -> Void
+        private var detected = false
+
+        init(providerDomain: String, onLoginDetected: @escaping () -> Void) {
+            self.providerDomain = providerDomain
+            self.onLoginDetected = onLoginDetected
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard !detected else { return }
+            let url = webView.url?.absoluteString ?? ""
+            #if DEBUG
+            NSLog("[noto] WebView didFinish: \(url)")
+            #endif
+
+            // Detect: on the ENT domain, not on Keycloak, not the initial login redirect
+            let isOnKeycloak = url.contains("auth.monlycee.net") || url.contains("/realms/")
+            let isOnENT = url.contains(providerDomain)
+            if isOnENT && !isOnKeycloak {
+                detected = true
+                DispatchQueue.main.async { self.onLoginDetected() }
+            }
         }
     }
 }
