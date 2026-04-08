@@ -132,6 +132,51 @@ final class PawnoteBridge {
         )
     }
 
+    /// Login via ENT/CAS SSO. Requires CAS cookies to already be in HTTPCookieStorage.shared.
+    /// Call `PawnoteBridge.transferCookies(_:for:)` before this method.
+    func loginENT(url: String, deviceUUID: String) async throws -> PronoteRefreshToken {
+        context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
+        session = context.objectForKeyedSubscript("_pawnoteSession")
+
+        let result = try await callAsync("""
+            PawnoteBridge.loginENT(
+                \(sessionRef),
+                "\(url.jsEscaped)",
+                "\(deviceUUID.jsEscaped)"
+            )
+        """)
+
+        guard let dict = result.toDictionary() as? [String: Any] else {
+            throw PronoteError.invalidResponse("Invalid ENT login response")
+        }
+
+        return PronoteRefreshToken(
+            url: dict["url"] as? String ?? "",
+            token: dict["token"] as? String ?? "",
+            username: dict["username"] as? String ?? "",
+            kind: .parent
+        )
+    }
+
+    /// Transfer cookies from WKWebView to HTTPCookieStorage so pawnote's fetch polyfill can use them.
+    @MainActor
+    static func transferCookies(_ cookies: [HTTPCookie], for url: URL) {
+        let storage = HTTPCookieStorage.shared
+        for cookie in cookies {
+            // Only transfer cookies relevant to the Pronote domain
+            if let host = url.host, cookie.domain.contains(host) || host.contains(cookie.domain.replacingOccurrences(of: ".", with: "", options: .anchored)) {
+                storage.setCookie(cookie)
+            }
+        }
+        // Also transfer CAS cookies (needed for SSO redirect)
+        for cookie in cookies {
+            if cookie.domain.contains("monlycee") || cookie.domain.contains("index-education") || cookie.domain.contains("pronote") {
+                storage.setCookie(cookie)
+            }
+        }
+        NSLog("[noto] Transferred %d cookies for %@", cookies.count, url.host ?? "unknown")
+    }
+
     func loginWithToken(url: String, username: String, token: String, deviceUUID: String) async throws -> PronoteRefreshToken {
         context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
         session = context.objectForKeyedSubscript("_pawnoteSession")
@@ -338,7 +383,13 @@ final class PawnoteBridge {
                         request.setValue(value, forHTTPHeaderField: key)
                     }
                 }
-                request.setValue("appliMobile=1", forHTTPHeaderField: "Cookie")
+                // Merge appliMobile cookie with any stored cookies (e.g. CAS session)
+                var cookieParts = ["appliMobile=1"]
+                let storedCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
+                for cookie in storedCookies {
+                    cookieParts.append("\(cookie.name)=\(cookie.value)")
+                }
+                request.setValue(cookieParts.joined(separator: "; "), forHTTPHeaderField: "Cookie")
 
                 // Set body
                 if let content = options.objectForKeyedSubscript("content")?.toString(), content != "undefined" {

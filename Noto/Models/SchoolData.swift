@@ -95,8 +95,9 @@ final class Message {
     var source: MessageSource
     var kind: MessageKind
     var read: Bool
+    var link: String?
 
-    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation) {
+    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation, link: String? = nil) {
         self.sender = sender
         self.subject = subject
         self.body = body
@@ -104,5 +105,6 @@ final class Message {
         self.source = source
         self.kind = kind
         self.read = false
+        self.link = link
     }
 }

@@ -90,6 +90,29 @@ struct ENTWebLoginView: View {
                 pronoteService = services.find(s => s.title === 'pronote' || (s.link || '').includes('pronote'));
             }
 
+            // Zimbra mail: get CSRF token from cookie, then fetch headers
+            let zimbraMail = null;
+            let csrfToken = (document.cookie.match(/CSRF_TOKEN=([^;]+)/) || [])[1] || '';
+            if (csrfToken) {
+                try {
+                    let mailBase = 'https://apis-mail.monlycee.net/webmail';
+                    // First create a token if needed
+                    await fetch(mailBase + '/xml/createToken.json', {
+                        method: 'POST', credentials: 'include',
+                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+                    });
+                    // Fetch mail headers
+                    let mailR = await fetch(mailBase + '/xml/getMailHeaderList.json', {
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+                    });
+                    if (mailR.ok) {
+                        let ct = mailR.headers.get('content-type') || '';
+                        if (ct.includes('json')) zimbraMail = await mailR.json();
+                    }
+                } catch(e) {}
+            }
+
             // Extract greeting
             let greeting = '';
             for (let el of document.querySelectorAll('*')) {
@@ -99,7 +122,7 @@ struct ENTWebLoginView: View {
                 }
             }
 
-            return { profile, services, logbook, news, pronoteService, greeting };
+            return { profile, services, logbook, news, pronoteService, greeting, zimbraMail, csrfToken };
             """,
             arguments: [:],
             in: nil,

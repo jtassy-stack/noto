@@ -20,11 +20,18 @@ final class MonLyceeSyncService {
         }
         syncLogbook(logbook, for: child)
 
-        // Also sync news
+        // Sync news
         if let newsStr = UserDefaults.standard.string(forKey: "monlycee_news"),
            let newsData = newsStr.data(using: .utf8),
            let news = try? JSONSerialization.jsonObject(with: newsData) as? [[String: Any]] {
             syncNews(news, for: child)
+        }
+
+        // Sync Zimbra mail
+        if let mailStr = UserDefaults.standard.string(forKey: "monlycee_zimbra_mail"),
+           let mailData = mailStr.data(using: .utf8),
+           let mail = try? JSONSerialization.jsonObject(with: mailData) as? [String: Any] {
+            syncZimbraMail(mail, for: child)
         }
 
         try? modelContext.save()
@@ -115,6 +122,7 @@ final class MonLyceeSyncService {
             let title = entry["title"] as? String ?? ""
             let author = entry["author"] as? String ?? ""
             let dateStr = entry["date"] as? String ?? ""
+            let link = entry["link"] as? String
             let date = parseISO(dateStr) ?? .now
 
             // Check if already exists (avoid duplicates)
@@ -127,9 +135,66 @@ final class MonLyceeSyncService {
                 body: "",
                 date: date,
                 source: .ent,
-                kind: .conversation
+                kind: .conversation,
+                link: link
             )
             msg.read = true  // News are read-only announcements
+            msg.child = child
+            modelContext.insert(msg)
+        }
+    }
+
+    // MARK: - Zimbra Mail
+
+    private func syncZimbraMail(_ mail: [String: Any], for child: Child) {
+        // Zimbra format: response.data.mailHeaderList or response.data
+        let headers: [[String: Any]]
+        if let response = mail["response"] as? [String: Any],
+           let data = response["data"] as? [String: Any] {
+            if let list = data["mailHeaderList"] as? [[String: Any]] {
+                headers = list
+            } else if let list = data["mails"] as? [[String: Any]] {
+                headers = list
+            } else {
+                headers = []
+            }
+        } else if let list = mail["mailHeaderList"] as? [[String: Any]] {
+            headers = list
+        } else {
+            #if DEBUG
+            NSLog("[noto] Zimbra mail: unexpected format, keys=\(mail.keys.sorted())")
+            #endif
+            return
+        }
+
+        #if DEBUG
+        NSLog("[noto] Zimbra mail: \(headers.count) messages")
+        #endif
+
+        for entry in headers {
+            let subject = entry["subject"] as? String ?? "(sans objet)"
+            let from = entry["from"] as? String
+                ?? (entry["displayNames"] as? [[String: Any]])?.first?["name"] as? String
+                ?? "?"
+            let unread = entry["unread"] as? Bool ?? true
+            let dateMs = entry["date"] as? Double ?? 0
+            let date = dateMs > 0 ? Date(timeIntervalSince1970: dateMs / 1000) : .now
+
+            // Skip if already exists
+            let exists = child.messages.contains {
+                $0.subject == subject && $0.sender == from && $0.source == .ent
+            }
+            guard !exists else { continue }
+
+            let msg = Message(
+                sender: from,
+                subject: subject,
+                body: "",
+                date: date,
+                source: .ent,
+                kind: .conversation
+            )
+            msg.read = !unread
             msg.child = child
             modelContext.insert(msg)
         }

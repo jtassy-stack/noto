@@ -140,6 +140,28 @@ globalThis.PawnoteBridge = {
     }));
   },
 
+  // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth.
+  // NOTE: This source version uses loginCredentials as a placeholder.
+  // The actual pawnote-bundle.js has a hand-patched version that calls
+  // Identification with pourENT:true (useCAS:true) for proper CAS auth.
+  // If rebuilding the bundle, the hand-patched loginENT in pawnote-bundle.js
+  // must be re-applied (see the block above fetchDiscussions in the bundle).
+  loginENT: async (session, url, deviceUUID) => {
+    const refresh = await pronote.loginCredentials(session, {
+      url,
+      kind: pronote.AccountKind.PARENT,
+      username: "",
+      password: "",
+      deviceUUID,
+    });
+    return {
+      token: refresh.token,
+      username: refresh.username,
+      url: refresh.url,
+      kind: refresh.kind,
+    };
+  },
+
   // Fetch discussions
   fetchDiscussions: async (session) => {
     if (!session.user.authorizations.canReadDiscussions) return [];

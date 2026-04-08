@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import SafariServices
 
 struct SchoolView: View {
     let selectedChild: Child?
@@ -642,9 +643,16 @@ private struct MessageRow: View {
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                 }
-                Text(msg.sender)
-                    .font(NotoTheme.Typography.headline)
-                    .fontWeight(msg.read ? .regular : .semibold)
+                HStack {
+                    Text(msg.sender)
+                        .font(NotoTheme.Typography.headline)
+                        .fontWeight(msg.read ? .regular : .semibold)
+                    if msg.link != nil {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                }
                 Text(msg.subject)
                     .font(NotoTheme.Typography.body)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
@@ -658,6 +666,7 @@ private struct MessageRow: View {
 private struct MessageDetailView: View {
     let msg: Message
     @Environment(\.dismiss) private var dismiss
+    @State private var showSafari = false
 
     var body: some View {
         NavigationStack {
@@ -676,9 +685,33 @@ private struct MessageDetailView: View {
 
                     Divider()
 
-                    Text(msg.body)
-                        .font(NotoTheme.Typography.body)
-                        .textSelection(.enabled)
+                    if !msg.body.isEmpty {
+                        Text(msg.body)
+                            .font(NotoTheme.Typography.body)
+                            .textSelection(.enabled)
+                    } else if let link = msg.link, let url = URL(string: link) {
+                        Button {
+                            showSafari = true
+                        } label: {
+                            Label("Voir le message", systemImage: "safari")
+                                .font(NotoTheme.Typography.body)
+                                .frame(maxWidth: .infinity)
+                                .padding(NotoTheme.Spacing.md)
+                                .background(NotoTheme.Colors.brand.opacity(0.15))
+                                .foregroundStyle(NotoTheme.Colors.brand)
+                                .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                        }
+                        .sheet(isPresented: $showSafari) {
+                            SafariView(url: url)
+                                .ignoresSafeArea()
+                        }
+                    } else {
+                        Text("Contenu non disponible")
+                            .font(NotoTheme.Typography.body)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, NotoTheme.Spacing.lg)
+                    }
                 }
                 .padding(NotoTheme.Spacing.md)
             }
@@ -691,6 +724,18 @@ private struct MessageDetailView: View {
             }
         }
     }
+}
+
+// MARK: - Safari View
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
 
 // MARK: - Child Tag

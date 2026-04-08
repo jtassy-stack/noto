@@ -22793,6 +22793,62 @@
         themes: a2.themes.map((t) => t.name ?? t)
       }));
     },
+    // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth
+    // Performs Identification with pourENT:true, then Authentification
+    loginENT: async (session, url, deviceUUID) => {
+      // Reuse pawnote internals (minified names from the bundle above)
+      // ee = fetchSessionPage, he = identification, fe = authentification
+      // me = fonctionParametres, Pe = deriveKey, Se = solveChallenge
+      // Ie = configureSession, Le = hasDoubleAuth, Te = finalizeLogin, Ve = handleDoubleAuth
+      const baseUrl = a(url);
+
+      // Step 1: Fetch mobile.parent.html with CAS cookies
+      // The __nativeFetch polyfill will include cookies from HTTPCookieStorage
+      const { information, version } = await ee(
+        { base: baseUrl, kind: V.PARENT, cookies: [], params: { ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" } },
+        session.fetcher
+      );
+      session.information = information;
+      session.instance = { version };
+      session.instance = await me(session);
+
+      // Step 2: Identification with pourENT:true (CAS auth)
+      const identData = await he(session, {
+        username: "",  // CAS provides the identity
+        deviceUUID: deviceUUID,
+        requestFirstMobileAuthentication: true,
+        reuseMobileAuthentication: false,
+        requestFromQRCode: false,
+        useCAS: true,  // This sets pourENT:true in the request
+      });
+
+      // Step 3: Solve challenge — with CAS, use empty password
+      // Pronote returns challenge encrypted with a key derived from the CAS session
+      // With pourENT:true, the alea+empty password should work
+      const username = identData.login || "";
+      const opts = { username, password: "" };
+      Ne(opts, "password", identData);
+      const authKey = Pe(identData, opts.username, opts.password);
+      const solvedChallenge = Se(session, identData, authKey);
+      const authData = await fe(session, solvedChallenge);
+
+      // Step 4: Configure session
+      Ie(session, authData, authKey);
+
+      // Step 5: Check for double auth or return token
+      if (Le(authData)) {
+        const result = await Ve(session, {
+          token: authData.jetonConnexionAppliMobile,
+          username: identData.login || username,
+          deviceUUID: deviceUUID,
+        });
+        return result;
+      }
+
+      const result = await Te(session, authData, identData, username);
+      return result;
+    },
+
     // Fetch discussions
     fetchDiscussions: async (session) => {
       if (!session.user.authorizations.canReadDiscussions) return [];

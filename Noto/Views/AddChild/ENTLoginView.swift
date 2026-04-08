@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WebKit
 
 struct ENTLoginView: View {
     let provider: ENTProvider
@@ -154,19 +155,22 @@ struct ENTLoginView: View {
         }
         #endif
 
-        // Store logbook + news for ENT data sync
-        if let logbook = json["logbook"] {
-            if let data = try? JSONSerialization.data(withJSONObject: logbook),
+        // Store logbook + news + mail for ENT data sync
+        for (key, udKey) in [("logbook", "monlycee_logbook"), ("news", "monlycee_news"), ("zimbraMail", "monlycee_zimbra_mail")] {
+            if let obj = json[key], !(obj is NSNull),
+               let data = try? JSONSerialization.data(withJSONObject: obj),
                let str = String(data: data, encoding: .utf8) {
-                UserDefaults.standard.set(str, forKey: "monlycee_logbook")
+                UserDefaults.standard.set(str, forKey: udKey)
             }
         }
-        if let news = json["news"] {
-            if let data = try? JSONSerialization.data(withJSONObject: news),
-               let str = String(data: data, encoding: .utf8) {
-                UserDefaults.standard.set(str, forKey: "monlycee_news")
-            }
+
+        #if DEBUG
+        if let mail = json["zimbraMail"] as? [String: Any] {
+            NSLog("[noto] Zimbra mail response keys: \(mail.keys.sorted())")
+        } else {
+            NSLog("[noto] Zimbra mail: nil (CSRF=\(json["csrfToken"] ?? "missing"))")
         }
+        #endif
 
         NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(hasPronote)")
 
@@ -199,10 +203,13 @@ struct ENTLoginView: View {
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
 
-        // If Pronote SSO succeeded, store the HTML for PawnoteBridge to parse later
+        // If Pronote SSO succeeded, store the HTML and attempt to get a refresh token
         if hasPronote, let html = pronoteHTML, let url = pronoteURL {
             UserDefaults.standard.set(html, forKey: "monlycee_pronote_html")
             UserDefaults.standard.set(url, forKey: "monlycee_pronote_url")
+
+            // Attempt to establish a pawnote session via CAS cookies
+            await establishPronoteSession(pronoteURL: url)
         }
 
         // Immediately sync data from the logbook we captured
@@ -214,6 +221,70 @@ struct ENTLoginView: View {
         dismiss()
 
         isLoading = false
+    }
+
+    // MARK: - Pronote Session from ENT SSO
+
+    /// After ENT SSO succeeds and we have Pronote HTML, try to get a pawnote refresh token.
+    /// This enables PronoteAutoConnect for future app launches.
+    @MainActor
+    private func establishPronoteSession(pronoteURL: String) async {
+        guard let url = URL(string: pronoteURL) else { return }
+
+        // Transfer WKWebView cookies to HTTPCookieStorage so pawnote's fetch can use them
+        let cookies = await withCheckedContinuation { continuation in
+            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+                continuation.resume(returning: cookies)
+            }
+        }
+        PawnoteBridge.transferCookies(cookies, for: url)
+
+        let deviceUUID = getOrCreateDeviceUUID()
+
+        do {
+            let bridge = try PawnoteBridge()
+            let refreshToken = try await bridge.loginENT(url: pronoteURL, deviceUUID: deviceUUID)
+
+            // Store refresh token in Keychain
+            if let tokenData = try? JSONEncoder().encode(refreshToken) {
+                try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
+
+                // Track username for auto-reconnect
+                var knownUsernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
+                if !knownUsernames.contains(refreshToken.username) {
+                    knownUsernames.append(refreshToken.username)
+                    UserDefaults.standard.set(knownUsernames, forKey: "pronote_known_usernames")
+                }
+            }
+
+            // Set bridge for immediate data sync
+            PronoteService.shared.setBridge(bridge)
+
+            // Sync school data for all Pronote children
+            guard let family else { return }
+            let syncService = PronoteSyncService(modelContext: modelContext)
+            let pronoteChildren = bridge.getChildren()
+            for (index, child) in family.children.enumerated() where child.schoolType == .pronote {
+                bridge.setActiveChild(index: min(index, pronoteChildren.count - 1))
+                await syncService.sync(child: child, bridge: bridge, childIndex: index)
+            }
+
+            NSLog("[noto] ENT→Pronote session established, username=%@", refreshToken.username)
+        } catch {
+            // CAS→Pronote auth failed — not fatal, ENT data still works
+            NSLog("[noto] ENT→Pronote session failed: %@", error.localizedDescription)
+            NSLog("[noto] Pronote sync will not be available until next CAS login")
+        }
+    }
+
+    private func getOrCreateDeviceUUID() -> String {
+        if let data = try? KeychainService.load(key: "device_uuid"),
+           let uuid = String(data: data, encoding: .utf8) {
+            return uuid
+        }
+        let uuid = UUID().uuidString
+        try? KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
+        return uuid
     }
 
     // MARK: - Form Login (PCN)
