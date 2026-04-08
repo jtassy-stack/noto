@@ -120,7 +120,8 @@ final class CurriculumService {
         }
     }
 
-    /// Convert app grade (e.g. "3e", "6e") to celyn.io API format ("3eme", "6eme").
+    /// Convert app grade to celyn.io API format.
+    /// Collège: "3e" → "3eme". Lycée: "2nde", "1re" → "1ere", "Tle" → "terminale". Primaire: passed through.
     func apiGrade(for grade: String) -> String {
         let g = grade.lowercased().trimmingCharacters(in: .whitespaces)
         // Already in API format
