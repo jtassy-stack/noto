@@ -32,7 +32,7 @@
 - **pawnote-bridge** — `@niicojs/pawnote` bundled as `pawnote-bundle.js` (763 KB, esbuild), executed via JavaScriptCore (`PawnoteBridge.swift`)
 - **Core ML on-device** — `TrendAnalyzer` (linear regression), `InsightEngine`
 - **Apple FoundationModels** — iOS 26+ with graceful fallback to rule-based text generation
-- **culture-api** — `https://celyn.io`, bearer token stored in Keychain, client in `Services/CultureAPI/`
+- **culture-api** — `https://celyn.io`, `x-api-key` header auth, client in `Services/CultureAPI/`; supports `?grade=` filtering with `3eme`-style grade format
 - **KeychainService** — all credentials (Pronote refresh token, culture-api token, etc.)
 - **CIDetector** — QR code scanning for Pronote login (photo picker → CIDetector, no live camera required)
 
@@ -51,7 +51,9 @@
 - `PronoteSyncService` — orchestrates sync via PawnoteBridge, writes to SwiftData
 - `BriefingEngine` — priority-scored briefing items + LLM context string
 - `TrendAnalyzer` — Core ML linear regression on grade history
-- `CultureAPIClient` — REST client for `https://celyn.io`, bearer from Keychain
+- `CultureAPIClient` — REST client for `https://celyn.io` with grade-filtered thematic search
+- `CurriculumService` — loads bundled `curriculum.json`, maps grades to API format (`3e` → `3eme`), extracts BO culture topics
+- `CurriculumMatcher` — matches homework/chapter text to curriculum keywords for culture-api queries
 
 ### View Structure (`Noto/Views/`)
 - `RootView` — authentication gate (Keychain check → onboarding or main)
@@ -60,7 +62,7 @@
 - `Home/` — `HomeView`: briefing dashboard, period picker, AI summary
 - `School/` — `SchoolView` with sub-tabs: Notes · EDT · Devoirs · Messages
 - `Insights/` — `InsightsView`: trends, strengths/weaknesses, weighted averages
-- `Discover/` — `DiscoverView`: culture-api recommendations
+- `Discover/` — `DiscoverView`: grade-filtered culture-api recommendations with curriculum tag badges
 - `AddChild/` — child onboarding flow (QR scan + Keychain storage)
 
 ## Pronote Protocol
