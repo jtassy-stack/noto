@@ -197,11 +197,7 @@ struct DiscoverView: View {
 
         let uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).shuffled().prefix(6)
         // Build API-format grade for curriculum tag filtering
-        let apiGrade: String? = if let refChild = selectedChild ?? children.first {
-            curriculumService.apiGrade(for: refChild.grade)
-        } else {
-            nil
-        }
+        let apiGrade = (selectedChild ?? children.first).map { curriculumService.apiGrade(for: $0.grade) }
         logger.info("BO topics for \(children.first?.grade ?? "?") (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
         guard !uniqueTopics.isEmpty else {

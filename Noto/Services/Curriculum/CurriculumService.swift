@@ -129,12 +129,12 @@ final class CurriculumService {
         if let match = g.wholeMatch(of: /(\d)e/) {
             return "\(match.1)eme"
         }
-        // Lycée: "2nde" → "2nde", "1re"/"1ère" → "1ere", "Tle" → "terminale"
+        // Lycée
         if g == "2nde" || g == "seconde" { return "2nde" }
-        if g.hasPrefix("1") { return "1ere" }
-        if g.hasPrefix("t") { return "terminale" }
+        if g == "1re" || g == "1ère" || g == "1ere" || g == "première" { return "1ere" }
+        if g == "tle" || g == "terminale" { return "terminale" }
         // Primaire: CP, CE1, CE2, CM1, CM2 — already correct
-        return grade
+        return g
     }
 
     /// Get all available levels.
