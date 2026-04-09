@@ -201,7 +201,7 @@ struct DiscoverView: View {
             }
 
             let apiGrade: String? = {
-                guard child.level == .college || child.level == .lycee else { return nil }
+                guard child.level != .maternelle else { return nil }
                 return curriculumService.apiGrade(for: child.grade)
             }()
             logger.info("BO topics for \(child.firstName) / \(child.grade) (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
