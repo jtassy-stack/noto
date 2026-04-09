@@ -1,31 +1,101 @@
-name: TestFlight
+name: CI / TestFlight
 
 on:
   push:
     branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
-  group: testflight-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SCHEME: Noto
+
 jobs:
-  build-and-upload:
+  # ──────────────────────────────────────────────
+  # Job 1 — Build (every PR + master push)
+  # Compiles for simulator, no signing required.
+  # ──────────────────────────────────────────────
+  build:
+    name: Build (simulator)
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          echo "Using $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH"
+          xcodebuild -version
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: homebrew-xcodegen-${{ runner.os }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Noto.xcodeproj \
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath SourcePackages
+
+      - name: Build for simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Noto.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -clonedSourcePackagesDirPath SourcePackages \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty || true
+
+  # ──────────────────────────────────────────────
+  # Job 2 — Archive + TestFlight (master only)
+  # Requires build to pass first.
+  # ──────────────────────────────────────────────
+  deploy:
+    name: Archive & Upload to TestFlight
     runs-on: macos-15
     timeout-minutes: 40
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+
     env:
-      SCHEME: Noto
       ARCHIVE_PATH: build/Noto.xcarchive
       EXPORT_PATH: build/export
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select latest Xcode
         run: |
           XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-          echo "Using $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
 
@@ -61,8 +131,9 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+          # BSD base64 on macOS does not support -o; use redirection
           CERT_PATH=$RUNNER_TEMP/certificate.p12
-          echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
           security import "$CERT_PATH" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 \
@@ -74,7 +145,7 @@ jobs:
 
           PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PP_DIR"
-          echo -n "$PP_NOTO" | base64 --decode > "$PP_DIR/noto.mobileprovision"
+          printf '%s' "$PP_NOTO" | base64 --decode > "$PP_DIR/noto.mobileprovision"
 
       - name: Resolve Swift packages
         run: |
@@ -103,7 +174,7 @@ jobs:
           API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
         run: |
           mkdir -p ~/.private_keys
-          echo -n "$API_KEY_BASE64" | base64 --decode \
+          printf '%s' "$API_KEY_BASE64" | base64 --decode \
             > ~/.private_keys/AuthKey_${API_KEY_ID}.p8
 
       - name: Export and upload to TestFlight
