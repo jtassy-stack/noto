@@ -11,6 +11,7 @@ struct DiscoverView: View {
     @State private var recos: [CultureSearchResult] = []
     @State private var isLoading = false
     @State private var hasLoaded = false
+    @State private var loadError: String? = nil
     @State private var selectedReco: CultureSearchResult? = nil
     @State private var showFavoritesOnly = false
     @StateObject private var locationService = LocationService()
@@ -92,6 +93,12 @@ struct DiscoverView: View {
             Group {
                 if isLoading {
                     ProgressView("Chargement des recommandations…")
+                } else if let error = loadError, recos.isEmpty {
+                    ContentUnavailableView(
+                        "Impossible de charger",
+                        systemImage: "wifi.exclamationmark",
+                        description: Text(error)
+                    )
                 } else if recos.isEmpty && hasLoaded {
                     ContentUnavailableView(
                         "Pas de recommandations",
@@ -160,6 +167,7 @@ struct DiscoverView: View {
 
     private func loadRecos() async {
         isLoading = true
+        loadError = nil
         let client = CultureAPIClient()
         let curriculumService = CurriculumService()
         await curriculumService.load()
@@ -218,6 +226,9 @@ struct DiscoverView: View {
                 perChildResults.append(results.filter { $0.score.map { $0 >= 0.3 } ?? true })
             } catch {
                 logger.error("Culture API error for \(child.firstName): \(error)")
+                if loadError == nil {
+                    loadError = "Impossible de charger les recommandations pour \(child.firstName). Vérifiez votre connexion et tirez pour réessayer."
+                }
             }
         }
 

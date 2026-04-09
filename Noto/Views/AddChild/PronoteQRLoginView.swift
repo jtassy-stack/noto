@@ -3,6 +3,9 @@ import SwiftData
 import AVFoundation
 import PhotosUI
 import CoreImage
+import OSLog
+
+private let logger = Logger(subsystem: "com.pmf.noto", category: "PronoteQR")
 
 /// Pronote QR Code login flow:
 /// 1. Scan QR from Pronote app (contains JSON with server URL + token)
@@ -16,7 +19,6 @@ struct PronoteQRLoginView: View {
     @State private var step: QRStep = .scan
     @State private var qrData: [String: Any]?
     @State private var pin = ""
-    @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showLiveCamera = false
@@ -81,10 +83,16 @@ struct PronoteQRLoginView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.pronote)
                 .sheet(isPresented: $showLiveCamera) {
-                    LiveCameraSheet { payload in
-                        showLiveCamera = false
-                        handleQRPayload(payload)
-                    }
+                    LiveCameraSheet(
+                        onDetected: { payload in
+                            showLiveCamera = false
+                            handleQRPayload(payload)
+                        },
+                        onError: { message in
+                            showLiveCamera = false
+                            errorMessage = message
+                        }
+                    )
                 }
 
                 PhotosPicker(
@@ -225,15 +233,16 @@ struct PronoteQRLoginView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.pronote)
-                .onAppear {
-                    // Auto-return home after 2 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        dismissToHome()
-                    }
-                }
             }
             .padding(.horizontal, NotoTheme.Spacing.xl)
             .padding(.bottom, NotoTheme.Spacing.xl)
+        }
+        // Auto-dismiss after 2s using .task so cancellation is automatic
+        // if the user taps "Ajouter un autre enfant" (step changes, view disappears)
+        .task {
+            try? await Task.sleep(for: .seconds(2))
+            guard case .success = step else { return }
+            dismissToHome()
         }
     }
 
@@ -257,7 +266,6 @@ struct PronoteQRLoginView: View {
         guard let item else { return }
         errorMessage = nil
 
-        // Load image data from PhotosPicker
         let cgImage: CGImage
         do {
             guard let data = try await item.loadTransferable(type: PhotoQRImage.self) else {
@@ -270,16 +278,13 @@ struct PronoteQRLoginView: View {
             return
         }
 
-        // Use CIDetector (works on simulator, no Neural Engine needed)
         let ciImage = CIImage(cgImage: cgImage)
         guard let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]) else {
             errorMessage = "Impossible d'initialiser le détecteur QR."
             return
         }
 
-        let features = detector.features(in: ciImage)
-        let qrFeatures = features.compactMap { $0 as? CIQRCodeFeature }
-
+        let qrFeatures = detector.features(in: ciImage).compactMap { $0 as? CIQRCodeFeature }
         guard let payload = qrFeatures.first?.messageString else {
             errorMessage = "Aucun QR code trouvé dans cette image. Assurez-vous que le QR code Pronote est bien visible."
             return
@@ -294,13 +299,11 @@ struct PronoteQRLoginView: View {
         guard let qrData, pin.count == 4 else { return }
 
         step = .loading
-        isLoading = true
         errorMessage = nil
 
         let deviceUUID = getOrCreateDeviceUUID()
 
         do {
-            // Use PawnoteBridge (pawnote via JavaScriptCore) for reliable Pronote protocol
             let bridge = try PawnoteBridge()
 
             let qrCopy: [String: String] = [
@@ -312,28 +315,36 @@ struct PronoteQRLoginView: View {
                 deviceUUID: deviceUUID, pin: pin, qrData: qrCopy
             )
 
-            // Store refresh token
-            if let tokenData = try? JSONEncoder().encode(refreshToken) {
-                try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
-                // Track username list for auto-reconnect
+            // Persist refresh token — failure here means session will be lost on relaunch
+            do {
+                let tokenData = try JSONEncoder().encode(refreshToken)
+                try KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
                 var knownUsernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
                 if !knownUsernames.contains(refreshToken.username) {
                     knownUsernames.append(refreshToken.username)
                     UserDefaults.standard.set(knownUsernames, forKey: "pronote_known_usernames")
                 }
+            } catch {
+                logger.error("Keychain save failed for \(refreshToken.username): \(error)")
+                errorMessage = "Connexion réussie mais impossible de sauvegarder vos identifiants. Réessayez."
+                step = .scan
+                return
             }
 
-            // Get children from pawnote session
             let pronoteChildren = bridge.getChildren()
 
-            guard let family else { return }
+            guard let family else {
+                logger.error("authenticate: no Family found in SwiftData")
+                errorMessage = "Aucun profil famille trouvé. Relancez l'application."
+                step = .scan
+                return
+            }
 
-            for (index, pc) in pronoteChildren.enumerated() {
+            for pc in pronoteChildren {
                 let nameParts = pc.name.split(separator: " ")
                 let firstName = nameParts.count > 1
                     ? String(nameParts.dropFirst().joined(separator: " "))
                     : pc.name
-
                 let child = Child(
                     firstName: firstName,
                     level: inferLevel(from: pc.className),
@@ -357,15 +368,20 @@ struct PronoteQRLoginView: View {
                 modelContext.insert(child)
             }
 
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                logger.error("SwiftData save failed: \(error)")
+                errorMessage = "Impossible de sauvegarder le profil de votre enfant : \(error.localizedDescription)"
+                step = .scan
+                return
+            }
 
-            // Sync school data with the authenticated bridge session
             let syncService = PronoteSyncService(modelContext: modelContext)
             for (index, child) in family.children.enumerated() where child.schoolType == .pronote {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
             }
 
-            // Store bridge for pull-to-refresh
             PronoteService.shared.setBridge(bridge)
 
             if let syncError = syncService.lastSyncError {
@@ -387,8 +403,6 @@ struct PronoteQRLoginView: View {
             pin = ""
             step = .pin
         }
-
-        isLoading = false
     }
 
     private func requestCameraAndScan() {
@@ -402,8 +416,12 @@ struct PronoteQRLoginView: View {
                     if granted { showLiveCamera = true }
                 }
             }
-        default:
-            errorMessage = "Autorisez l'accès à la caméra dans Réglages > nōto."
+        case .denied:
+            errorMessage = "L'accès à la caméra a été refusé. Autorisez-le dans Réglages > Confidentialité > Caméra > nōto."
+        case .restricted:
+            errorMessage = "L'accès à la caméra est restreint sur cet appareil. Utilisez la galerie photos à la place."
+        @unknown default:
+            errorMessage = "Accès à la caméra non disponible."
         }
     }
 
@@ -429,14 +447,18 @@ struct PronoteQRLoginView: View {
             return uuid
         }
         let uuid = UUID().uuidString
-        try? KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
+        do {
+            try KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
+        } catch {
+            logger.error("Failed to persist device UUID: \(error)")
+        }
         return uuid
     }
 
     private func inferLevel(from className: String) -> SchoolLevel {
         let lower = className.lowercased()
-        if lower.contains("6") || lower.contains("5") || lower.contains("4") || lower.contains("3") { return .college }
-        if lower.contains("2nde") || lower.contains("1") || lower.contains("tle") { return .lycee }
+        if lower.contains("6e") || lower.contains("5e") || lower.contains("4e") || lower.contains("3e") { return .college }
+        if lower.contains("2nde") || lower.contains("1re") || lower.contains("1ere") || lower.contains("tle") { return .lycee }
         return .college
     }
 
@@ -454,21 +476,6 @@ private enum QRStep {
     case pin
     case loading
     case success(childName: String)
-}
-
-// MARK: - PhotosPicker Transferable
-
-// MARK: - PIN to AES Key
-
-extension Data {
-    /// Pad PIN bytes (4 bytes) to a valid AES key size (16 bytes) with zeros.
-    /// Matches node-forge createBuffer behavior.
-    func pinPaddedToAESKey() -> Data {
-        var padded = Data(count: 16)
-        let copyCount = Swift.min(self.count, 16)
-        padded.replaceSubrange(0..<copyCount, with: self.prefix(copyCount))
-        return padded
-    }
 }
 
 // MARK: - PhotosPicker Transferable
@@ -494,13 +501,17 @@ struct PhotoQRImage: Transferable {
 
 private struct LiveCameraSheet: View {
     let onDetected: (String) -> Void
+    let onError: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ZStack {
-                CameraQRScannerView(onDetected: onDetected)
-                    .ignoresSafeArea()
+                CameraQRScannerView(onDetected: onDetected, onError: { message in
+                    dismiss()
+                    onError(message)
+                })
+                .ignoresSafeArea()
 
                 VStack {
                     Spacer()
@@ -525,4 +536,3 @@ private struct LiveCameraSheet: View {
         }
     }
 }
-
