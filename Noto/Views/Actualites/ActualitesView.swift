@@ -197,7 +197,9 @@ struct ActualitesView: View {
                 }
 
                 // Feed
-                if filteredItems.isEmpty {
+                if activeFilter == .photos {
+                    PhotoGridView(children: children)
+                } else if filteredItems.isEmpty {
                     emptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -267,20 +269,15 @@ struct ActualitesView: View {
             .onTapGesture { showMonLyceeSetup = true }
     }
 
-    @ViewBuilder
     private var emptyState: some View {
-        let icon = activeFilter == .photos ? "photo.on.rectangle.angled" : "tray"
-        let title = activeFilter == .photos ? "Bientôt disponible" : "Aucun message pour le moment"
-        let subtitle = activeFilter == .photos ? "Les photos partagées par l'école apparaîtront ici." : "Tirez vers le bas pour synchroniser."
-
         VStack(spacing: NotoTheme.Spacing.sm) {
-            Image(systemName: icon)
+            Image(systemName: "tray")
                 .font(.system(size: 44))
                 .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.5))
-            Text(title)
+            Text("Aucun message pour le moment")
                 .font(NotoTheme.Typography.headline)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
-            Text(subtitle)
+            Text("Tirez vers le bas pour synchroniser.")
                 .font(NotoTheme.Typography.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
