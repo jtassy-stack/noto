@@ -167,11 +167,22 @@ final class ENTClient: Sendable {
     // MARK: - Blog
 
     func fetchBlogPosts() async throws -> [ENTBlogPost] {
-        let data = try await get("/blog/list/all")
+        // PCN/Edifice ENT: parents access shared blogs via filter=all
+        // Fallback to /blog/list/all for other providers
+        let data = try await get("/blog/list?filter=all&page=0&limit=100")
 
-        guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        let root = try JSONSerialization.jsonObject(with: data)
+        // Response is either a raw array or {rows: [...], total: N}
+        let list: [[String: Any]]
+        if let arr = root as? [[String: Any]] {
+            list = arr
+        } else if let obj = root as? [String: Any], let rows = obj["rows"] as? [[String: Any]] {
+            list = rows
+        } else {
+            NSLog("[noto] fetchBlogPosts: unexpected format — %@", String(data: data.prefix(200), encoding: .utf8) ?? "")
             return []
         }
+        NSLog("[noto] fetchBlogPosts parsed %d blogs", list.count)
 
         return list.compactMap { json in
             guard let id = json["_id"] as? String ?? json["id"] as? String else { return nil }
@@ -189,14 +200,18 @@ final class ENTClient: Sendable {
         let data = try await get("/blog/\(blogId)/posts?page=0&pageSize=50")
 
         let posts: [[String: Any]]
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let p = json["posts"] as? [[String: Any]] {
+        let root2 = try JSONSerialization.jsonObject(with: data)
+        if let json = root2 as? [String: Any], let p = json["posts"] as? [[String: Any]] {
             posts = p
-        } else if let arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+        } else if let json = root2 as? [String: Any], let p = json["rows"] as? [[String: Any]] {
+            posts = p
+        } else if let arr = root2 as? [[String: Any]] {
             posts = arr
         } else {
+            NSLog("[noto] fetchBlogPhotoAttachments %@: unexpected format — %@", blogId, String(data: data.prefix(200), encoding: .utf8) ?? "")
             return []
         }
+        NSLog("[noto] blog %@ → %d posts", blogId, posts.count)
 
         var attachments: [ENTPhotoAttachment] = []
         for post in posts {
