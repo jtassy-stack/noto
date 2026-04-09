@@ -26,6 +26,8 @@
     <string>Authentification sécurisée pour accéder aux données scolaires.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Pour afficher les événements culturels proches de vous.</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>UIAppFonts</key>
     <array>
         <string>SpaceMono-Regular.ttf</string>
