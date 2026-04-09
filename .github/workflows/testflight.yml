@@ -74,6 +74,20 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             | xcpretty || true
 
+      - name: Fix build with Claude
+        if: failure()
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_tools: "Bash,Read,Write,Edit,Glob,Grep"
+          prompt: |
+            The iOS build just failed on branch ${{ github.ref_name }}.
+
+            Run `gh run view --log-failed ${{ github.run_id }}` to get the compiler errors,
+            identify the root cause, fix the code, and commit + push directly to ${{ github.ref_name }}.
+
+            Working directory is the repo root. Be concise and act directly.
+
   # ──────────────────────────────────────────────
   # Job 2 — Archive + TestFlight (master only)
   # Requires build to pass first.
