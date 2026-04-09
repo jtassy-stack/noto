@@ -80,12 +80,14 @@ struct ENTBlogPostContent: Sendable {
 // MARK: - Photo attachment (blog or schoolbook)
 
 struct ENTPhotoAttachment: Sendable {
-    let id: String             // workspace document id
     let path: String           // /workspace/document/<id>
     let title: String?         // blog post title or schoolbook word title
     let authorName: String?
     let date: Date
     let source: ENTPhotoSource
+
+    /// Derived from path — avoids id/path divergence.
+    var id: String { path.components(separatedBy: "/").last ?? path }
 }
 
 enum ENTPhotoSource: String, Codable, Sendable {

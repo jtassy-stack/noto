@@ -163,19 +163,26 @@ final class PawnoteBridge {
     @MainActor
     static func transferCookies(_ cookies: [HTTPCookie], for url: URL) {
         let storage = HTTPCookieStorage.shared
+        var transferred = 0
         for cookie in cookies {
             // Only transfer cookies relevant to the Pronote domain
             if let host = url.host, cookie.domain.contains(host) || host.contains(cookie.domain.replacingOccurrences(of: ".", with: "", options: .anchored)) {
                 storage.setCookie(cookie)
+                transferred += 1
             }
         }
         // Also transfer CAS cookies (needed for SSO redirect)
         for cookie in cookies {
             if cookie.domain.contains("monlycee") || cookie.domain.contains("index-education") || cookie.domain.contains("pronote") {
                 storage.setCookie(cookie)
+                transferred += 1
             }
         }
-        NSLog("[noto] Transferred %d cookies for %@", cookies.count, url.host ?? "unknown")
+        if transferred == 0 {
+            NSLog("[noto][warning] transferCookies: 0/%d cookies matched for %@. ENT login may fail.", cookies.count, url.host ?? "?")
+        } else {
+            NSLog("[noto] transferCookies: %d/%d cookies transferred for %@", transferred, cookies.count, url.host ?? "?")
+        }
     }
 
     func loginWithToken(url: String, username: String, token: String, deviceUUID: String) async throws -> PronoteRefreshToken {

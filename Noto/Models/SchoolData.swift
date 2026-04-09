@@ -92,14 +92,17 @@ enum MessageKind: String, Codable {
 @Model
 final class SchoolPhoto {
     var child: Child?
-    var source: String           // "blog" or "schoolbook"
-    var entPath: String          // /workspace/document/<id> — used as cache key
+    var source: ENTPhotoSource
+    @Attribute(.unique) var entPath: String  // /workspace/document/<id> — used as cache key
     var title: String?           // blog post title or schoolbook word title
     var authorName: String?
     var date: Date
     var synced: Date             // when this record was last updated
 
-    init(entPath: String, source: String, title: String? = nil, authorName: String? = nil, date: Date) {
+    /// The document ID portion of the ENT path.
+    var photoId: String { entPath.components(separatedBy: "/").last ?? entPath }
+
+    init(entPath: String, source: ENTPhotoSource, title: String? = nil, authorName: String? = nil, date: Date) {
         self.entPath = entPath
         self.source = source
         self.title = title

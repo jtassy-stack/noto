@@ -136,10 +136,22 @@ final class HeadlessENTAuth: NSObject, WKNavigationDelegate {
         })()
         """
 
-        state = .submitted
-        webView.evaluateJavaScript(js) { result, error in
-            NSLog("[noto] HeadlessENTAuth fillAndSubmit: %@ err: %@",
-                  String(describing: result), error?.localizedDescription ?? "nil")
+        webView.evaluateJavaScript(js) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    NSLog("[noto][error] HeadlessENTAuth JS eval failed: %@", error.localizedDescription)
+                    self.fail(ENTError.invalidResponse("Échec injection formulaire: \(error.localizedDescription)"))
+                    return
+                }
+                let outcome = result as? String ?? ""
+                NSLog("[noto] HeadlessENTAuth JS outcome: %@", outcome)
+                if outcome.hasPrefix("no_fields") || outcome == "no_submit" {
+                    self.fail(ENTError.invalidResponse("Formulaire ENT introuvable: \(outcome)"))
+                } else {
+                    self.state = .submitted
+                }
+            }
         }
     }
 
@@ -175,5 +187,8 @@ final class HeadlessENTAuth: NSObject, WKNavigationDelegate {
          .replacingOccurrences(of: "\"", with: "\\\"")
          .replacingOccurrences(of: "\n", with: "\\n")
          .replacingOccurrences(of: "\r", with: "\\r")
+         .replacingOccurrences(of: "\0", with: "\\0")
+         .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+         .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
     }
 }

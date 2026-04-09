@@ -51,6 +51,7 @@ struct ActualitesView: View {
     @State private var path: [FeedDestination] = []
     @State private var showMonLyceeSetup = false
     @State private var imapConfigured = false
+    @State private var syncError: String?
 
     // Stable child-index → color mapping
     private static let avatarColors: [Color] = [
@@ -135,8 +136,12 @@ struct ActualitesView: View {
                 guard let entChildId = child.entChildId else { continue }
                 do {
                     try await service.sync(child: child, client: client, entChildId: entChildId)
+                } catch ENTError.sessionExpired, ENTError.badCredentials {
+                    NSLog("[noto][error] ENT session expired for %@", child.firstName)
+                    syncError = "Session expirée pour \(child.firstName). Reconnectez-vous dans Réglages."
                 } catch {
-                    // Silently skip — session may be expired; user can re-auth in Settings
+                    NSLog("[noto][error] ENT sync failed for %@: %@", child.firstName, error.localizedDescription)
+                    syncError = "Erreur de synchronisation ENT."
                 }
             case .pronote:
                 // IMAP sync applies to all children sharing the family mailbox
@@ -144,7 +149,8 @@ struct ActualitesView: View {
                 do {
                     try await service.sync(for: child)
                 } catch {
-                    // Silently skip — no credentials or network error
+                    NSLog("[noto][error] IMAP sync failed for %@: %@", child.firstName, error.localizedDescription)
+                    syncError = "Erreur de synchronisation des messages."
                 }
             }
         }
@@ -164,6 +170,30 @@ struct ActualitesView: View {
                 // MonLycée setup prompt — visible when IMAP not configured
                 if !imapConfigured {
                     monLyceePrompt
+                }
+
+                // Sync error banner — dismissible
+                if let error = syncError {
+                    HStack(spacing: NotoTheme.Spacing.sm) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(NotoTheme.Colors.amber)
+                        Text(error)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button {
+                            syncError = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    .padding(NotoTheme.Spacing.sm)
+                    .background(NotoTheme.Colors.amber.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .padding(.top, NotoTheme.Spacing.xs)
                 }
 
                 // Feed
@@ -280,7 +310,12 @@ struct ActualitesView: View {
                             if !item.msg.read {
                                 Button {
                                     item.msg.read = true
-                                    try? modelContext.save()
+                                    do {
+                                        try modelContext.save()
+                                    } catch {
+                                        NSLog("[noto][error] ActualitesView: save failed: %@", error.localizedDescription)
+                                        item.msg.read = false
+                                    }
                                 } label: {
                                     Label("Lu", systemImage: "envelope.open")
                                 }
@@ -569,7 +604,12 @@ struct FeedMessageDetailView: View {
         .onAppear {
             if !msg.read {
                 msg.read = true
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    NSLog("[noto][error] FeedMessageDetailView: save failed: %@", error.localizedDescription)
+                    msg.read = false
+                }
             }
         }
     }

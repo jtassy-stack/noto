@@ -48,7 +48,7 @@ final class ENTClient: Sendable {
         getRequest.setValue(loginPageURL.absoluteString, forHTTPHeaderField: "Referer")
         let (_, _) = try await session.data(for: getRequest)
         let cookiesAfterGet = ENTClient.cookieStorage.cookies(for: loginPageURL) ?? []
-        entLog("[noto] ENT cookies after GET: \(cookiesAfterGet.map { "\($0.name)=\($0.value.prefix(10))" })")
+        entLog("[noto] ENT cookies after GET: \(cookiesAfterGet.map { $0.name })")
 
         // Step 2: POST credentials — mimic browser behavior with Origin/Referer headers
         // Edifice/ENTCore expects these for CSRF validation
@@ -218,9 +218,7 @@ final class ENTClient: Sendable {
                 if !allPaths.contains(thumbPath) { allPaths.insert(thumbPath, at: 0) }
             }
             for path in allPaths {
-                let docId = path.components(separatedBy: "/").last ?? postId
                 attachments.append(ENTPhotoAttachment(
-                    id: "\(blogId)_\(docId)",
                     path: path,
                     title: title,
                     authorName: authorName,
@@ -234,14 +232,16 @@ final class ENTClient: Sendable {
 
     /// Fetch schoolbook word detail and extract photo attachment paths.
     func fetchSchoolbookPhotoAttachments(wordId: String, wordTitle: String, wordDate: Date, authorName: String) async throws -> [ENTPhotoAttachment] {
-        guard let word = try await fetchSchoolbookWord(id: wordId) else { return [] }
+        let rawData = try await get("/schoolbook/word/\(wordId)")
+        guard let json = try JSONSerialization.jsonObject(with: rawData) as? [String: Any] else { return [] }
+
+        // Parse word content from the single response
+        let text = json["text"] as? String ?? ""
 
         // Extract images from HTML body
-        let htmlPaths = extractWorkspacePaths(from: word.text)
+        let htmlPaths = extractWorkspacePaths(from: text)
         var attachments: [ENTPhotoAttachment] = htmlPaths.map { path in
-            let docId = path.components(separatedBy: "/").last ?? path
             return ENTPhotoAttachment(
-                id: "schoolbook_\(wordId)_\(docId)",
                 path: path,
                 title: wordTitle,
                 authorName: authorName,
@@ -250,12 +250,8 @@ final class ENTClient: Sendable {
             )
         }
 
-        // The raw JSON from /schoolbook/word/<id> may also include an `attachments` array
-        // (already parsed via fetchSchoolbookWord → we'd need raw JSON for that)
-        // Re-fetch raw to get attachments array
-        if let rawData = try? await get("/schoolbook/word/\(wordId)"),
-           let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any],
-           let rawAttachments = json["attachments"] as? [[String: Any]] {
+        // Also include image attachments from the `attachments` array in the same response
+        if let rawAttachments = json["attachments"] as? [[String: Any]] {
             for att in rawAttachments {
                 let attId = att["id"] as? String ?? att["_id"] as? String ?? ""
                 let mime = att["contentType"] as? String ?? att["mime"] as? String ?? ""
@@ -264,7 +260,6 @@ final class ENTClient: Sendable {
                 let attName = att["filename"] as? String ?? att["name"] as? String
                 if !attachments.contains(where: { $0.path == path }) {
                     attachments.append(ENTPhotoAttachment(
-                        id: "schoolbook_\(wordId)_\(attId)",
                         path: path,
                         title: attName ?? wordTitle,
                         authorName: authorName,
@@ -282,7 +277,13 @@ final class ENTClient: Sendable {
     private func extractWorkspacePaths(from html: String) -> [String] {
         // Match src="/workspace/document/<id>" or src="https://host/workspace/document/<id>"
         let pattern = #"src=[\"']((?:https?://[^\"']*)?/workspace/document/[a-zA-Z0-9\-_]+)[\"']"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let regex: NSRegularExpression
+        do {
+            regex = try NSRegularExpression(pattern: pattern)
+        } catch {
+            NSLog("[noto] extractWorkspacePaths: regex compilation failed: %@", error.localizedDescription)
+            return []
+        }
         let range = NSRange(html.startIndex..., in: html)
         let matches = regex.matches(in: html, range: range)
         var seen = Set<String>()
@@ -343,8 +344,13 @@ final class ENTClient: Sendable {
         ]
 
         for path in paths {
-            if let words = try? await fetchSchoolbookAt(path: path), !words.isEmpty {
-                return words
+            do {
+                let words = try await fetchSchoolbookAt(path: path)
+                if !words.isEmpty { return words }
+            } catch ENTError.sessionExpired {
+                throw ENTError.sessionExpired
+            } catch {
+                entLog("[noto] fetchSchoolbook path \(path) failed: \(error.localizedDescription)")
             }
         }
         return []

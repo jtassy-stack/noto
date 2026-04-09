@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import UIKit
 
@@ -12,7 +13,11 @@ actor ENTPhotoCache {
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         cacheDir = caches.appendingPathComponent("noto_ent_photos", isDirectory: true)
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        } catch {
+            NSLog("[noto][error] ENTPhotoCache: cannot create cache dir: %@", error.localizedDescription)
+        }
     }
 
     /// Returns a cached image if available, otherwise downloads it via an authenticated ENTClient.
@@ -29,7 +34,11 @@ actor ENTPhotoCache {
         guard let data = try? await client.fetchData(path: path),
               let img = UIImage(data: data) else { return nil }
 
-        try? data.write(to: fileURL)
+        do {
+            try data.write(to: fileURL)
+        } catch {
+            NSLog("[noto][warning] ENTPhotoCache: write failed for %@: %@", path, error.localizedDescription)
+        }
         return img
     }
 
@@ -46,11 +55,8 @@ actor ENTPhotoCache {
     }
 
     private func cacheKey(for path: String) -> String {
-        // Replace slashes and special chars to make a valid filename
-        path
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "?", with: "_")
-            .replacingOccurrences(of: "=", with: "_")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        let data = Data(path.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }

@@ -60,21 +60,33 @@ final class ENTSyncService {
         var photos: [ENTPhotoAttachment] = []
 
         // Blog photos
-        let blogs = (try? await client.fetchBlogPosts()) ?? []
+        let blogs: [ENTBlogPost]
+        do {
+            blogs = try await client.fetchBlogPosts()
+        } catch {
+            NSLog("[noto][error] fetchBlogPosts failed: %@", error.localizedDescription)
+            blogs = []
+        }
         for blog in blogs {
-            let blogPhotos = (try? await client.fetchBlogPhotoAttachments(blogId: blog.id)) ?? []
-            photos += blogPhotos
+            do {
+                photos += try await client.fetchBlogPhotoAttachments(blogId: blog.id)
+            } catch {
+                NSLog("[noto][error] fetchBlogPhotoAttachments %@ failed: %@", blog.id, error.localizedDescription)
+            }
         }
 
         // Schoolbook word photo attachments (images embedded in words or attached)
         for word in words {
-            let wordPhotos = (try? await client.fetchSchoolbookPhotoAttachments(
-                wordId: word.id,
-                wordTitle: word.title,
-                wordDate: word.date,
-                authorName: word.ownerName
-            )) ?? []
-            photos += wordPhotos
+            do {
+                photos += try await client.fetchSchoolbookPhotoAttachments(
+                    wordId: word.id,
+                    wordTitle: word.title,
+                    wordDate: word.date,
+                    authorName: word.ownerName
+                )
+            } catch {
+                NSLog("[noto][error] fetchSchoolbookPhotoAttachments %@ failed: %@", word.id, error.localizedDescription)
+            }
         }
 
         return photos
@@ -84,7 +96,7 @@ final class ENTSyncService {
         for photo in photos {
             let p = SchoolPhoto(
                 entPath: photo.path,
-                source: photo.source.rawValue,
+                source: photo.source,
                 title: photo.title,
                 authorName: photo.authorName,
                 date: photo.date
