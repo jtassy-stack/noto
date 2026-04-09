@@ -35,5 +35,6 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PROVISIONING_PROFILE_SPECIFIER: "noto appstore"
+        DEVELOPMENT_ASSET_PATHS: "\"Noto/Preview Content\""
     entitlements:
       path: Noto/App/Noto.entitlements

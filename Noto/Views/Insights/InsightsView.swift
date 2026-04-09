@@ -859,6 +859,6 @@ private struct TrendDetailSheet: View {
 }
 
 #Preview("Insights") {
-    InsightsView()
+    InsightsView(selectedChild: nil)
         .withPreviewData()
 }

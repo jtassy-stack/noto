@@ -980,6 +980,6 @@ extension Homework: Identifiable {}
 extension Message: Identifiable {}
 
 #Preview("École") {
-    SchoolView()
+    SchoolView(selectedChild: nil)
         .withPreviewData()
 }

@@ -402,6 +402,6 @@ private struct RecoRow: View {
 }
 
 #Preview("Découvrir") {
-    DiscoverView()
+    DiscoverView(selectedChild: nil)
         .withPreviewData()
 }
