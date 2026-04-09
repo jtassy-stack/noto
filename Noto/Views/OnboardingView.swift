@@ -15,7 +15,7 @@ struct OnboardingView: View {
 
                 Text("l'essentiel de la scolarité,\nen un coup d'œil.")
                     .font(NotoTheme.Typography.serif(18))
-                    .foregroundStyle(NotoTheme.Colors.mist)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
 
                 Spacer()
@@ -63,5 +63,5 @@ struct OnboardingView: View {
 
 #Preview("Onboarding") {
     OnboardingView()
-        .withPreviewData()
+        .modelContainer(PreviewData.container)
 }

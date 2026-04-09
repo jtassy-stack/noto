@@ -255,7 +255,14 @@ struct HomeView: View {
 
             let client = ENTClient(provider: provider)
             do {
-                try await client.login(email: String(parts[0]), password: String(parts[1]))
+                // ENT is a React SPA — must use HeadlessENTAuth (WKWebView), not URLSession POST
+                let loginURL = provider.baseURL.appendingPathComponent("auth/login")
+                let cookies = try await HeadlessENTAuth.login(
+                    loginURL: loginURL,
+                    email: String(parts[0]),
+                    password: String(parts[1])
+                )
+                ENTClient.importCookies(cookies)
             } catch {
                 errors.append("\(provider.name) : reconnexion échouée")
                 continue
@@ -658,7 +665,7 @@ private struct HeroCard: View {
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                     Text(weekdayString)
                         .font(NotoTheme.Typography.caption)
-                        .foregroundStyle(NotoTheme.Colors.mist)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .textCase(.uppercase)
                     Text(dateString)
                         .font(NotoTheme.Typography.dataLarge)

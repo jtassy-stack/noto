@@ -56,11 +56,11 @@ struct BriefingCardView: View {
     }
 }
 
-#Preview("BriefingCard — Dark", traits: .init()) {
+#Preview("BriefingCard — Dark") {
     sampleCards.preferredColorScheme(.dark)
 }
 
-#Preview("BriefingCard — Light", traits: .init()) {
+#Preview("BriefingCard — Light") {
     sampleCards.preferredColorScheme(.light)
 }
 

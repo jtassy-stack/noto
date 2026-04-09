@@ -126,13 +126,13 @@ struct InsightsView: View {
                 value: "\(unreadCount)",
                 label: "Non lus",
                 icon: "envelope.badge",
-                color: unreadCount > 0 ? NotoTheme.Colors.cobalt : NotoTheme.Colors.mist
+                color: unreadCount > 0 ? NotoTheme.Colors.cobalt : NotoTheme.Colors.textSecondary
             )
             ENTStatTile(
                 value: "\(unsignedCount)",
                 label: "À signer",
                 icon: "text.book.closed",
-                color: unsignedCount > 0 ? NotoTheme.Colors.amber : NotoTheme.Colors.mist
+                color: unsignedCount > 0 ? NotoTheme.Colors.amber : NotoTheme.Colors.textSecondary
             )
         }
 
@@ -324,7 +324,7 @@ struct InsightsView: View {
                                     y: .value("Classe", ca),
                                     series: .value("Série", "Classe")
                                 )
-                                .foregroundStyle(NotoTheme.Colors.mist.opacity(0.5))
+                                .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.5))
                                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                                 .interpolationMethod(.catmullRom)
                             }
@@ -387,7 +387,7 @@ struct InsightsView: View {
                 .chartYAxis {
                     AxisMarks(values: [0, 5, 10, 15, 20]) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(NotoTheme.Colors.mist.opacity(0.2))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.2))
                         AxisValueLabel {
                             if let v = value.as(Int.self) {
                                 Text("\(v)")
@@ -400,7 +400,7 @@ struct InsightsView: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(NotoTheme.Colors.mist.opacity(0.2))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.2))
                         AxisValueLabel(format: .dateTime.month(.abbreviated).day(), centered: true)
                             .font(.system(size: 10))
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
@@ -454,13 +454,13 @@ struct InsightsView: View {
                             y: .value("Matière", shortSubject(item.subject)),
                             height: .fixed(12)
                         )
-                        .foregroundStyle(NotoTheme.Colors.mist.opacity(0.3))
+                        .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.3))
                         .cornerRadius(3)
                         .position(by: .value("Qui", "Classe"))
                         .annotation(position: .trailing, alignment: .leading, spacing: 4) {
                             Text(String(format: "%.1f", ca))
                                 .font(.system(size: 10))
-                                .foregroundStyle(NotoTheme.Colors.mist)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
                         }
                     }
                 }
@@ -469,7 +469,7 @@ struct InsightsView: View {
             .chartXAxis {
                 AxisMarks(values: [0, 5, 10, 15, 20]) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(NotoTheme.Colors.mist.opacity(0.2))
+                        .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.2))
                     AxisValueLabel {
                         if let v = value.as(Int.self) {
                             Text("\(v)")
@@ -488,7 +488,7 @@ struct InsightsView: View {
             }
             .chartForegroundStyleScale([
                 "Moi": NotoTheme.Colors.brand,
-                "Classe": NotoTheme.Colors.mist.opacity(0.4)
+                "Classe": NotoTheme.Colors.textSecondary.opacity(0.4)
             ])
             .chartLegend(hasClassData ? .visible : .hidden)
             .frame(height: CGFloat(subjectAverages.count) * (hasClassData ? 52 : 38) + 20)
@@ -716,7 +716,7 @@ private struct TrendDetailSheet: View {
                                             y: .value("Classe", ca),
                                             series: .value("Série", "Classe")
                                         )
-                                        .foregroundStyle(NotoTheme.Colors.mist.opacity(0.5))
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.5))
                                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                                         .interpolationMethod(.catmullRom)
                                     }
@@ -760,7 +760,7 @@ private struct TrendDetailSheet: View {
                             .chartYAxis {
                                 AxisMarks(values: [0, 5, 10, 15, 20]) { value in
                                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                        .foregroundStyle(NotoTheme.Colors.mist.opacity(0.2))
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.2))
                                     AxisValueLabel {
                                         if let v = value.as(Int.self) { Text("\(v)").font(.system(size: 10)) }
                                     }
@@ -789,7 +789,7 @@ private struct TrendDetailSheet: View {
                     if let ca = classAvg {
                         HStack(spacing: NotoTheme.Spacing.sm) {
                             Rectangle()
-                                .fill(NotoTheme.Colors.mist.opacity(0.5))
+                                .fill(NotoTheme.Colors.textSecondary.opacity(0.5))
                                 .frame(width: 20, height: 2)
                                 .overlay(
                                     HStack(spacing: 3) {

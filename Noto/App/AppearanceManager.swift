@@ -3,6 +3,7 @@ import SwiftUI
 /// Persists and exposes the user's preferred color scheme.
 /// Inject via .environment(AppearanceManager.shared) at the root.
 @Observable
+@MainActor
 final class AppearanceManager {
     static let shared = AppearanceManager()
 
