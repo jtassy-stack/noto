@@ -14,7 +14,7 @@
 	<true/>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.pmf.noto</key>
+		<key>fr.noto.app</key>
 		<string>noto AppStore</string>
 	</dict>
 </dict>
