@@ -2,104 +2,258 @@ import SwiftUI
 import SwiftData
 import SafariServices
 
+// MARK: - SchoolView (per-child, adaptive tabs)
+
 struct SchoolView: View {
     let selectedChild: Child?
 
     @Query private var families: [Family]
-    @State private var selectedSection: SchoolSection?
+    @State private var activeTab: SchoolTab? = nil
+    @State private var showAbsence = false
+    @State private var absenceChild: Child? = nil
 
-    private var children: [Child] {
-        if let child = selectedChild { return [child] }
-        return families.first?.children ?? []
-    }
-
-    private var hasData: Bool {
-        children.contains {
-            !$0.grades.isEmpty || !$0.schedule.isEmpty || !$0.homework.isEmpty || !$0.messages.isEmpty
-        }
-    }
-
-    /// Available sections depend on child type
-    private var availableSections: [SchoolSection] {
-        if let child = selectedChild {
-            return child.schoolType == .pronote
-                ? [.grades, .schedule, .homework, .messages]
-                : [.schoolbook, .homework, .messages]  // PCN: no grades, no schedule
-        }
-        // Famille mode: union of both
-        let hasPronote = children.contains { $0.schoolType == .pronote }
-        let hasENT = children.contains { $0.schoolType == .ent }
-        var sections: [SchoolSection] = []
-        if hasPronote { sections.append(contentsOf: [.grades, .schedule]) }
-        if hasENT { sections.append(.schoolbook) }
-        sections.append(contentsOf: [.homework, .messages])
-        return sections
-    }
-
-    /// Ensure selectedSection is valid for current child
-    private var activeSection: SchoolSection {
-        if let s = selectedSection, availableSections.contains(s) { return s }
-        return availableSections.first ?? .homework
+    private var allChildren: [Child] {
+        families.first?.children ?? []
     }
 
     var body: some View {
         NavigationStack {
-            if hasData {
-                VStack(spacing: 0) {
-                    Picker("Section", selection: Binding(
-                        get: { activeSection },
-                        set: { selectedSection = $0 }
-                    )) {
-                        ForEach(availableSections, id: \.self) { section in
-                            Text(section.title).tag(section)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, NotoTheme.Spacing.md)
-                    .padding(.vertical, NotoTheme.Spacing.sm)
-
-                    switch activeSection {
-                    case .grades:
-                        GradesListView(children: children.filter { $0.schoolType == .pronote })
-                    case .schedule:
-                        ScheduleListView(children: children.filter { $0.schoolType == .pronote })
-                    case .schoolbook:
-                        SchoolbookListView(children: children.filter { $0.schoolType == .ent })
-                    case .homework:
-                        HomeworkListView(children: children)
-                    case .messages:
-                        MessagesListView(children: children)
-                    }
+            Group {
+                if let child = selectedChild {
+                    ChildSchoolView(
+                        child: child,
+                        activeTab: tabBinding(for: child),
+                        showAbsence: $showAbsence,
+                        absenceChild: $absenceChild
+                    )
+                } else {
+                    FamilySchoolView(children: allChildren)
                 }
-                .background(NotoTheme.Colors.background)
-                .navigationTitle("École")
-                .navigationBarTitleDisplayMode(.large)
-            } else {
-                ContentUnavailableView(
-                    "École",
-                    systemImage: "book.closed",
-                    description: Text("Aucune donnée scolaire. Lancez une synchronisation depuis l'accueil.")
-                )
-                .navigationTitle("École")
-                .navigationBarTitleDisplayMode(.large)
+            }
+            .navigationTitle("École")
+            .navigationBarTitleDisplayMode(.large)
+        }
+        .sheet(isPresented: $showAbsence) {
+            if let child = absenceChild {
+                AbsenceView(preselectedChild: child)
             }
         }
         .onChange(of: selectedChild?.id) { _, _ in
-            // Reset section when switching child
-            selectedSection = nil
+            activeTab = nil
+        }
+    }
+
+    /// Binding that resets to nil (resolved to default) when child changes.
+    private func tabBinding(for child: Child) -> Binding<SchoolTab?> {
+        Binding(
+            get: { activeTab },
+            set: { activeTab = $0 }
+        )
+    }
+}
+
+// MARK: - Per-child school view
+
+private struct ChildSchoolView: View {
+    let child: Child
+    @Binding var activeTab: SchoolTab?
+    @Binding var showAbsence: Bool
+    @Binding var absenceChild: Child?
+
+    private var availableTabs: [SchoolTab] {
+        switch child.schoolType {
+        case .pronote:
+            return [.notes, .edt, .devoirs]
+        case .ent:
+            return [.carnet, .devoirs]
+        }
+    }
+
+    private var resolvedTab: SchoolTab {
+        if let tab = activeTab, availableTabs.contains(tab) { return tab }
+        return availableTabs[0]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Adaptive tab picker
+            Picker("Onglet", selection: Binding(
+                get: { resolvedTab },
+                set: { activeTab = $0 }
+            )) {
+                ForEach(availableTabs, id: \.self) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+
+            // Tab content
+            switch resolvedTab {
+            case .notes:
+                GradesListView(children: [child])
+            case .edt:
+                ScheduleListView(children: [child])
+            case .carnet:
+                SchoolbookListView(children: [child])
+            case .devoirs:
+                HomeworkListView(children: [child])
+            }
+        }
+        .background(NotoTheme.Colors.background)
+        .toolbar {
+            if child.schoolType == .ent {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        absenceChild = child
+                        showAbsence = true
+                    } label: {
+                        Image(systemName: "envelope.badge.person.crop")
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    }
+                }
+            }
         }
     }
 }
 
-enum SchoolSection: String, CaseIterable {
-    case grades, schedule, schoolbook, homework, messages
+// MARK: - Family mode (no child selected)
+
+private struct FamilySchoolView: View {
+    let children: [Child]
+
+    var body: some View {
+        if children.isEmpty {
+            ContentUnavailableView(
+                "Aucun enfant",
+                systemImage: "person.2",
+                description: Text("Ajoutez un enfant dans les réglages pour commencer.")
+            )
+        } else {
+            ScrollView {
+                VStack(spacing: NotoTheme.Spacing.sm) {
+                    // Prompt
+                    HStack {
+                        Image(systemName: "hand.tap")
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        Text("Sélectionnez un enfant via le sélecteur en haut")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .padding(.top, NotoTheme.Spacing.sm)
+
+                    ForEach(children) { child in
+                        ChildSchoolCard(child: child)
+                            .padding(.horizontal, NotoTheme.Spacing.md)
+                    }
+                }
+                .padding(.bottom, NotoTheme.Spacing.lg)
+            }
+            .background(NotoTheme.Colors.background)
+        }
+    }
+}
+
+// MARK: - Child summary card (family mode)
+
+private struct ChildSchoolCard: View {
+    let child: Child
+
+    private var pendingHomework: Int {
+        child.homework.filter { !$0.done && $0.dueDate >= Calendar.current.startOfDay(for: .now) }.count
+    }
+
+    private var unreadMessages: Int {
+        child.messages.filter { !$0.read }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                    Text(child.firstName)
+                        .font(NotoTheme.Typography.headline)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("\(child.grade) — \(child.establishment)")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                SchoolTypeBadge(schoolType: child.schoolType)
+            }
+
+            Divider()
+                .background(NotoTheme.Colors.border)
+
+            HStack(spacing: NotoTheme.Spacing.md) {
+                StatPill(
+                    icon: "pencil.and.list.clipboard",
+                    value: "\(pendingHomework)",
+                    label: "devoirs",
+                    color: pendingHomework > 0 ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary
+                )
+                if unreadMessages > 0 {
+                    StatPill(
+                        icon: "envelope.badge",
+                        value: "\(unreadMessages)",
+                        label: "messages",
+                        color: NotoTheme.Colors.brand
+                    )
+                }
+            }
+        }
+        .padding(NotoTheme.Spacing.md)
+        .notoCard()
+    }
+}
+
+private struct SchoolTypeBadge: View {
+    let schoolType: SchoolType
+
+    var body: some View {
+        Text(schoolType == .pronote ? "Pronote" : "PCN")
+            .font(NotoTheme.Typography.dataSmall)
+            .foregroundStyle(schoolType == .pronote ? NotoTheme.Colors.pronote : NotoTheme.Colors.ent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                (schoolType == .pronote ? NotoTheme.Colors.pronote : NotoTheme.Colors.ent).opacity(0.15)
+            )
+            .clipShape(Capsule())
+    }
+}
+
+private struct StatPill: View {
+    let icon: String
+    let value: String
+    let label: String
+    var color: Color = NotoTheme.Colors.textSecondary
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.xs) {
+            Image(systemName: icon)
+                .font(NotoTheme.Typography.caption)
+            Text("\(value) \(label)")
+                .font(NotoTheme.Typography.caption)
+        }
+        .foregroundStyle(color)
+    }
+}
+
+// MARK: - SchoolTab enum (per-child-type)
+
+enum SchoolTab: String, CaseIterable {
+    case notes, edt, carnet, devoirs
+
     var title: String {
         switch self {
-        case .grades: "Notes"
-        case .schedule: "EDT"
-        case .schoolbook: "Carnet"
-        case .homework: "Devoirs"
-        case .messages: "Messages"
+        case .notes:   "Notes"
+        case .edt:     "EDT"
+        case .carnet:  "Carnet"
+        case .devoirs: "Devoirs"
         }
     }
 }
@@ -273,9 +427,21 @@ private struct ScheduleListView: View {
         return allEntries.filter { $0.entry.start >= dayStart && $0.entry.start < dayEnd }
     }
 
+    private var isMonLyceeOnly: Bool {
+        !children.isEmpty && children.allSatisfy { $0.entProvider == .monlycee }
+    }
+
     var body: some View {
         if allEntries.isEmpty {
-            ContentUnavailableView("Pas de cours", systemImage: "calendar", description: Text("L'emploi du temps apparaîtra après synchronisation."))
+            if isMonLyceeOnly {
+                ContentUnavailableView(
+                    "EDT non disponible",
+                    systemImage: "calendar.badge.exclamationmark",
+                    description: Text("L'emploi du temps n'est pas accessible via MonLycée.\nPour l'activer, ajoutez un enfant via QR code Pronote.")
+                )
+            } else {
+                ContentUnavailableView("Pas de cours", systemImage: "calendar", description: Text("L'emploi du temps apparaîtra après synchronisation."))
+            }
         } else {
             VStack(spacing: 0) {
                 // Day selector
@@ -398,9 +564,15 @@ private struct ScheduleRow: View {
 
 // MARK: - Schoolbook List (Carnet de liaison — PCN)
 
+private struct SchoolbookSelection: Identifiable {
+    let id: ObjectIdentifier
+    let child: Child
+    let msg: Message
+}
+
 private struct SchoolbookListView: View {
     let children: [Child]
-    @State private var selectedWord: Message?
+    @State private var selection: SchoolbookSelection?
 
     private var allWords: [(child: Child, msg: Message)] {
         children.flatMap { child in
@@ -419,13 +591,16 @@ private struct SchoolbookListView: View {
             )
         } else {
             List(allWords, id: \.msg.id) { item in
-                SchoolbookRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedWord = item.msg }
+                Button {
+                    selection = SchoolbookSelection(id: ObjectIdentifier(item.msg), child: item.child, msg: item.msg)
+                } label: {
+                    SchoolbookRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
+                }
+                .buttonStyle(.plain)
             }
             .listStyle(.plain)
-            .sheet(item: $selectedWord) { msg in
-                MessageDetailView(msg: msg)
+            .sheet(item: $selection) { item in
+                SchoolbookDetailView(child: item.child, msg: item.msg)
             }
         }
     }
@@ -435,6 +610,13 @@ private struct SchoolbookRow: View {
     let msg: Message
     let showChild: Bool
     let childName: String
+
+    /// Strip HTML tags for 2-line preview (body is stored as raw HTML).
+    private var bodyPreview: String {
+        msg.body
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
@@ -459,7 +641,13 @@ private struct SchoolbookRow: View {
                 Text(msg.subject)
                     .font(NotoTheme.Typography.body)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                if !bodyPreview.isEmpty {
+                    Text(bodyPreview)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .lineLimit(2)
+                }
                 if !msg.read {
                     Text("À signer")
                         .font(NotoTheme.Typography.caption)
@@ -592,7 +780,10 @@ private struct HomeworkDetailView: View {
 
 private struct MessagesListView: View {
     let children: [Child]
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedMessage: Message?
+    @State private var hasIMAPCredentials = IMAPService.loadCredentials() != nil
+    @State private var syncError: String?
 
     private var allMessages: [(child: Child, msg: Message)] {
         children.flatMap { child in
@@ -603,17 +794,44 @@ private struct MessagesListView: View {
     }
 
     var body: some View {
-        if allMessages.isEmpty {
-            ContentUnavailableView("Pas de messages", systemImage: "envelope", description: Text("Les messages apparaîtront après synchronisation."))
-        } else {
-            List(allMessages, id: \.msg.id) { item in
-                MessageRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedMessage = item.msg }
+        Group {
+            if !hasIMAPCredentials {
+                MailboxSetupView {
+                    hasIMAPCredentials = true
+                    Task { await syncIMAP() }
+                }
+            } else if allMessages.isEmpty {
+                ContentUnavailableView(
+                    "Pas de messages",
+                    systemImage: "envelope",
+                    description: Text("Tirez pour rafraîchir.")
+                )
+                .refreshable { await syncIMAP() }
+            } else {
+                List(allMessages, id: \.msg.id) { item in
+                    Button { selectedMessage = item.msg } label: {
+                        MessageRow(msg: item.msg, showChild: children.count > 1, childName: item.child.firstName)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .refreshable { await syncIMAP() }
+                .sheet(item: $selectedMessage) { msg in
+                    MessageDetailView(msg: msg)
+                }
             }
-            .listStyle(.plain)
-            .sheet(item: $selectedMessage) { msg in
-                MessageDetailView(msg: msg)
+        }
+        .task { await syncIMAP() }
+    }
+
+    @MainActor
+    private func syncIMAP() async {
+        let service = IMAPSyncService(modelContext: modelContext)
+        for child in children {
+            do {
+                try await service.sync(for: child)
+            } catch {
+                syncError = error.localizedDescription
             }
         }
     }

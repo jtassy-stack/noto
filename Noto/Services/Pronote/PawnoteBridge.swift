@@ -108,6 +108,7 @@ final class PawnoteBridge {
         session = context.objectForKeyedSubscript("_pawnoteSession")
 
         // Call loginQrCode
+        NSLog("[noto] loginWithQRCode qrData: url=%@ login=%@", qrData["url"] ?? "nil", qrData["login"] ?? "nil")
         let qrJSON = try JSONSerialization.data(withJSONObject: qrData)
         let qrJSONString = String(data: qrJSON, encoding: .utf8)!
 
@@ -374,32 +375,44 @@ final class PawnoteBridge {
                     return
                 }
 
+                NSLog("[noto] pawnote fetch: %@ %@", method, urlString)
                 var request = URLRequest(url: url)
                 request.httpMethod = method
+                // Let HTTPCookieStorage.shared handle cookies automatically (required for CAS redirects)
+                request.httpShouldHandleCookies = true
 
-                // Set headers
+                // Set headers (but never override Cookie — let URLSession handle it)
                 if let headers = options.objectForKeyedSubscript("headers")?.toDictionary() as? [String: String] {
                     for (key, value) in headers {
-                        request.setValue(value, forHTTPHeaderField: key)
+                        if key.lowercased() != "cookie" {
+                            request.setValue(value, forHTTPHeaderField: key)
+                        }
                     }
                 }
-                // Merge appliMobile cookie with any stored cookies (e.g. CAS session)
-                var cookieParts = ["appliMobile=1"]
-                let storedCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
-                for cookie in storedCookies {
-                    cookieParts.append("\(cookie.name)=\(cookie.value)")
+                // Inject appliMobile=1 as a separate cookie so it's stored and forwarded on redirects
+                if let appliCookie = HTTPCookie(properties: [
+                    .name: "appliMobile", .value: "1",
+                    .domain: url.host ?? "", .path: "/", .discard: true
+                ]) {
+                    HTTPCookieStorage.shared.setCookie(appliCookie)
                 }
-                request.setValue(cookieParts.joined(separator: "; "), forHTTPHeaderField: "Cookie")
 
                 // Set body
                 if let content = options.objectForKeyedSubscript("content")?.toString(), content != "undefined" {
                     request.httpBody = content.data(using: .utf8)
                 }
 
-                // Handle redirect
+                // Handle redirect — use shared cookie storage always so appliMobile=1 is sent
                 let redirect = options.objectForKeyedSubscript("redirect")?.toString()
-                let delegate = redirect == "manual" ? NoRedirectDelegate() : nil
-                let session = delegate != nil ? URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil) : URLSession.shared
+                let session: URLSession
+                if redirect == "manual" {
+                    let config = URLSessionConfiguration.default
+                    config.httpCookieStorage = .shared
+                    config.httpCookieAcceptPolicy = .always
+                    session = URLSession(configuration: config, delegate: NoRedirectDelegate(), delegateQueue: nil)
+                } else {
+                    session = URLSession.shared
+                }
 
                 session.dataTask(with: request) { data, response, error in
                     if let error {
@@ -413,6 +426,7 @@ final class PawnoteBridge {
                     // Extract set-cookie headers
                     let headers = (response as? HTTPURLResponse)?.allHeaderFields as? [String: String] ?? [:]
 
+                    NSLog("[noto] pawnote response: %d %@ (%.200@)", statusCode, urlString, content)
                     DispatchQueue.main.async {
                         let result: [String: Any] = [
                             "content": content,

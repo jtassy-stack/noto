@@ -41,7 +41,7 @@ struct AddChildView: View {
                     // ENT providers
                     ForEach(ENTProvider.allCases) { provider in
                         NavigationLink {
-                            ENTLoginView(provider: provider)
+                            ENTLoginView(provider: provider, onDismissAll: { dismiss() })
                         } label: {
                             ServiceCard(
                                 title: provider.name,

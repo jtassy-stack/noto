@@ -4,6 +4,7 @@ import WebKit
 
 struct ENTLoginView: View {
     let provider: ENTProvider
+    var onDismissAll: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -43,8 +44,9 @@ struct ENTLoginView: View {
                     } else {
                         // Show the web login view inline
                         ENTWebLoginView(
+                            provider: provider,
                             loginURL: URL(string: "\(provider.baseURL.absoluteString)/auth/login")!,
-                            providerDomain: provider.baseURL.host ?? "monlycee.net",
+                            providerDomain: provider.baseURL.host ?? "ent.parisclassenumerique.fr",
                             onSuccess: { json in Task { await handleWebLoginSuccess(json: json) } },
                             onError: { msg in errorMessage = msg }
                         )
@@ -97,7 +99,7 @@ struct ENTLoginView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    // MARK: - Web Login Success (MonLycée)
+    // MARK: - Web Login Success
 
     @MainActor
     private func handleWebLoginSuccess(json: [String: Any]) async {
@@ -107,6 +109,12 @@ struct ENTLoginView: View {
         #if DEBUG
         NSLog("[noto] Web login data keys: \(json.keys.sorted())")
         #endif
+
+        // PCN uses a simpler flow — no Pronote SSO, no Zimbra
+        if provider == .pcn {
+            await handlePCNWebLoginSuccess(json: json)
+            return
+        }
 
         // Extract children from /logbook response
         var entChildren: [ENTChildInfo] = []
@@ -168,7 +176,7 @@ struct ENTLoginView: View {
         if let mail = json["zimbraMail"] as? [String: Any] {
             NSLog("[noto] Zimbra mail response keys: \(mail.keys.sorted())")
         } else {
-            NSLog("[noto] Zimbra mail: nil (CSRF=\(json["csrfToken"] ?? "missing"))")
+            NSLog("[noto] Zimbra mail: nil")
         }
         #endif
 
@@ -209,7 +217,18 @@ struct ENTLoginView: View {
             UserDefaults.standard.set(url, forKey: "monlycee_pronote_url")
 
             // Attempt to establish a pawnote session via CAS cookies
+            // (also transfers WKWebView cookies → HTTPCookieStorage.shared)
             await establishPronoteSession(pronoteURL: url)
+        } else {
+            // Transfer cookies even without Pronote, so Zimbra URLSession call works
+            let cookies = await withCheckedContinuation { continuation in
+                WKWebsiteDataStore.default().httpCookieStore.getAllCookies {
+                    continuation.resume(returning: $0)
+                }
+            }
+            for cookie in cookies where cookie.domain.contains("monlycee") {
+                HTTPCookieStorage.shared.setCookie(cookie)
+            }
         }
 
         // Immediately sync data from the logbook we captured
@@ -218,8 +237,52 @@ struct ENTLoginView: View {
             syncService.syncFromStoredLogbook(for: child)
         }
 
-        dismiss()
+        onDismissAll?() ?? dismiss()
 
+        isLoading = false
+    }
+
+    // MARK: - PCN Web Login Success
+
+    @MainActor
+    private func handlePCNWebLoginSuccess(json: [String: Any]) async {
+        // Cookies were already transferred to ENTClient by ENTWebLoginView's success handler
+
+        // Parse children from /userbook/api/person response
+        var entChildren: [ENTChildInfo] = []
+        if let person = json["person"] as? [String: Any],
+           let results = person["result"] as? [[String: Any]] {
+            var seen = Set<String>()
+            for entry in results {
+                let name = entry["relatedName"] as? String ?? ""
+                let id = entry["relatedId"] as? String ?? ""
+                guard !name.isEmpty, !seen.contains(name) else { continue }
+                seen.insert(name)
+                entChildren.append(ENTChildInfo(id: id, displayName: name, className: ""))
+            }
+        }
+
+        NSLog("[noto] PCN found \(entChildren.count) children")
+
+        guard !entChildren.isEmpty else {
+            errorMessage = "Connexion réussie mais aucun enfant trouvé."
+            isLoading = false
+            return
+        }
+
+        createChildren(entChildren)
+
+        // Immediately sync data using the session cookies already transferred from WebView
+        let client = ENTClient(provider: .pcn)
+        let syncService = ENTSyncService(modelContext: modelContext)
+        // createChildren already saves; family.children is up to date
+        for child in (family?.children ?? []) where child.entProvider == .pcn {
+            if let entChildId = child.entChildId {
+                try? await syncService.sync(child: child, client: client, entChildId: entChildId)
+            }
+        }
+
+        onDismissAll?() ?? dismiss()
         isLoading = false
     }
 
@@ -287,34 +350,43 @@ struct ENTLoginView: View {
         return uuid
     }
 
-    // MARK: - Form Login (PCN)
+    // MARK: - Form Login (PCN — headless WKWebView)
+    // Edifice/PCN login page is a JS SPA — URLSession cannot authenticate.
+    // We use a hidden WKWebView that auto-fills and submits the native form,
+    // then transfer cookies to ENTClient for all subsequent API calls.
 
     @MainActor
     private func performFormLogin() async {
         isLoading = true
         errorMessage = nil
 
-        let client = ENTClient(provider: provider)
-
         do {
-            try await client.login(email: login, password: password)
+            let loginURL = URL(string: "\(provider.baseURL.absoluteString)/auth/login")!
+            let cookies = try await HeadlessENTAuth.login(loginURL: loginURL, email: login, password: password)
+            ENTClient.importCookies(cookies)
 
+            // Save credentials for background sync (re-auth when session expires)
             let creds = "\(login):\(password)"
-            do {
-                try KeychainService.save(key: "ent_credentials_\(provider.rawValue)", data: Data(creds.utf8))
-            } catch {
-                errorMessage = "Impossible de sauvegarder les identifiants. La synchronisation automatique ne fonctionnera pas."
-                NSLog("[noto] Keychain save failed: \(error)")
+            try? KeychainService.save(key: "ent_credentials_\(provider.rawValue)", data: Data(creds.utf8))
+
+            let client = ENTClient(provider: provider)
+            let entChildren = try await client.fetchChildren()
+            NSLog("[noto] %@ found %d children", provider.name, entChildren.count)
+            createChildren(entChildren)
+
+            // Immediate sync
+            let syncService = ENTSyncService(modelContext: modelContext)
+            for child in (family?.children ?? []) where child.entProvider == provider {
+                if let id = child.entChildId {
+                    try? await syncService.sync(child: child, client: client, entChildId: id)
+                }
             }
 
-            let entChildren = try await client.fetchChildren()
-            NSLog("[noto] \(provider.name) found \(entChildren.count) children: \(entChildren.map(\.displayName))")
-            createChildren(entChildren)
-            dismiss()
-        } catch let error as ENTError {
-            errorMessage = error.localizedDescription
+            onDismissAll?() ?? dismiss()
+        } catch ENTError.badCredentials {
+            errorMessage = "Identifiants incorrects."
         } catch {
-            errorMessage = "Erreur : \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
         }
 
         isLoading = false
@@ -351,6 +423,7 @@ struct ENTLoginView: View {
                 )
                 child.entChildId = ec.id
                 child.entProvider = provider
+                child.entClassName = ec.className.isEmpty ? nil : ec.className
                 child.family = family
                 modelContext.insert(child)
             }
@@ -403,7 +476,6 @@ struct ENTLoginView: View {
         if provider == .monlycee { return .lycee }
         let lower = className.lowercased()
         if lower.contains("ps") || lower.contains("ms") || lower.contains("gs") { return .maternelle }
-        if lower.contains("cp") || lower.contains("ce") || lower.contains("cm") { return .elementaire }
         return .elementaire
     }
 

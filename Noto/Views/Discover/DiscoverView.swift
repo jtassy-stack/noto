@@ -195,16 +195,19 @@ struct DiscoverView: View {
             }
         }
 
-        let uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).shuffled().prefix(6)
-        // Build API-format grade for curriculum tag filtering
-        let apiGrade = (selectedChild ?? children.first).map { curriculumService.apiGrade(for: $0.grade) }
-        logger.info("BO topics for \(children.first?.grade ?? "?") (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
-
-        guard !uniqueTopics.isEmpty else {
-            isLoading = false
-            hasLoaded = true
-            return
+        var uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).shuffled().prefix(6)
+        // Last-resort fallback: if curriculum has no data for these grades, use generic topics
+        if uniqueTopics.isEmpty {
+            uniqueTopics = ["histoire", "sciences", "littérature", "art", "musique", "découverte"][...].prefix(6)
         }
+        // Build API-format grade for curriculum tag filtering.
+        // Only pass grade for collège/lycée — the API has no primaire curriculum tags (CM1, CP, etc.)
+        let apiGrade: String? = (selectedChild ?? children.first).flatMap { child in
+            let level = child.level
+            guard level == .college || level == .lycee else { return nil }
+            return curriculumService.apiGrade(for: child.grade)
+        }
+        logger.info("BO topics for \(children.first?.grade ?? "?") (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
         let geo = locationService.location.map {
             (lat: $0.coordinate.latitude, lng: $0.coordinate.longitude)
@@ -322,10 +325,16 @@ private struct RecoRow: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
 
-            // Curriculum tags (e.g. "3eme-histoire", "3eme-francais")
-            if !reco.curriculumTags.isEmpty {
+            // Curriculum tags — filtered to this child's grade level only
+            let gradeTags: [String] = {
+                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(3)) }
+                let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
+                let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
+                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(3))
+            }()
+            if !gradeTags.isEmpty {
                 HStack(spacing: 4) {
-                    ForEach(reco.curriculumTags.prefix(3), id: \.self) { tag in
+                    ForEach(gradeTags, id: \.self) { tag in
                         Text(Self.formatCurriculumTag(tag))
                             .font(NotoTheme.Typography.caption)
                             .padding(.horizontal, 6)

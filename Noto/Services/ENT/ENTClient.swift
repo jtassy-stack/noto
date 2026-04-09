@@ -13,82 +13,54 @@ private func entLog(_ message: @autoclosure () -> String) {
 final class ENTClient: Sendable {
     let baseURL: URL
     private let session: URLSession
-    /// Dedicated in-memory cookie storage — never persisted to disk
-    static let cookieStorage: HTTPCookieStorage = {
-        let storage = HTTPCookieStorage()
-        storage.cookieAcceptPolicy = .always
-        return storage
-    }()
+    /// Shared cookie storage for ENT sessions.
+    /// HTTPCookieStorage() custom init silently drops setCookie calls — must use .shared.
+    /// Session cookies (oneSessionId etc.) are short-lived tokens, not credentials.
+    static let cookieStorage: HTTPCookieStorage = .shared
 
     init(provider: ENTProvider = .pcn) {
         self.baseURL = provider.baseURL
-        let config = URLSessionConfiguration.ephemeral
-        config.httpCookieStorage = ENTClient.cookieStorage
+        let config = URLSessionConfiguration.default
+        config.httpCookieStorage = .shared
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         self.session = URLSession(configuration: config)
     }
 
-    /// Import cookies from WKWebView into our ephemeral session
+    /// Import cookies from WKWebView into our session cookie storage
     static func importCookies(_ cookies: [HTTPCookie]) {
+        entLog("[noto] ENTClient.importCookies: \(cookies.map { "\($0.name)@\($0.domain)" })")
         for cookie in cookies {
             cookieStorage.setCookie(cookie)
         }
+        let stored = cookieStorage.cookies ?? []
+        entLog("[noto] ENTClient.cookieStorage after import: \(stored.map { "\($0.name)@\($0.domain)" })")
     }
 
     // MARK: - Auth
 
     func login(email login: String, password: String) async throws {
-        // Step 1: GET the login page to find the form action and hidden fields (CAS tokens)
         let loginPageURL = URL(string: "\(baseURL.absoluteString)/auth/login")!
-        let (pageData, _) = try await session.data(for: URLRequest(url: loginPageURL))
-        let pageHTML = String(data: pageData, encoding: .utf8) ?? ""
 
-        // Extract CAS hidden fields (lt, execution, _eventId) if present
-        var formFields: [(String, String)] = [
-            ("email", login),
-            ("password", password),
-        ]
+        // Step 1: GET login page — establishes initial session cookie
+        var getRequest = URLRequest(url: loginPageURL)
+        getRequest.setValue(baseURL.absoluteString, forHTTPHeaderField: "Origin")
+        getRequest.setValue(loginPageURL.absoluteString, forHTTPHeaderField: "Referer")
+        let (_, _) = try await session.data(for: getRequest)
+        let cookiesAfterGet = ENTClient.cookieStorage.cookies(for: loginPageURL) ?? []
+        entLog("[noto] ENT cookies after GET: \(cookiesAfterGet.map { "\($0.name)=\($0.value.prefix(10))" })")
 
-        // Parse hidden inputs from the login form
-        let hiddenPattern = #"<input[^>]+type=["\']hidden["\'][^>]*>"#
-        if let regex = try? NSRegularExpression(pattern: hiddenPattern, options: .caseInsensitive) {
-            let matches = regex.matches(in: pageHTML, range: NSRange(pageHTML.startIndex..., in: pageHTML))
-            for match in matches {
-                let tag = String(pageHTML[Range(match.range, in: pageHTML)!])
-                if let name = extractAttr(tag, "name"), let value = extractAttr(tag, "value") {
-                    formFields.append((name, value))
-                }
-            }
-        }
-
-        // Detect form action URL (may differ from /auth/login for CAS)
-        var postURL = loginPageURL
-        let formPattern = #"<form[^>]+action=["\']([^"\']+)["\']"#
-        if let formRegex = try? NSRegularExpression(pattern: formPattern, options: .caseInsensitive),
-           let formMatch = formRegex.firstMatch(in: pageHTML, range: NSRange(pageHTML.startIndex..., in: pageHTML)),
-           let actionRange = Range(formMatch.range(at: 1), in: pageHTML) {
-            let action = String(pageHTML[actionRange])
-            if action.hasPrefix("http") {
-                postURL = URL(string: action) ?? postURL
-            } else if action.hasPrefix("/") {
-                postURL = URL(string: "\(baseURL.absoluteString)\(action)") ?? postURL
-            }
-        }
-
-        // Also try "username" field name (CAS standard) alongside "email" (Edifice standard)
-        if pageHTML.contains("name=\"username\"") {
-            formFields = formFields.map { ($0.0 == "email" ? "username" : $0.0, $0.1) }
-        }
-
-        // Step 2: POST credentials
-        let body = formFields.map { "\($0.0)=\($0.1.urlEncoded)" }.joined(separator: "&")
-        var request = URLRequest(url: postURL)
+        // Step 2: POST credentials — mimic browser behavior with Origin/Referer headers
+        // Edifice/ENTCore expects these for CSRF validation
+        let body = "email=\(login.formEncoded)&password=\(password.formEncoded)"
+        var request = URLRequest(url: loginPageURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString, forHTTPHeaderField: "Origin")
+        request.setValue(loginPageURL.absoluteString, forHTTPHeaderField: "Referer")
         request.httpBody = body.data(using: .utf8)
 
-        entLog("[noto] ENT login POST → \(postURL.absoluteString) fields=\(formFields.map(\.0))")
+        entLog("[noto] ENT login POST → \(loginPageURL.absoluteString)")
 
         let (data, response) = try await session.data(for: request)
 
@@ -96,16 +68,14 @@ final class ENTClient: Sendable {
             throw ENTError.invalidResponse("Not HTTP")
         }
 
-        let text = String(data: data, encoding: .utf8) ?? ""
-        let finalURL = http.url?.absoluteString ?? postURL.absoluteString
-        entLog("[noto] ENT login response: \(http.statusCode), finalURL=\(finalURL), body prefix: \(String(text.prefix(300)))")
+        let finalURL = http.url?.absoluteString ?? loginPageURL.absoluteString
+        entLog("[noto] ENT login → \(http.statusCode) finalURL=\(finalURL)")
 
-        if http.statusCode == 401 {
-            throw ENTError.badCredentials
-        }
+        if http.statusCode == 401 { throw ENTError.badCredentials }
 
-        // If we landed back on a login form, credentials were wrong
-        if text.contains("name=\"password\"") && (text.contains("auth/login") || text.contains("cas/login")) {
+        // If we landed back on a login form, credentials were rejected
+        let text = String(data: data.prefix(500), encoding: .utf8) ?? ""
+        if finalURL.contains("/auth/login") && text.contains("name=\"password\"") {
             throw ENTError.badCredentials
         }
     }
@@ -214,6 +184,123 @@ final class ENTClient: Sendable {
         }
     }
 
+    /// Fetch all posts for a blog and extract photo workspace paths from their HTML content.
+    func fetchBlogPhotoAttachments(blogId: String) async throws -> [ENTPhotoAttachment] {
+        let data = try await get("/blog/\(blogId)/posts?page=0&pageSize=50")
+
+        let posts: [[String: Any]]
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let p = json["posts"] as? [[String: Any]] {
+            posts = p
+        } else if let arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            posts = arr
+        } else {
+            return []
+        }
+
+        var attachments: [ENTPhotoAttachment] = []
+        for post in posts {
+            let postId = post["_id"] as? String ?? post["id"] as? String ?? ""
+            let title = post["title"] as? String ?? ""
+            let date = parseMongoDate(post["firstPublishDate"] ?? post["modified"]) ?? .now
+            let authorName: String?
+            if let author = post["author"] as? [String: Any] {
+                authorName = author["username"] as? String
+            } else {
+                authorName = post["author"] as? String
+            }
+            let content = post["content"] as? String ?? ""
+            let paths = extractWorkspacePaths(from: content)
+            // Also include thumbnail if present
+            var allPaths = paths
+            if let thumb = post["thumbnail"] as? String, !thumb.isEmpty {
+                let thumbPath = thumb.hasPrefix("/") ? thumb : "/workspace/document/\(thumb)"
+                if !allPaths.contains(thumbPath) { allPaths.insert(thumbPath, at: 0) }
+            }
+            for path in allPaths {
+                let docId = path.components(separatedBy: "/").last ?? postId
+                attachments.append(ENTPhotoAttachment(
+                    id: "\(blogId)_\(docId)",
+                    path: path,
+                    title: title,
+                    authorName: authorName,
+                    date: date,
+                    source: .blog
+                ))
+            }
+        }
+        return attachments
+    }
+
+    /// Fetch schoolbook word detail and extract photo attachment paths.
+    func fetchSchoolbookPhotoAttachments(wordId: String, wordTitle: String, wordDate: Date, authorName: String) async throws -> [ENTPhotoAttachment] {
+        guard let word = try await fetchSchoolbookWord(id: wordId) else { return [] }
+
+        // Extract images from HTML body
+        let htmlPaths = extractWorkspacePaths(from: word.text)
+        var attachments: [ENTPhotoAttachment] = htmlPaths.map { path in
+            let docId = path.components(separatedBy: "/").last ?? path
+            return ENTPhotoAttachment(
+                id: "schoolbook_\(wordId)_\(docId)",
+                path: path,
+                title: wordTitle,
+                authorName: authorName,
+                date: wordDate,
+                source: .schoolbook
+            )
+        }
+
+        // The raw JSON from /schoolbook/word/<id> may also include an `attachments` array
+        // (already parsed via fetchSchoolbookWord → we'd need raw JSON for that)
+        // Re-fetch raw to get attachments array
+        if let rawData = try? await get("/schoolbook/word/\(wordId)"),
+           let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any],
+           let rawAttachments = json["attachments"] as? [[String: Any]] {
+            for att in rawAttachments {
+                let attId = att["id"] as? String ?? att["_id"] as? String ?? ""
+                let mime = att["contentType"] as? String ?? att["mime"] as? String ?? ""
+                guard mime.hasPrefix("image/"), !attId.isEmpty else { continue }
+                let path = "/workspace/document/\(attId)"
+                let attName = att["filename"] as? String ?? att["name"] as? String
+                if !attachments.contains(where: { $0.path == path }) {
+                    attachments.append(ENTPhotoAttachment(
+                        id: "schoolbook_\(wordId)_\(attId)",
+                        path: path,
+                        title: attName ?? wordTitle,
+                        authorName: authorName,
+                        date: wordDate,
+                        source: .schoolbook
+                    ))
+                }
+            }
+        }
+
+        return attachments
+    }
+
+    /// Extract /workspace/document/<id> paths from HTML string.
+    private func extractWorkspacePaths(from html: String) -> [String] {
+        // Match src="/workspace/document/<id>" or src="https://host/workspace/document/<id>"
+        let pattern = #"src=[\"']((?:https?://[^\"']*)?/workspace/document/[a-zA-Z0-9\-_]+)[\"']"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(html.startIndex..., in: html)
+        let matches = regex.matches(in: html, range: range)
+        var seen = Set<String>()
+        return matches.compactMap { match -> String? in
+            guard let r = Range(match.range(at: 1), in: html) else { return nil }
+            let full = String(html[r])
+            // Normalize to relative path
+            let path: String
+            if let url = URL(string: full), let relPath = url.path.isEmpty ? nil : url.path {
+                path = relPath.hasPrefix("/workspace") ? relPath : full
+            } else {
+                path = full
+            }
+            guard seen.insert(path).inserted else { return nil }
+            return path
+        }
+    }
+
     // MARK: - Timeline
 
     func fetchTimeline() async throws -> [ENTTimelineNotification] {
@@ -307,6 +394,75 @@ final class ENTClient: Sendable {
         }
     }
 
+    // MARK: - Schoolbook Acknowledgment
+
+    func acknowledgeSchoolbookWord(id: String) async throws {
+        let tryPUT = await performAck(method: "PUT", id: id)
+        if tryPUT { return }
+        // Fallback to POST
+        let tryPOST = await performAck(method: "POST", id: id)
+        if !tryPOST {
+            throw ENTError.invalidResponse("Impossible d'acquitter le mot \(id)")
+        }
+    }
+
+    private func performAck(method: String, id: String) async -> Bool {
+        let url = URL(string: "\(baseURL.absoluteString)/schoolbook/word/\(id)/ack")!
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data()
+        entLog("[noto] ENT \(method) /schoolbook/word/\(id)/ack")
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse else { return false }
+        entLog("[noto] ENT ack response: \(http.statusCode)")
+        return (200...299).contains(http.statusCode)
+    }
+
+    /// Authenticated data fetch for workspace documents (images, attachments).
+    func fetchData(path: String) async throws -> Data {
+        let urlString: String
+        if path.hasPrefix("http") {
+            urlString = path
+        } else {
+            urlString = "\(baseURL.absoluteString)\(path)"
+        }
+        guard let url = URL(string: urlString) else {
+            throw ENTError.invalidResponse("URL invalide: \(path)")
+        }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        entLog("[noto] ENT fetchData \(url.absoluteString)")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ENTError.invalidResponse("Not HTTP")
+        }
+        if http.statusCode == 401 { throw ENTError.sessionExpired }
+        return data
+    }
+
+    /// HEAD request to fetch Content-Disposition filename for a workspace document.
+    func fetchFilename(path: String) async -> String? {
+        let urlString = path.hasPrefix("http") ? path : "\(baseURL.absoluteString)\(path)"
+        guard let url = URL(string: urlString) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              let disposition = http.value(forHTTPHeaderField: "Content-Disposition") else { return nil }
+        // Content-Disposition: attachment; filename="document.pdf"
+        let parts = disposition.components(separatedBy: ";")
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            if trimmed.lowercased().hasPrefix("filename=") {
+                let name = trimmed.dropFirst("filename=".count)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                return name.isEmpty ? nil : name
+            }
+        }
+        return nil
+    }
+
     // MARK: - Private
 
     private func get(_ path: String) async throws -> Data {
@@ -315,7 +471,8 @@ final class ENTClient: Sendable {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        entLog("[noto] ENT GET \(url.absoluteString)")
+        let sentCookies = ENTClient.cookieStorage.cookies(for: url) ?? []
+        entLog("[noto] ENT GET \(url.absoluteString) cookies=\(sentCookies.map(\.name))")
         let (data, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse else {
@@ -360,19 +517,31 @@ final class ENTClient: Sendable {
     private func parseConversation(_ json: [String: Any]) -> ENTConversation? {
         guard let id = json["id"] as? String else { return nil }
 
-        let displayNames = json["displayNames"] as? [[String: Any]] ?? []
-        let from = displayNames.first?["name"] as? String
+        // displayNames is an array of [id, name, isGroup] tuples (JSON arrays)
+        // e.g. [["abc123", "M. Dupont", false], ["grp456", "CM2 A", true]]
+        let displayNames = json["displayNames"] as? [[Any]] ?? []
+        let fromEntry = displayNames.first { ($0[safe: 2] as? Bool) == false }
+        let from = fromEntry?[safe: 1] as? String
             ?? json["from"] as? String ?? ""
-
         let groupNames = displayNames
-            .filter { $0["isGroup"] as? Bool == true }
-            .compactMap { $0["name"] as? String }
+            .filter { ($0[safe: 2] as? Bool) == true }
+            .compactMap { $0[safe: 1] as? String }
+
+        // date is a millisecond timestamp (Int or Double), not an ISO string
+        let date: Date
+        if let ms = json["date"] as? Double {
+            date = Date(timeIntervalSince1970: ms / 1000)
+        } else if let ms = json["date"] as? Int {
+            date = Date(timeIntervalSince1970: Double(ms) / 1000)
+        } else {
+            date = parseISO(json["date"] as? String) ?? .now
+        }
 
         return ENTConversation(
             id: id,
             subject: json["subject"] as? String ?? "",
             from: from,
-            date: parseISO(json["date"] as? String) ?? .now,
+            date: date,
             body: json["body"] as? String,
             unread: json["unread"] as? Bool ?? false,
             groupNames: groupNames
@@ -392,7 +561,7 @@ final class ENTClient: Sendable {
         return ENTSchoolbookWord(
             id: id,
             title: json["title"] as? String ?? json["subject"] as? String ?? "",
-            text: stripHTML(json["text"] as? String ?? ""),
+            text: json["text"] as? String ?? "",
             date: parseMongoDate(json["modified"] ?? json["created"]) ?? .now,
             ownerName: ownerName,
             acknowledged: json["ack"] as? Bool ?? false
@@ -427,7 +596,18 @@ final class ENTClient: Sendable {
 // MARK: - URL Encoding
 
 private extension String {
-    var urlEncoded: String {
-        addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? self
+    /// encodeURIComponent-equivalent: encodes everything except A-Z a-z 0-9 - _ . ! ~ * ' ( )
+    var formEncoded: String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-_.!~*'()")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
+    }
+}
+
+// MARK: - Safe Array Access
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

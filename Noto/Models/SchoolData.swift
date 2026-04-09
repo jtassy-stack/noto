@@ -85,6 +85,30 @@ enum MessageKind: String, Codable {
     case schoolbook    // carnet de liaison (PCN)
 }
 
+// MARK: - School Photo
+
+/// Metadata for a photo from PCN blogs or schoolbook.
+/// Actual image data is cached on disk by ENTPhotoCache, keyed by `entPath`.
+@Model
+final class SchoolPhoto {
+    var child: Child?
+    var source: String           // "blog" or "schoolbook"
+    var entPath: String          // /workspace/document/<id> — used as cache key
+    var title: String?           // blog post title or schoolbook word title
+    var authorName: String?
+    var date: Date
+    var synced: Date             // when this record was last updated
+
+    init(entPath: String, source: String, title: String? = nil, authorName: String? = nil, date: Date) {
+        self.entPath = entPath
+        self.source = source
+        self.title = title
+        self.authorName = authorName
+        self.date = date
+        self.synced = .now
+    }
+}
+
 @Model
 final class Message {
     var child: Child?
