@@ -82,8 +82,7 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=ZU448G6529 \
-            PROVISIONING_PROFILE_SPECIFIER="noto appstore"
+            DEVELOPMENT_TEAM=ZU448G6529
 
       - name: Prepare App Store Connect API key
         env:
