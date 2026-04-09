@@ -79,7 +79,15 @@ jobs:
 
       - name: Show build errors
         if: failure()
-        run: grep -E "error:|fatal error" /tmp/build.log | head -50 || tail -100 /tmp/build.log
+        run: |
+          echo "=== BUILD ERRORS ==="
+          grep " error:" /tmp/build.log | head -30 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 /tmp/build.log
+          echo "=== ANNOTATION ERRORS ==="
+          grep " error:" /tmp/build.log | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Fix build with Claude
         if: failure()
