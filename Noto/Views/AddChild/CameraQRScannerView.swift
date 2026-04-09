@@ -84,9 +84,10 @@ struct CameraQRScannerView: UIViewRepresentable {
 
             previewView.configure(session: session)
 
-            // startRunning() blocks until running — must not be called on main thread
-            DispatchQueue.global(qos: .userInitiated).async { [session] in
-                session.startRunning()
+            // startRunning() blocks until running — must not be called on main thread.
+            // Capture self (@unchecked Sendable) rather than local session (non-Sendable).
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                self.session?.startRunning()
             }
         }
 
