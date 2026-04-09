@@ -47,6 +47,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Install xcpretty
+        run: gem install xcpretty --no-document
+
       - name: Cache Swift packages
         uses: actions/cache@v4
         with:
@@ -72,7 +75,7 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty || true
+            2>&1 | xcpretty
 
       - name: Fix build with Claude
         if: failure()
