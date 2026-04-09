@@ -23,6 +23,7 @@ targets:
     platform: iOS
     sources:
       - path: Noto
+      - path: Noto/Resources/Assets.xcassets
     dependencies:
       - package: SwiftMail
         product: SwiftMail

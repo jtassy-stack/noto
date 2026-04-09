@@ -22,6 +22,8 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>UIRequiresFullScreen</key>
+    <true/>
     <key>NSFaceIDUsageDescription</key>
     <string>Authentification sécurisée pour accéder aux données scolaires.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
