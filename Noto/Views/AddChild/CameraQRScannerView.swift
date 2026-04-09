@@ -34,13 +34,13 @@ struct CameraQRScannerView: UIViewRepresentable {
     // AVCaptureSession is not annotated Sendable by Apple, so we use nonisolated(unsafe)
     // to suppress the Swift 6 Sendable check. Thread safety is upheld by the access model above.
 
-    final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+    // @unchecked Sendable: AVFoundation types (AVCaptureSession, AVCaptureDevice, etc.)
+    // are not annotated Sendable by Apple. Thread safety is upheld manually — see
+    // thread model above. This is the standard pattern for AVFoundation coordinators in Swift 6.
+    final class Coordinator: NSObject, @unchecked Sendable, AVCaptureMetadataOutputObjectsDelegate {
         private let onDetected: (String) -> Void
         private let onError: (String) -> Void
-        // nonisolated(unsafe): AVCaptureSession is internally thread-safe for
-        // start/stop and is only accessed from main thread except for startRunning()
-        // which is explicitly dispatched to a background queue per Apple's docs.
-        nonisolated(unsafe) private var session: AVCaptureSession?
+        private var session: AVCaptureSession?
         private var hasDetected = false
 
         init(onDetected: @escaping (String) -> Void, onError: @escaping (String) -> Void) {
