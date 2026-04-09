@@ -4,16 +4,10 @@
 xcuserdata/
 DerivedData/
 .build/
+SourcePackages/
 *.ipa
 *.dSYM.zip
 *.dSYM
-
-# Old Expo / Node
-node_modules/
-package-lock.json
-.expo/
-dist/
-web-build/
 
 # Secrets
 .env
@@ -29,3 +23,6 @@ web-build/
 # OS
 .DS_Store
 *.swp
+
+# XcodeBuildMCP
+.xcodebuildmcp/
