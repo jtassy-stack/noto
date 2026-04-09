@@ -75,7 +75,11 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            2>&1 | xcpretty
+            2>&1 | tee /tmp/build.log | xcpretty
+
+      - name: Show build errors
+        if: failure()
+        run: grep -E "error:|fatal error" /tmp/build.log | head -50 || tail -100 /tmp/build.log
 
       - name: Fix build with Claude
         if: failure()
