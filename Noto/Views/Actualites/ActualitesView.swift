@@ -160,7 +160,11 @@ struct ActualitesView: View {
                     ENTClient.importCookies(cookies)
                     NSLog("[noto] ENT re-auth OK for %@ (%d cookies)", child.firstName, cookies.count)
                     try await service.sync(child: child, client: client, entChildId: entChildId)
-                    NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, child.photos.count)
+                    let photoCount = child.photos.count
+                    NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, photoCount)
+                    if photoCount == 0 {
+                        syncError = "\(child.firstName) : sync OK mais aucune photo trouvée (pas de blog avec photos sur PCN)."
+                    }
                 } catch ENTError.sessionExpired, ENTError.badCredentials {
                     NSLog("[noto][error] ENT bad credentials for %@", child.firstName)
                     syncError = "Identifiants PCN incorrects pour \(child.firstName). Reconnectez-vous dans Réglages."

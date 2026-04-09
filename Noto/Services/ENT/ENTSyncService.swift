@@ -30,8 +30,13 @@ final class ENTSyncService {
         catch { fetchErrors.append("devoirs: \(error.localizedDescription)") }
 
         // Photos: blog posts + schoolbook word attachments
-        do { photos += try await fetchAllPhotos(client: client, words: words) }
-        catch { fetchErrors.append("photos: \(error.localizedDescription)") }
+        do {
+            photos += try await fetchAllPhotos(client: client, words: words)
+            NSLog("[noto] fetchAllPhotos OK — %d attachments for %@", photos.count, child.firstName)
+        } catch {
+            NSLog("[noto][error] fetchAllPhotos failed for %@: %@", child.firstName, error.localizedDescription)
+            fetchErrors.append("photos: \(error.localizedDescription)")
+        }
 
         // Only proceed if we got at least some data
         let hasData = !conversations.isEmpty || !words.isEmpty || !homework.isEmpty
@@ -63,13 +68,16 @@ final class ENTSyncService {
         let blogs: [ENTBlogPost]
         do {
             blogs = try await client.fetchBlogPosts()
+            NSLog("[noto] fetchBlogPosts → %d blogs", blogs.count)
         } catch {
             NSLog("[noto][error] fetchBlogPosts failed: %@", error.localizedDescription)
             blogs = []
         }
         for blog in blogs {
             do {
-                photos += try await client.fetchBlogPhotoAttachments(blogId: blog.id)
+                let attachments = try await client.fetchBlogPhotoAttachments(blogId: blog.id)
+                NSLog("[noto] blog %@ → %d photo attachments", blog.id, attachments.count)
+                photos += attachments
             } catch {
                 NSLog("[noto][error] fetchBlogPhotoAttachments %@ failed: %@", blog.id, error.localizedDescription)
             }
