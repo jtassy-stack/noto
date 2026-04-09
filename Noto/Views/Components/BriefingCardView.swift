@@ -55,3 +55,30 @@ struct BriefingCardView: View {
         card.priority == .urgent ? NotoTheme.Colors.danger : NotoTheme.Colors.textSecondary
     }
 }
+
+#Preview("BriefingCard") {
+    VStack(spacing: 12) {
+        BriefingCardView(card: BriefingCard(
+            type: .test, childName: "Léa",
+            title: "Contrôle de maths demain",
+            subtitle: "Équations du second degré — chapitre 4",
+            priority: .urgent, icon: "pencil.and.list.clipboard"
+        ), showChildName: true)
+
+        BriefingCardView(card: BriefingCard(
+            type: .homework, childName: "Tom",
+            title: "Pas de devoirs ce soir",
+            subtitle: "Bonne soirée 🎉",
+            priority: .positive, icon: "checkmark.circle"
+        ), showChildName: true)
+
+        BriefingCardView(card: BriefingCard(
+            type: .message, childName: "Léa",
+            title: "Nouveau message",
+            subtitle: "M. Bernard — Résultats du contrôle",
+            priority: .normal, icon: "envelope"
+        ), showChildName: false)
+    }
+    .padding()
+    .background(NotoTheme.Colors.background)
+}

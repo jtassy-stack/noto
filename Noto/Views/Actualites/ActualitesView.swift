@@ -611,3 +611,8 @@ struct FeedMessageDetailView: View {
         }
     }
 }
+
+#Preview("Actualités") {
+    ActualitesView()
+        .withPreviewData()
+}

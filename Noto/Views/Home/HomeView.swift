@@ -779,3 +779,8 @@ private struct AbsenceShortcutCard: View {
         )
     }
 }
+
+#Preview("Léa — collège") {
+    HomeView(selectedChild: nil)
+        .withPreviewData()
+}

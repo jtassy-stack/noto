@@ -322,3 +322,7 @@ struct PhotoDetailView: View {
         }
     }
 }
+
+#Preview("Galerie photos — vide") {
+    PhotoGridView(children: [])
+}

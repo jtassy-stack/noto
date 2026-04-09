@@ -116,3 +116,9 @@ Before the first build in a session, call `session_show_defaults` to verify proj
 - Notion specs: https://www.notion.so/pmfconsulting/331e0fdcdce881899db6c3c5a0b5274d
 - Sprint board: https://www.notion.so/pmfconsulting/94812efc2c374cf1b0a42eeb081918f8
 - culture-api: https://celyn.io
+
+### culture-api Integration Guide
+
+**Before modifying culture-api integration**, invoke the `/celyn` skill to load the full API reference, endpoint docs, and nōto-specific patterns (curriculum matching, batch recommendations, grade filters).
+
+Integration guide: `https://celyn.io/portal/wiki#api/integration-noto.md`

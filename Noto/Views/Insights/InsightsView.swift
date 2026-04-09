@@ -857,3 +857,8 @@ private struct TrendDetailSheet: View {
         return NotoTheme.Colors.danger
     }
 }
+
+#Preview("Insights") {
+    InsightsView()
+        .withPreviewData()
+}

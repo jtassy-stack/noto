@@ -168,3 +168,8 @@ struct SettingsView: View {
         try? modelContext.save()
     }
 }
+
+#Preview("Réglages") {
+    SettingsView()
+        .withPreviewData()
+}

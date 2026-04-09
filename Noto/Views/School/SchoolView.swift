@@ -978,3 +978,8 @@ struct ChildTag: View {
 extension Grade: Identifiable {}
 extension Homework: Identifiable {}
 extension Message: Identifiable {}
+
+#Preview("École") {
+    SchoolView()
+        .withPreviewData()
+}

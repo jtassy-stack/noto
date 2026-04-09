@@ -400,3 +400,8 @@ private struct RecoRow: View {
         return "\(subject) · \(grade)"
     }
 }
+
+#Preview("Découvrir") {
+    DiscoverView()
+        .withPreviewData()
+}

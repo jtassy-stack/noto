@@ -60,3 +60,8 @@ struct OnboardingView: View {
         showAddChild = true
     }
 }
+
+#Preview("Onboarding") {
+    OnboardingView()
+        .withPreviewData()
+}

@@ -22796,46 +22796,83 @@
     // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth
     // Performs Identification with pourENT:true, then Authentification
     loginENT: async (session, url, deviceUUID) => {
-      // Reuse pawnote internals (minified names from the bundle above)
-      // ee = fetchSessionPage, he = identification, fe = authentification
-      // me = fonctionParametres, Pe = deriveKey, Se = solveChallenge
-      // Ie = configureSession, Le = hasDoubleAuth, Te = finalizeLogin, Ve = handleDoubleAuth
       const baseUrl = a(url);
 
-      // Step 1: Fetch mobile.parent.html with CAS cookies
-      // The __nativeFetch polyfill will include cookies from HTTPCookieStorage
-      const { information, version } = await ee(
-        { base: baseUrl, kind: V.PARENT, cookies: [], params: { ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" } },
-        session.fetcher
-      );
+      // Step 1: Fetch mobile.parent.html with redirect:follow (CAS redirects must be followed)
+      // pawnote's built-in fetchSessionPage uses redirect:manual which breaks CAS flows.
+      let information, version;
+      try {
+        const pageUrl = new URL(baseUrl + "/mobile.parent.html");
+        for (const [k, v2] of Object.entries({ ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" })) {
+          pageUrl.searchParams.set(k, v2);
+        }
+        // Use redirect:follow so CAS redirect chain is traversed
+        const resp = await session.fetcher({ url: pageUrl, redirect: "follow" });
+        const html = resp.content;
+
+        // Extract version — works for both old Pronote (inline Start()) and new Vite builds (meta/script tag)
+        const versionMatch = html.match(/>PRONOTE (?<version>\d+\.\d+\.\d+)/) ||
+                             html.match(/["'](?<version>\d{4}\.\d+\.\d+\.\d+)["']/) ||
+                             html.match(/versionPN['":\s]+['"](?<version>[\d.]+)['"]/);
+        const versionStr = versionMatch?.groups?.version || versionMatch?.[1];
+        if (!versionStr) throw new Error("Version string not found in Pronote HTML (len=" + html.length + ", url=" + resp.finalUrl + ")");
+        const versionArr = versionStr.split(".").map(Number);
+
+        // Extract Start() data — present in old Pronote inline HTML
+        const noSpaces = html.replace(/ /gu, "").replace(/\n/gu, "");
+        const startIdx = noSpaces.indexOf("Start(");
+        if (startIdx === -1) throw new Error("Start() not found (len=" + html.length + " ver=" + versionStr + " prefix=" + html.substring(0, 300).replace(/\n/g, ' ') + ")");
+        const endIdx = noSpaces.indexOf(")}catch");
+        const startJson = noSpaces.substring(startIdx + 6, endIdx)
+          .replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ')
+          .replace(/'/gu, '"');
+
+        information = W(JSON.parse(startJson), baseUrl, versionArr);
+        version = versionArr;
+      } catch (e) {
+        throw new Error("ENT_STEP1_FAIL: " + (e && e.message || String(e)));
+      }
       session.information = information;
       session.instance = { version };
-      session.instance = await me(session);
+      try { session.instance = await me(session); } catch (e) {
+        throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
+      }
 
-      // Step 2: Identification with pourENT:true (CAS auth)
-      const identData = await he(session, {
-        username: "",  // CAS provides the identity
-        deviceUUID: deviceUUID,
-        requestFirstMobileAuthentication: true,
-        reuseMobileAuthentication: false,
-        requestFromQRCode: false,
-        useCAS: true,  // This sets pourENT:true in the request
-      });
+      // Step 2: Identification with pourENT:true (CAS provides the identity)
+      let identData;
+      try {
+        identData = await he(session, {
+          username: "",
+          deviceUUID: deviceUUID,
+          requestFirstMobileAuthentication: true,
+          reuseMobileAuthentication: false,
+          requestFromQRCode: false,
+          useCAS: true,
+        });
+      } catch (e) {
+        throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
+      }
 
-      // Step 3: Solve challenge — with CAS, use empty password
-      // Pronote returns challenge encrypted with a key derived from the CAS session
-      // With pourENT:true, the alea+empty password should work
+      // Step 3: Solve challenge with empty password (CAS session provides auth)
       const username = identData.login || "";
       const opts = { username, password: "" };
       Ne(opts, "password", identData);
       const authKey = Pe(identData, opts.username, opts.password);
-      const solvedChallenge = Se(session, identData, authKey);
-      const authData = await fe(session, solvedChallenge);
+      let solvedChallenge;
+      try {
+        solvedChallenge = Se(session, identData, authKey);
+      } catch (e) {
+        throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + "): " + (e && e.message || String(e)));
+      }
+      let authData;
+      try {
+        authData = await fe(session, solvedChallenge);
+      } catch (e) {
+        throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
+      }
 
-      // Step 4: Configure session
       Ie(session, authData, authKey);
 
-      // Step 5: Check for double auth or return token
       if (Le(authData)) {
         const result = await Ve(session, {
           token: authData.jetonConnexionAppliMobile,

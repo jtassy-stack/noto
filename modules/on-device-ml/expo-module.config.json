@@ -1,9 +1,0 @@
-{
-  "platforms": ["apple", "android", "web"],
-  "apple": {
-    "modules": ["OnDeviceMlModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.ondeviceml.OnDeviceMlModule"]
-  }
-}

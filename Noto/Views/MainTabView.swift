@@ -96,3 +96,8 @@ extension Notification.Name {
     static let navigateToHomework = Notification.Name("noto.navigateToHomework")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
 }
+
+#Preview("MainTabView") {
+    MainTabView()
+        .withPreviewData()
+}
