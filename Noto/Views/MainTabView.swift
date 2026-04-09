@@ -65,6 +65,9 @@ struct MainTabView: View {
             AddChildView()
         }
         .onAppear { configureTabBarAppearance() }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToHome)) { _ in
+            selectedTab = .home
+        }
     }
 
     private func configureTabBarAppearance() {
@@ -89,6 +92,7 @@ enum Tab: String {
 // MARK: - Notification Names
 
 extension Notification.Name {
+    static let navigateToHome = Notification.Name("noto.navigateToHome")
     static let navigateToHomework = Notification.Name("noto.navigateToHomework")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
 }
