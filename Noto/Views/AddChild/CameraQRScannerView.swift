@@ -25,8 +25,16 @@ struct CameraQRScannerView: UIViewRepresentable {
     }
 
     // MARK: - Coordinator
+    //
+    // Thread model:
+    // - setup() and stopSession() are called on the main thread (SwiftUI lifecycle)
+    // - metadataOutput delegate is dispatched to .main (line: setMetadataObjectsDelegate queue: .main)
+    // - startRunning() is dispatched to a background queue (it blocks until running)
+    //
+    // hasDetected is only ever read/written on the main thread (delegate queue = .main),
+    // so no lock is needed. @MainActor annotation is deliberately avoided to prevent
+    // Swift 6 Sendable violations when capturing AVCaptureSession across isolation domains.
 
-    @MainActor
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         private let onDetected: (String) -> Void
         private let onError: (String) -> Void
@@ -43,7 +51,7 @@ struct CameraQRScannerView: UIViewRepresentable {
             self.session = session
 
             guard let device = AVCaptureDevice.default(for: .video) else {
-                onError("Caméra inaccessible. Vérifiez les autorisations dans Réglages > nōto.")
+                DispatchQueue.main.async { self.onError("Caméra inaccessible. Vérifiez les autorisations dans Réglages > nōto.") }
                 return
             }
 
@@ -51,30 +59,30 @@ struct CameraQRScannerView: UIViewRepresentable {
             do {
                 input = try AVCaptureDeviceInput(device: device)
             } catch {
-                onError("Impossible d'accéder à la caméra : \(error.localizedDescription)")
+                DispatchQueue.main.async { self.onError("Impossible d'accéder à la caméra : \(error.localizedDescription)") }
                 return
             }
 
             guard session.canAddInput(input) else {
-                onError("La session caméra ne peut pas démarrer.")
+                DispatchQueue.main.async { self.onError("La session caméra ne peut pas démarrer.") }
                 return
             }
             session.addInput(input)
 
             let output = AVCaptureMetadataOutput()
             guard session.canAddOutput(output) else {
-                onError("Impossible de configurer la détection QR.")
+                DispatchQueue.main.async { self.onError("Impossible de configurer la détection QR.") }
                 return
             }
             session.addOutput(output)
+            // Delegate dispatched to main — hasDetected is only accessed on main thread
             output.setMetadataObjectsDelegate(self, queue: .main)
             output.metadataObjectTypes = [.qr]
 
             previewView.configure(session: session)
 
-            Task.detached { [session] in
-                session.startRunning()
-            }
+            // startRunning() blocks until the session is running; must be off main thread
+            DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
         }
 
         func stopSession() {
@@ -82,17 +90,15 @@ struct CameraQRScannerView: UIViewRepresentable {
             session = nil
         }
 
-        nonisolated func metadataOutput(_ output: AVCaptureMetadataOutput,
-                                        didOutput metadataObjects: [AVMetadataObject],
-                                        from connection: AVCaptureConnection) {
-            guard let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+        func metadataOutput(_ output: AVCaptureMetadataOutput,
+                            didOutput metadataObjects: [AVMetadataObject],
+                            from connection: AVCaptureConnection) {
+            guard !hasDetected,
+                  let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
                   let payload = object.stringValue else { return }
-            Task { @MainActor in
-                guard !hasDetected else { return }
-                hasDetected = true
-                session?.stopRunning()
-                onDetected(payload)
-            }
+            hasDetected = true
+            session?.stopRunning()
+            onDetected(payload)
         }
     }
 }
