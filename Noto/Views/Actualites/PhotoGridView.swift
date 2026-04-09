@@ -103,6 +103,7 @@ private struct PhotoThumbnail: View {
     let children: [Child]
 
     @State private var image: UIImage? = nil
+    @State private var saveToast: String? = nil
 
     var body: some View {
         ZStack {
@@ -120,6 +121,52 @@ private struct PhotoThumbnail: View {
         }
         .task(id: photo.entPath) {
             await loadImage()
+        }
+        .contextMenu {
+            if let img = image {
+                Button {
+                    Task { await save(img) }
+                } label: {
+                    Label("Enregistrer dans Photos", systemImage: "square.and.arrow.down")
+                }
+                ShareLink(item: Image(uiImage: img), preview: SharePreview(photo.title ?? "Photo")) {
+                    Label("Partager…", systemImage: "square.and.arrow.up")
+                }
+            }
+        } preview: {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 300, maxHeight: 300)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = saveToast {
+                Text(toast)
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, NotoTheme.Spacing.sm)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.7))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 4)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: saveToast)
+    }
+
+    private func save(_ img: UIImage) async {
+        do {
+            try await ENTPhotoSaver.save(img)
+            saveToast = "Enregistrée ✓"
+            try? await Task.sleep(for: .seconds(2))
+            saveToast = nil
+        } catch {
+            saveToast = "Erreur d'enregistrement"
+            try? await Task.sleep(for: .seconds(2))
+            saveToast = nil
         }
     }
 
@@ -158,6 +205,7 @@ struct PhotoDetailView: View {
     let children: [Child]
 
     @State private var image: UIImage? = nil
+    @State private var saveToast: String? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -174,7 +222,24 @@ struct PhotoDetailView: View {
                     ProgressView()
                         .tint(.white)
                 }
+
+                // Toast
+                if let toast = saveToast {
+                    VStack {
+                        Spacer()
+                        Text(toast)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, NotoTheme.Spacing.md)
+                            .padding(.vertical, NotoTheme.Spacing.sm)
+                            .background(.black.opacity(0.7))
+                            .clipShape(Capsule())
+                            .padding(.bottom, 100)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
             }
+            .animation(.easeInOut(duration: 0.3), value: saveToast)
             .navigationTitle(photo.title ?? "Photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -182,6 +247,25 @@ struct PhotoDetailView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fermer") { dismiss() }
                         .foregroundStyle(.white)
+                }
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    if let img = image {
+                        // Save to Photos
+                        Button {
+                            Task { await save(img) }
+                        } label: {
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundStyle(.white)
+                        }
+                        // Share sheet
+                        ShareLink(
+                            item: Image(uiImage: img),
+                            preview: SharePreview(photo.title ?? "Photo")
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundStyle(.white)
+                        }
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -223,5 +307,18 @@ struct PhotoDetailView: View {
         else { return }
 
         image = await ENTPhotoCache.shared.image(for: photo.entPath, client: client)
+    }
+
+    private func save(_ img: UIImage) async {
+        do {
+            try await ENTPhotoSaver.save(img)
+            withAnimation { saveToast = "Enregistrée dans Photos ✓" }
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation { saveToast = nil }
+        } catch {
+            withAnimation { saveToast = "Erreur — vérifiez les autorisations Photos" }
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation { saveToast = nil }
+        }
     }
 }
