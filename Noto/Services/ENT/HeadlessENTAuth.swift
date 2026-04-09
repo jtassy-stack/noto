@@ -112,27 +112,45 @@ final class HeadlessENTAuth: NSObject, WKNavigationDelegate {
     // MARK: - Form interaction
 
     private func fillAndSubmitForm(_ webView: WKWebView) {
-        let safeEmail = jsEscape(email)
-        let safePassword = jsEscape(password)
+        // Pass credentials via JSON to avoid any string-interpolation injection issues.
+        // The try/catch wrapper ensures a JS exception never surfaces as a WKError.
+        guard let payload = try? JSONSerialization.data(withJSONObject: ["e": email, "p": password]),
+              let payloadStr = String(data: payload, encoding: .utf8) else {
+            fail(ENTError.invalidResponse("Échec encodage credentials"))
+            return
+        }
 
         let js = """
         (function() {
-            var email = document.querySelector('input[type="email"], input[name="email"], input[id="email"], input[name="login"], input[name="username"]');
-            var pwd = document.querySelector('input[type="password"]');
-            if (!email || !pwd) return 'no_fields:' + document.body.innerHTML.substring(0, 100);
-            function setNativeValue(el, val) {
-                var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                nativeSetter.call(el, val);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
+            try {
+                var creds = \(payloadStr);
+                var emailEl = document.querySelector(
+                    'input[type="email"], input[name="email"], input[id="email"], input[name="login"], input[name="username"]'
+                );
+                var pwdEl = document.querySelector('input[type="password"]');
+                if (!emailEl || !pwdEl) return 'no_fields';
+                function fill(el, val) {
+                    try {
+                        var desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                        if (desc && desc.set) { desc.set.call(el, val); }
+                        else { el.value = val; }
+                    } catch(e) { el.value = val; }
+                    el.dispatchEvent(new Event('input',  { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    el.dispatchEvent(new Event('blur',   { bubbles: true }));
+                }
+                fill(emailEl, creds.e);
+                fill(pwdEl,   creds.p);
+                var form = emailEl.closest('form') || document.querySelector('form');
+                if (form) { form.requestSubmit ? form.requestSubmit() : form.submit(); return 'form_submit'; }
+                var btn = document.querySelector(
+                    'button[type="submit"], input[type="submit"], button.login-btn, button.submit, button'
+                );
+                if (btn) { btn.click(); return 'btn_click'; }
+                return 'no_submit';
+            } catch(e) {
+                return 'exception:' + e.message;
             }
-            setNativeValue(email, "\(safeEmail)");
-            setNativeValue(pwd, "\(safePassword)");
-            var form = email.closest('form') || document.querySelector('form');
-            if (form) { form.submit(); return 'form_submit'; }
-            var btn = document.querySelector('button[type="submit"], input[type="submit"], button.login-btn, button.submit');
-            if (btn) { btn.click(); return 'btn_click'; }
-            return 'no_submit';
         })()
         """
 
@@ -146,10 +164,24 @@ final class HeadlessENTAuth: NSObject, WKNavigationDelegate {
                 }
                 let outcome = result as? String ?? ""
                 NSLog("[noto] HeadlessENTAuth JS outcome: %@", outcome)
-                if outcome.hasPrefix("no_fields") || outcome == "no_submit" {
-                    self.fail(ENTError.invalidResponse("Formulaire ENT introuvable: \(outcome)"))
-                } else {
-                    self.state = .submitted
+                switch outcome {
+                case "no_fields":
+                    // Wait a bit more and retry once — SPA may not have mounted yet
+                    Task { @MainActor [weak self] in
+                        guard let self, self.state == .loading else { return }
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard self.state == .loading else { return }
+                        NSLog("[noto] HeadlessENTAuth retrying form injection…")
+                        self.fillAndSubmitForm(webView)
+                    }
+                case "no_submit":
+                    self.fail(ENTError.invalidResponse("Bouton de connexion introuvable"))
+                default:
+                    if outcome.hasPrefix("exception:") {
+                        self.fail(ENTError.invalidResponse("Erreur JS: \(outcome)"))
+                    } else {
+                        self.state = .submitted
+                    }
                 }
             }
         }
@@ -182,13 +214,4 @@ final class HeadlessENTAuth: NSObject, WKNavigationDelegate {
         webView = nil
     }
 
-    private func jsEscape(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
-         .replacingOccurrences(of: "\"", with: "\\\"")
-         .replacingOccurrences(of: "\n", with: "\\n")
-         .replacingOccurrences(of: "\r", with: "\\r")
-         .replacingOccurrences(of: "\0", with: "\\0")
-         .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
-         .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
-    }
 }
