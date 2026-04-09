@@ -15,10 +15,34 @@ struct HomeView: View {
     @State private var showNoConnectionAlert = false
     @State private var showSettings = false
     @State private var syncError: String?
+    @State private var showAbsence = false
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
     private var isFamilyMode: Bool { selectedChild == nil }
+
+    // MARK: - Computed helpers for new sections
+
+    private var isSchoolDay: Bool {
+        let weekday = Calendar.current.component(.weekday, from: Date.now)
+        return weekday >= 2 && weekday <= 6
+    }
+
+    private var hasENTChildren: Bool {
+        children.contains { $0.schoolType == .ent }
+    }
+
+    private var unreadMessageCount: Int {
+        children.flatMap(\.messages).filter { !$0.read && $0.kind == .conversation }.count
+    }
+
+    private var urgentHomeworkCount: Int {
+        children.flatMap(\.homework).filter { !$0.done && $0.dueDate <= Date.now.addingTimeInterval(86_400) }.count
+    }
+
+    private var unsignedCarnetsCount: Int {
+        children.flatMap(\.messages).filter { !$0.read && $0.kind == .schoolbook }.count
+    }
 
     private var lastSyncDate: Date? {
         lastSyncDateInterval > 0 ? Date(timeIntervalSince1970: lastSyncDateInterval) : nil
@@ -38,6 +62,33 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: NotoTheme.Spacing.md) {
+                    // MARK: Story Rings
+                    if !children.isEmpty {
+                        StoryRingsRow(children: children)
+                    }
+
+                    // MARK: Hero Card
+                    if !children.isEmpty {
+                        HeroCard(
+                            unreadMessageCount: unreadMessageCount,
+                            children: children
+                        )
+                    }
+
+                    // MARK: Morning Action Strip
+                    if !children.isEmpty {
+                        MorningActionStrip(
+                            messageCount: unreadMessageCount,
+                            homeworkCount: urgentHomeworkCount,
+                            carnetCount: unsignedCarnetsCount
+                        )
+                    }
+
+                    // MARK: Absence Shortcut
+                    if isSchoolDay && hasENTChildren {
+                        AbsenceShortcutCard(showAbsence: $showAbsence)
+                    }
+
                     // Auto-reconnect banner
                     if pronoteService.isReconnecting {
                         ReconnectingBanner()
@@ -98,6 +149,9 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .sheet(isPresented: $showAbsence) {
+                AbsenceView()
+            }
             .refreshable {
                 await performFullRefresh()
             }
@@ -122,24 +176,46 @@ struct HomeView: View {
 
         var errors: [String] = []
         let targetChildren = selectedChild.map { [$0] } ?? children
-        let pronoteChildren = targetChildren.filter { $0.schoolType == .pronote }
-        let entChildren = targetChildren.filter { $0.schoolType == .ent }
+        // Children with a direct Pronote bridge connection (QR code login)
+        let directPronoteChildren = targetChildren.filter { $0.schoolType == .pronote && $0.entProvider == nil }
+        // Children from MonLycée (have entProvider) — sync via logbook
+        let monlyceeChildren = targetChildren.filter { $0.entProvider == .monlycee }
+        // Pure ENT children (PCN etc)
+        let entChildren = targetChildren.filter { $0.schoolType == .ent && $0.entProvider != .monlycee }
 
-        // Pronote sync
-        if !pronoteChildren.isEmpty {
+        // Direct Pronote sync (QR code login)
+        if !directPronoteChildren.isEmpty {
             if let bridge = pronoteService.bridge {
                 let syncService = PronoteSyncService(modelContext: modelContext)
-                for (index, child) in pronoteChildren.enumerated() {
+                for (index, child) in directPronoteChildren.enumerated() {
                     await syncService.sync(child: child, bridge: bridge, childIndex: index)
                 }
-            } else if entChildren.isEmpty {
-                showNoConnectionAlert = true
             } else {
-                errors.append("Pronote : reconnexion requise")
+                showNoConnectionAlert = true
             }
         }
 
-        // ENT/PCN sync
+        // MonLycée children: try Pronote bridge first, fallback to logbook
+        if !monlyceeChildren.isEmpty {
+            // If no bridge, attempt auto-reconnect (uses stored Pronote token if available)
+            if pronoteService.bridge == nil {
+                await PronoteAutoConnect.autoConnect(modelContext: modelContext)
+            }
+            if let bridge = pronoteService.bridge {
+                let syncService = PronoteSyncService(modelContext: modelContext)
+                for (index, child) in monlyceeChildren.enumerated() {
+                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                }
+            } else {
+                // Fallback: sync from stored logbook data
+                let syncService = MonLyceeSyncService(modelContext: modelContext)
+                for child in monlyceeChildren {
+                    syncService.syncFromStoredLogbook(for: child)
+                }
+            }
+        }
+
+        // Pure ENT/PCN sync
         if !entChildren.isEmpty {
             let entErrors = await syncENTChildren(entChildren)
             errors.append(contentsOf: entErrors)
@@ -398,5 +474,308 @@ private struct EmptyBriefingView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, NotoTheme.Spacing.xl)
+    }
+}
+
+// MARK: - Story Rings
+
+private struct StoryRingsRow: View {
+    let children: [Child]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NotoTheme.Spacing.lg) {
+                ForEach(children) { child in
+                    ChildStoryRing(child: child)
+                }
+            }
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.xs)
+        }
+    }
+}
+
+private struct ChildStoryRing: View {
+    let child: Child
+
+    @State private var isPressed = false
+
+    private var hasActivity: Bool {
+        let unreadMsgs = child.messages.contains { !$0.read }
+        return unreadMsgs
+    }
+
+    private var ringColor: Color {
+        hasActivity ? NotoTheme.Colors.brand : NotoTheme.Colors.border
+    }
+
+    private var ringWidth: CGFloat {
+        hasActivity ? 3 : 1.5
+    }
+
+    private var schoolBadgeColor: Color {
+        switch child.schoolType {
+        case .ent: return NotoTheme.Colors.cobalt
+        case .pronote: return NotoTheme.Colors.pronote
+        }
+    }
+
+    private var schoolBadgeLabel: String {
+        switch child.schoolType {
+        case .ent: return child.entProvider?.rawValue.uppercased() ?? "ENT"
+        case .pronote: return "PRO"
+        }
+    }
+
+    var body: some View {
+        Button(action: {}) {
+            VStack(spacing: NotoTheme.Spacing.xs) {
+                ZStack {
+                    // Ring border
+                    Circle()
+                        .stroke(ringColor, lineWidth: ringWidth)
+                        .frame(width: 60, height: 60)
+
+                    // Avatar or initial
+                    if let avatarData = child.avatar,
+                       let uiImage = UIImage(data: avatarData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 54, height: 54)
+                            .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(NotoTheme.Colors.indigo)
+                            .frame(width: 54, height: 54)
+                            .overlay(
+                                Text(String(child.firstName.prefix(1)).uppercased())
+                                    .font(NotoTheme.Typography.mono(22, weight: .bold))
+                                    .foregroundStyle(NotoTheme.Colors.paper)
+                            )
+                    }
+
+                    // School type badge
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Text(schoolBadgeLabel)
+                                .font(NotoTheme.Typography.mono(7, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 3)
+                                .padding(.vertical, 1)
+                                .background(schoolBadgeColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                                .offset(x: 4, y: 4)
+                        }
+                    }
+                    .frame(width: 60, height: 60)
+                }
+
+                Text(child.firstName)
+                    .font(NotoTheme.Typography.mono(10))
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    .lineLimit(1)
+
+                Text(child.grade)
+                    .font(NotoTheme.Typography.mono(9))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.92 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isPressed)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded { _ in isPressed = false }
+        )
+    }
+}
+
+// MARK: - Hero Card
+
+private struct HeroCard: View {
+    let unreadMessageCount: Int
+    let children: [Child]
+
+    private var dateString: String {
+        Date.now.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "fr_FR")))
+    }
+
+    private var weekdayString: String {
+        Date.now.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "fr_FR"))).capitalized
+    }
+
+    var body: some View {
+        // TODO: blog photo hero — use school blog photo when available from PCN
+        ZStack(alignment: .bottomLeading) {
+            // Background
+            RoundedRectangle(cornerRadius: NotoTheme.Radius.lg)
+                .fill(NotoTheme.Colors.indigo)
+                .frame(height: 180)
+
+            // Subtle grid pattern overlay
+            GeometryReader { geo in
+                Canvas { context, size in
+                    let step: CGFloat = 24
+                    var x: CGFloat = 0
+                    while x < size.width {
+                        var y: CGFloat = 0
+                        while y < size.height {
+                            let rect = CGRect(x: x, y: y, width: 1, height: 1)
+                            context.fill(Path(rect), with: .color(.white.opacity(0.06)))
+                            y += step
+                        }
+                        x += step
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.lg))
+            }
+            .frame(height: 180)
+
+            if unreadMessageCount > 0 {
+                // Message count hero
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                    HStack(alignment: .firstTextBaseline, spacing: NotoTheme.Spacing.sm) {
+                        Text("\(unreadMessageCount)")
+                            .font(NotoTheme.Typography.dataLarge)
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                    }
+                    Text("message\(unreadMessageCount > 1 ? "s" : "") non lu\(unreadMessageCount > 1 ? "s" : "")")
+                        .font(NotoTheme.Typography.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                .padding(NotoTheme.Spacing.md)
+            } else {
+                // Journée summary hero
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                    Text(weekdayString)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.mist)
+                        .textCase(.uppercase)
+                    Text(dateString)
+                        .font(NotoTheme.Typography.dataLarge)
+                        .foregroundStyle(NotoTheme.Colors.paper)
+                    Text("Bonne journée")
+                        .font(NotoTheme.Typography.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                .padding(NotoTheme.Spacing.md)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Morning Action Strip
+
+private struct MorningActionStrip: View {
+    let messageCount: Int
+    let homeworkCount: Int
+    let carnetCount: Int
+
+    var body: some View {
+        let chips = buildChips()
+        if !chips.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: NotoTheme.Spacing.sm) {
+                    ForEach(chips, id: \.label) { chip in
+                        ActionChip(icon: chip.icon, count: chip.count, label: chip.label, accentColor: chip.accentColor)
+                    }
+                }
+                .padding(.horizontal, NotoTheme.Spacing.md)
+                .padding(.vertical, NotoTheme.Spacing.xs)
+            }
+        }
+    }
+
+    private struct ChipData {
+        let icon: String
+        let count: Int
+        let label: String
+        let accentColor: Color
+    }
+
+    private func buildChips() -> [ChipData] {
+        var result: [ChipData] = []
+        if messageCount > 0 {
+            result.append(ChipData(icon: "envelope.fill", count: messageCount, label: "messages", accentColor: NotoTheme.Colors.brand))
+        }
+        if homeworkCount > 0 {
+            result.append(ChipData(icon: "pencil", count: homeworkCount, label: "devoirs", accentColor: NotoTheme.Colors.cobalt))
+        }
+        if carnetCount > 0 {
+            result.append(ChipData(icon: "signature", count: carnetCount, label: "carnet\(carnetCount > 1 ? "s" : "") à signer", accentColor: NotoTheme.Colors.amber))
+        }
+        return result
+    }
+}
+
+private struct ActionChip: View {
+    let icon: String
+    let count: Int
+    let label: String
+    let accentColor: Color
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(accentColor)
+            Text("\(count) \(label)")
+                .font(NotoTheme.Typography.mono(12))
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+        }
+        .padding(.horizontal, NotoTheme.Spacing.md)
+        .padding(.vertical, NotoTheme.Spacing.sm)
+        .background(NotoTheme.Colors.card)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(accentColor.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Absence Shortcut
+
+private struct AbsenceShortcutCard: View {
+    @Binding var showAbsence: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Votre enfant est absent aujourd'hui ?")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+
+            Button {
+                showAbsence = true
+            } label: {
+                HStack(spacing: NotoTheme.Spacing.xs) {
+                    Text("Signaler une absence")
+                        .font(NotoTheme.Typography.mono(13, weight: .bold))
+                        .foregroundStyle(NotoTheme.Colors.cobalt)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NotoTheme.Colors.cobalt)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(NotoTheme.Spacing.md)
+        .background(Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: NotoTheme.Radius.md)
+                .stroke(NotoTheme.Colors.border, lineWidth: 1)
+        )
     }
 }

@@ -38,6 +38,13 @@ struct MainTabView: View {
                     }
                     .tag(Tab.home)
 
+                ActualitesView()
+                    .tabItem {
+                        Label("Actualités", systemImage: "newspaper")
+                    }
+                    .badge(unreadMessagesBadge)
+                    .tag(Tab.actualites)
+
                 SchoolView(selectedChild: selectedChild)
                     .tabItem {
                         Label("École", systemImage: "book")
@@ -50,24 +57,6 @@ struct MainTabView: View {
                         Label("Découvrir", systemImage: "safari")
                     }
                     .tag(Tab.discover)
-
-                InsightsView(
-                    selectedChild: selectedChild,
-                    onNavigateToHomework: {
-                        // Navigate to School tab, Devoirs section
-                        NotificationCenter.default.post(name: .navigateToHomework, object: nil)
-                        selectedTab = .school
-                    },
-                    onNavigateToDiscover: { subject in
-                        // Deep link to Discover tab with subject filter
-                        NotificationCenter.default.post(name: .navigateToDiscover, object: subject)
-                        selectedTab = .discover
-                    }
-                )
-                .tabItem {
-                    Label("Suivi", systemImage: "chart.xyaxis.line")
-                }
-                .tag(Tab.insights)
             }
             .tint(NotoTheme.Colors.brand)
         }
@@ -92,9 +81,9 @@ struct MainTabView: View {
 
 enum Tab: String {
     case home
+    case actualites
     case school
     case discover
-    case insights
 }
 
 // MARK: - Notification Names

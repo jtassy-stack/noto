@@ -68,6 +68,33 @@ struct ENTBlogPost: Sendable {
     let thumbnail: String?
 }
 
+struct ENTBlogPostContent: Sendable {
+    let id: String
+    let blogId: String
+    let title: String
+    let author: String?
+    let date: Date
+    let imagePaths: [String]   // /workspace/document/<id> paths extracted from HTML
+}
+
+// MARK: - Photo attachment (blog or schoolbook)
+
+struct ENTPhotoAttachment: Sendable {
+    let path: String           // /workspace/document/<id>
+    let title: String?         // blog post title or schoolbook word title
+    let authorName: String?
+    let date: Date
+    let source: ENTPhotoSource
+
+    /// Derived from path — avoids id/path divergence.
+    var id: String { path.components(separatedBy: "/").last ?? path }
+}
+
+enum ENTPhotoSource: String, Codable, Sendable {
+    case blog
+    case schoolbook
+}
+
 // MARK: - Timeline
 
 struct ENTTimelineNotification: Sendable {

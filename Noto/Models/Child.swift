@@ -23,6 +23,7 @@ final class Child {
     var establishment: String
     var entChildId: String?        // ENT user ID for schoolbook API
     var entProvider: ENTProvider?   // pcn or monlycee
+    var entClassName: String?      // Full class name from ENT (e.g. "CM1 - CM2 A - M. Lucas") for message filtering
     var family: Family?
     var createdAt: Date
 
@@ -37,6 +38,8 @@ final class Child {
     var messages: [Message]
     @Relationship(deleteRule: .cascade, inverse: \Insight.child)
     var insights: [Insight]
+    @Relationship(deleteRule: .cascade, inverse: \SchoolPhoto.child)
+    var photos: [SchoolPhoto]
 
     init(
         firstName: String,
@@ -56,5 +59,6 @@ final class Child {
         self.homework = []
         self.messages = []
         self.insights = []
+        self.photos = []
     }
 }

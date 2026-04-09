@@ -1,9 +1,10 @@
 import SwiftUI
 import WebKit
 
-/// Web-based login for ENT providers that use Keycloak/OIDC (e.g. MonLycée).
+/// Web-based login for ENT providers (PCN/Edifice CAS and MonLycée/Keycloak).
 /// Shows a WKWebView with a floating "Continuer" button once the user is logged in.
 struct ENTWebLoginView: View {
+    let provider: ENTProvider
     let loginURL: URL
     let providerDomain: String
     let onSuccess: ([String: Any]) -> Void
@@ -17,6 +18,7 @@ struct ENTWebLoginView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ENTWebViewWrapper(
+                provider: provider,
                 loginURL: loginURL,
                 providerDomain: providerDomain,
                 onWebViewReady: { webViewHolder.webView = $0 },
@@ -62,13 +64,25 @@ struct ENTWebLoginView: View {
         isFetching = true
         statusMessage = "Récupération du profil…"
 
-        // Multi-step flow:
-        // 1. Fetch /user/profile, /user/services, /logbook, /news/messages
-        // 2. If Pronote found in services → navigate to Pronote SSO
-        // 3. Extract Pronote session from the loaded page
-        // Step 1: Fetch profile, services, logbook from the ENT
-        webView.callAsyncJavaScript(
+        let js: String
+        if provider == .pcn {
+            // PCN/Edifice: fetch children from /userbook/api/person
+            js = """
+            async function tryJSON(url) {
+                try {
+                    let r = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+                    let ct = r.headers.get('content-type') || '';
+                    if (!ct.includes('json')) return null;
+                    return await r.json();
+                } catch(e) { return null; }
+            }
+            let base = location.origin;
+            let person = await tryJSON(base + '/userbook/api/person');
+            return { person };
             """
+        } else {
+            // MonLycée: fetch profile, logbook, news, Pronote service
+            js = """
             async function tryJSON(url) {
                 try {
                     let r = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
@@ -84,36 +98,14 @@ struct ENTWebLoginView: View {
             let logbook = await tryJSON(base + '/logbook');
             let news = await tryJSON(base + '/news/messages');
 
-            // Find Pronote service
             let pronoteService = null;
             if (Array.isArray(services)) {
                 pronoteService = services.find(s => s.title === 'pronote' || (s.link || '').includes('pronote'));
             }
 
-            // Zimbra mail: get CSRF token from cookie, then fetch headers
-            let zimbraMail = null;
             let csrfToken = (document.cookie.match(/CSRF_TOKEN=([^;]+)/) || [])[1] || '';
-            if (csrfToken) {
-                try {
-                    let mailBase = 'https://apis-mail.monlycee.net/webmail';
-                    // First create a token if needed
-                    await fetch(mailBase + '/xml/createToken.json', {
-                        method: 'POST', credentials: 'include',
-                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
-                    });
-                    // Fetch mail headers
-                    let mailR = await fetch(mailBase + '/xml/getMailHeaderList.json', {
-                        credentials: 'include',
-                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
-                    });
-                    if (mailR.ok) {
-                        let ct = mailR.headers.get('content-type') || '';
-                        if (ct.includes('json')) zimbraMail = await mailR.json();
-                    }
-                } catch(e) {}
-            }
+            const zimbraMail = null;
 
-            // Extract greeting
             let greeting = '';
             for (let el of document.querySelectorAll('*')) {
                 let t = el.textContent || '';
@@ -123,11 +115,10 @@ struct ENTWebLoginView: View {
             }
 
             return { profile, services, logbook, news, pronoteService, greeting, zimbraMail, csrfToken };
-            """,
-            arguments: [:],
-            in: nil,
-            in: .page
-        ) { [self] result in
+            """
+        }
+
+        webView.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { [self] result in
             switch result {
             case .success(let value):
                 guard let raw = value as? [String: Any] else {
@@ -135,21 +126,15 @@ struct ENTWebLoginView: View {
                     return
                 }
 
-                // Transfer cookies
+                // Transfer cookies then proceed to Pronote SSO (or complete)
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
                     ENTClient.importCookies(cookies)
-
-                    // Check if Pronote was found
-                    if let pronoteService = raw["pronoteService"] as? [String: Any],
-                       let pronoteLink = pronoteService["link"] as? String {
-                        // Step 2: Navigate to Pronote via SSO
-                        DispatchQueue.main.async {
+                    DispatchQueue.main.async {
+                        if let pronoteService = raw["pronoteService"] as? [String: Any],
+                           let pronoteLink = pronoteService["link"] as? String {
                             self.statusMessage = "Connexion Pronote via SSO…"
                             self.navigateToPronoteSSO(pronoteURL: pronoteLink, entData: raw)
-                        }
-                    } else {
-                        // No Pronote — return ENT data only
-                        DispatchQueue.main.async {
+                        } else {
                             self.onSuccess(raw)
                         }
                     }
@@ -255,6 +240,7 @@ private class WebViewHolder: ObservableObject {
 }
 
 private struct ENTWebViewWrapper: UIViewRepresentable {
+    let provider: ENTProvider
     let loginURL: URL
     let providerDomain: String
     let onWebViewReady: (WKWebView) -> Void
@@ -273,15 +259,17 @@ private struct ENTWebViewWrapper: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(providerDomain: providerDomain, onLoginDetected: onLoginDetected)
+        Coordinator(provider: provider, providerDomain: providerDomain, onLoginDetected: onLoginDetected)
     }
 
     class Coordinator: NSObject, WKNavigationDelegate {
+        let provider: ENTProvider
         let providerDomain: String
         let onLoginDetected: () -> Void
         private var detected = false
 
-        init(providerDomain: String, onLoginDetected: @escaping () -> Void) {
+        init(provider: ENTProvider, providerDomain: String, onLoginDetected: @escaping () -> Void) {
+            self.provider = provider
             self.providerDomain = providerDomain
             self.onLoginDetected = onLoginDetected
         }
@@ -293,10 +281,15 @@ private struct ENTWebViewWrapper: UIViewRepresentable {
             NSLog("[noto] WebView didFinish: \(url)")
             #endif
 
-            // Detect: on the ENT domain, not on Keycloak, not the initial login redirect
-            let isOnKeycloak = url.contains("auth.monlycee.net") || url.contains("/realms/")
             let isOnENT = url.contains(providerDomain)
-            if isOnENT && !isOnKeycloak {
+            // PCN: logged in when on ENT domain but NOT on the login page
+            // MonLycée: logged in when on ENT domain but NOT on Keycloak
+            let isOnKeycloak = url.contains("auth.monlycee.net") || url.contains("/realms/")
+            let isOnLoginPage = url.contains("/auth/login")
+            let loggedIn = provider == .pcn
+                ? (isOnENT && !isOnLoginPage)
+                : (isOnENT && !isOnKeycloak)
+            if loggedIn {
                 detected = true
 
                 // Inject XHR/fetch interceptor to discover what API calls the SPA makes

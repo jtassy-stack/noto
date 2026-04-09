@@ -12,12 +12,20 @@ settings:
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
 
+packages:
+  SwiftMail:
+    url: https://github.com/Cocoanetics/SwiftMail
+    from: "1.5.1"
+
 targets:
   Noto:
     type: application
     platform: iOS
     sources:
       - path: Noto
+    dependencies:
+      - package: SwiftMail
+        product: SwiftMail
     settings:
       base:
         INFOPLIST_FILE: Noto/App/Info.plist
