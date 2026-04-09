@@ -32,6 +32,8 @@
     <string>Pour enregistrer les photos de l'école dans votre Pellicule.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Pour afficher les événements culturels proches de vous.</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>UIAppFonts</key>
