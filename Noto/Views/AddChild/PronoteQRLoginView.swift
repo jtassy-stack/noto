@@ -19,6 +19,8 @@ struct PronoteQRLoginView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showLiveCamera = false
+    @State private var cameraPermission: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
 
     private var family: Family? { families.first }
 
@@ -69,7 +71,7 @@ struct PronoteQRLoginView: View {
 
             VStack(spacing: NotoTheme.Spacing.md) {
                 Button {
-                    // TODO: Open live camera scanner (requires real device)
+                    requestCameraAndScan()
                 } label: {
                     Label("Scanner avec la caméra", systemImage: "camera")
                         .font(NotoTheme.Typography.headline)
@@ -78,6 +80,12 @@ struct PronoteQRLoginView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.pronote)
+                .sheet(isPresented: $showLiveCamera) {
+                    LiveCameraSheet { payload in
+                        showLiveCamera = false
+                        handleQRPayload(payload)
+                    }
+                }
 
                 PhotosPicker(
                     selection: $selectedPhoto,
@@ -208,7 +216,7 @@ struct PronoteQRLoginView: View {
                 .tint(NotoTheme.Colors.pronote)
 
                 Button {
-                    dismiss()
+                    dismissToHome()
                 } label: {
                     Text("Terminer")
                         .font(NotoTheme.Typography.headline)
@@ -217,6 +225,12 @@ struct PronoteQRLoginView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.pronote)
+                .onAppear {
+                    // Auto-return home after 2 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        dismissToHome()
+                    }
+                }
             }
             .padding(.horizontal, NotoTheme.Spacing.xl)
             .padding(.bottom, NotoTheme.Spacing.xl)
@@ -271,18 +285,7 @@ struct PronoteQRLoginView: View {
             return
         }
 
-        print("[noto] QR payload: \(payload)")
-
-        // Parse JSON from QR payload
-        guard let jsonData = payload.data(using: .utf8),
-              let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-            errorMessage = "QR code détecté mais format inattendu. Contenu : \(String(payload.prefix(100)))"
-            return
-        }
-
-        qrData = parsed
-        errorMessage = nil
-        step = .pin
+        handleQRPayload(payload)
     }
 
     // MARK: - Auth
@@ -388,6 +391,38 @@ struct PronoteQRLoginView: View {
         isLoading = false
     }
 
+    private func requestCameraAndScan() {
+        switch cameraPermission {
+        case .authorized:
+            showLiveCamera = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    cameraPermission = granted ? .authorized : .denied
+                    if granted { showLiveCamera = true }
+                }
+            }
+        default:
+            errorMessage = "Autorisez l'accès à la caméra dans Réglages > nōto."
+        }
+    }
+
+    private func handleQRPayload(_ payload: String) {
+        guard let jsonData = payload.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            errorMessage = "QR code détecté mais format inattendu. Contenu : \(String(payload.prefix(100)))"
+            return
+        }
+        qrData = parsed
+        errorMessage = nil
+        step = .pin
+    }
+
+    private func dismissToHome() {
+        NotificationCenter.default.post(name: .navigateToHome, object: nil)
+        dismiss()
+    }
+
     private func getOrCreateDeviceUUID() -> String {
         if let data = try? KeychainService.load(key: "device_uuid"),
            let uuid = String(data: data, encoding: .utf8) {
@@ -454,3 +489,40 @@ struct PhotoQRImage: Transferable {
         case importFailed
     }
 }
+
+// MARK: - Live Camera Sheet
+
+private struct LiveCameraSheet: View {
+    let onDetected: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                CameraQRScannerView(onDetected: onDetected)
+                    .ignoresSafeArea()
+
+                VStack {
+                    Spacer()
+                    Text("Pointez la caméra vers le QR code Pronote")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                        .background(.black.opacity(0.5))
+                        .clipShape(Capsule())
+                        .padding(.bottom, NotoTheme.Spacing.xl)
+                }
+            }
+            .navigationTitle("Scanner le QR code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                        .tint(.white)
+                }
+            }
+        }
+    }
+}
+

@@ -164,93 +164,81 @@ struct DiscoverView: View {
         let curriculumService = CurriculumService()
         await curriculumService.load()
 
-        // For each child, build topics from BO curriculum themes + recent chapter context
-        var allTopics: [String] = []
-        var ageMin: Int? = nil
-        var ageMax: Int? = nil
+        let geo = locationService.location.map {
+            (lat: $0.coordinate.latitude, lng: $0.coordinate.longitude)
+        }
+
+        // Fetch recommendations per child, then interleave for balanced family view
+        var perChildResults: [[CultureSearchResult]] = []
 
         for child in children {
-            // Age range from school level
             let age = curriculumService.ageRange(for: child.grade)
-            ageMin = min(ageMin ?? age.min, age.min)
-            ageMax = max(ageMax ?? age.max, age.max)
 
-            // Pull BO themes per subject studied — now that curriculum.json covers
-            // Maths, SVT, Physique-Chimie, Anglais for collège, these are specific
-            // and culturally relevant (e.g. "ADN hérédité génétique", "Pythagore Thalès").
+            var topics: [String] = []
             let subjects = Set(child.grades.map(\.subject))
             for subject in subjects {
                 let themes = curriculumService.cultureTopics(for: child.grade, subject: subject, maxPerSubject: 2)
                 if themes.isEmpty {
-                    // Subject not in curriculum yet → use normalized fallback
-                    allTopics.append(Self.normalizeSubject(subject))
+                    topics.append(Self.normalizeSubject(subject))
                 } else {
-                    allTopics.append(contentsOf: themes)
+                    topics.append(contentsOf: themes)
                 }
             }
-
-            // Fallback if no grades at all
-            if allTopics.isEmpty {
-                allTopics.append(contentsOf: curriculumService.subjects(for: child.grade).prefix(4).map { Self.normalizeSubject($0) })
+            if topics.isEmpty {
+                topics.append(contentsOf: curriculumService.subjects(for: child.grade).prefix(4).map { Self.normalizeSubject($0) })
             }
-        }
+            var uniqueTopics = Array(Set(topics.filter { !$0.isEmpty })).shuffled().prefix(6)
+            if uniqueTopics.isEmpty {
+                uniqueTopics = ["histoire", "sciences", "littérature", "art", "musique", "découverte"][...].prefix(6)
+            }
 
-        var uniqueTopics = Array(Set(allTopics.filter { !$0.isEmpty })).shuffled().prefix(6)
-        // Last-resort fallback: if curriculum has no data for these grades, use generic topics
-        if uniqueTopics.isEmpty {
-            uniqueTopics = ["histoire", "sciences", "littérature", "art", "musique", "découverte"][...].prefix(6)
-        }
-        // Build API-format grade for curriculum tag filtering.
-        // Only pass grade for collège/lycée — the API has no primaire curriculum tags (CM1, CP, etc.)
-        let apiGrade: String? = (selectedChild ?? children.first).flatMap { child in
-            let level = child.level
-            guard level == .college || level == .lycee else { return nil }
-            return curriculumService.apiGrade(for: child.grade)
-        }
-        logger.info("BO topics for \(children.first?.grade ?? "?") (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
+            let apiGrade: String? = {
+                guard child.level == .college || child.level == .lycee else { return nil }
+                return curriculumService.apiGrade(for: child.grade)
+            }()
+            logger.info("BO topics for \(child.firstName) / \(child.grade) (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
-        let geo = locationService.location.map {
-            (lat: $0.coordinate.latitude, lng: $0.coordinate.longitude)
-        }
-        // Reference child for metadata (single child or first in family)
-        let refChild = selectedChild ?? children.first
-
-        do {
-            var results = try await client.searchThematic(
-                query: uniqueTopics.joined(separator: " "),
-                types: ["event", "podcast", "oeuvre"],
-                grade: apiGrade,
-                ageMin: ageMin,
-                ageMax: ageMax,
-                geo: geo,
-                limit: 20
-            )
-            // Annotate with child name + level only — subject is omitted
-            // because the query is a mix of all subjects and we can't reliably
-            // attribute each result to one specific course.
-            if let child = refChild {
+            do {
+                var results = try await client.searchThematic(
+                    query: uniqueTopics.joined(separator: " "),
+                    types: ["event", "podcast", "oeuvre"],
+                    grade: apiGrade,
+                    ageMin: age.min,
+                    ageMax: age.max,
+                    geo: geo,
+                    limit: children.count > 1 ? 12 : 20
+                )
+                // Annotate each result with the child it was fetched for
                 results = results.map {
                     var r = $0
                     r.linkedChildName = child.firstName
                     r.linkedLevel = child.grade
                     return r
                 }
+                perChildResults.append(results.filter { $0.score.map { $0 >= 0.3 } ?? true })
+            } catch {
+                logger.error("Culture API error for \(child.firstName): \(error)")
             }
-            // Balance types (max 5 per type) and drop low-relevance results
-            var seen: [String: Int] = [:]
-            recos = results
-                .shuffled()
-                .filter { $0.score.map { $0 >= 0.3 } ?? true }
-                .filter { item in
-                    let count = seen[item.type, default: 0]
-                    guard count < 5 else { return false }
-                    seen[item.type] = count + 1
-                    return true
-                }
-            logger.info("recos: \(recos.count) results (filtered from \(results.count)) for age \(ageMin ?? 0)-\(ageMax ?? 99)")
-        } catch {
-            logger.error("Culture API error: \(error)")
         }
+
+        // Round-robin interleave: [A0, B0, C0, A1, B1, C1, ...]
+        var merged: [CultureSearchResult] = []
+        let maxLen = perChildResults.map(\.count).max() ?? 0
+        for i in 0..<maxLen {
+            for childRecos in perChildResults where i < childRecos.count {
+                merged.append(childRecos[i])
+            }
+        }
+
+        // Cap at 5 per type across the full merged list
+        var seen: [String: Int] = [:]
+        recos = merged.filter { item in
+            let count = seen[item.type, default: 0]
+            guard count < 5 else { return false }
+            seen[item.type] = count + 1
+            return true
+        }
+        logger.info("recos: \(recos.count) results merged from \(children.count) child(ren)")
 
         isLoading = false
         hasLoaded = true
