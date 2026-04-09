@@ -134,30 +134,39 @@ struct ActualitesView: View {
                 let provider = child.entProvider ?? .pcn
                 let client = ENTClient(provider: provider)
                 let service = ENTSyncService(modelContext: modelContext)
-                guard let entChildId = child.entChildId else { continue }
+                guard let entChildId = child.entChildId else {
+                    syncError = "\(child.firstName) : profil ENT incomplet (pas d'ID enfant)."
+                    continue
+                }
                 do {
                     // Re-authenticate each sync — ENT session cookies don't survive app restarts
                     let credKey = "ent_credentials_\(provider.rawValue)"
-                    if let credData = try? KeychainService.load(key: credKey),
-                       let credStr = String(data: credData, encoding: .utf8) {
-                        let parts = credStr.split(separator: ":", maxSplits: 1)
-                        if parts.count == 2 {
-                            let loginURL = provider.baseURL.appendingPathComponent("auth/login")
-                            let cookies = try await HeadlessENTAuth.login(
-                                loginURL: loginURL,
-                                email: String(parts[0]),
-                                password: String(parts[1])
-                            )
-                            ENTClient.importCookies(cookies)
-                        }
+                    guard let credData = try? KeychainService.load(key: credKey),
+                          let credStr = String(data: credData, encoding: .utf8) else {
+                        syncError = "\(child.firstName) : identifiants ENT manquants. Reconnectez-vous dans Réglages."
+                        continue
                     }
+                    let parts = credStr.split(separator: ":", maxSplits: 1)
+                    guard parts.count == 2 else {
+                        syncError = "\(child.firstName) : identifiants ENT corrompus."
+                        continue
+                    }
+                    let loginURL = provider.baseURL.appendingPathComponent("auth/login")
+                    let cookies = try await HeadlessENTAuth.login(
+                        loginURL: loginURL,
+                        email: String(parts[0]),
+                        password: String(parts[1])
+                    )
+                    ENTClient.importCookies(cookies)
+                    NSLog("[noto] ENT re-auth OK for %@ (%d cookies)", child.firstName, cookies.count)
                     try await service.sync(child: child, client: client, entChildId: entChildId)
+                    NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, child.photos.count)
                 } catch ENTError.sessionExpired, ENTError.badCredentials {
-                    NSLog("[noto][error] ENT session expired for %@", child.firstName)
-                    syncError = "Session expirée pour \(child.firstName). Reconnectez-vous dans Réglages."
+                    NSLog("[noto][error] ENT bad credentials for %@", child.firstName)
+                    syncError = "Identifiants PCN incorrects pour \(child.firstName). Reconnectez-vous dans Réglages."
                 } catch {
-                    NSLog("[noto][error] ENT sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    syncError = "Erreur de synchronisation ENT."
+                    NSLog("[noto][error] ENT sync error for %@: %@", child.firstName, error.localizedDescription)
+                    syncError = "Sync ENT \(child.firstName) : \(error.localizedDescription)"
                 }
             case .pronote:
                 // IMAP sync applies to all children sharing the family mailbox

@@ -6,49 +6,54 @@ enum NotoTheme {
     // Dark-mode-first. Retro/anime 90s aesthetic.
     // All semantic colors adapt automatically to light/dark mode.
     enum Colors {
-        // MARK: Core palette (fixed — same in both modes)
-        static let brand   = Color(hex: 0x5BD45B)   // 1-Up green — accent principal
-        static let indigo  = Color(hex: 0x2B2B6E)   // Super Famicom
-        static let dmg     = Color(hex: 0x9BBB0F)   // Game Boy green
-        static let crimson = Color(hex: 0xDC2626)   // alertes
+        // MARK: Core palette — fixed (design system Notion)
+        // Source: nōto. Brief Design — https://www.notion.so/331e0fdcdce88120b109ff193b9d808d
+
+        static let brand   = Color(hex: 0x5BD45B)   // 1-Up green — accent signature
+        static let indigo  = Color(hex: 0x2B2B6E)   // Super Famicom surface
+        static let dmg     = Color(hex: 0x9BBB0F)   // Game Boy green (vigilance)
+        static let crimson = Color(hex: 0xDC2626)   // rouge froid alertes
+        static let cherry  = Color(hex: 0xBE123C)   // rouge profond hover/active
         static let cobalt  = Color(hex: 0x2563EB)   // liens, interactif
-        static let amber   = Color(hex: 0xD4A017)   // avertissements
+        static let sky     = Color(hex: 0x38BDF8)   // liens hover
+        static let amber   = Color(hex: 0xCA8A04)   // avertissements (jaune/doré PAS orange)
         static let forest  = Color(hex: 0x0F380F)   // Game Boy easter egg
+        static let mist    = Color(hex: 0xB0B0D0)   // texte secondaire sombre, bordures
 
-        // MARK: Adaptive semantic colors
+        // MARK: Adaptive semantic colors (dark-mode-first)
 
-        /// Page background
+        /// Page background — Paper #F5F3EE / Shadow #0A0A08
         static let background = adaptive(dark: 0x0A0A08, light: 0xF5F3EE)
 
-        /// Card / elevated surface
-        static let surface = adaptive(dark: 0x141414, light: 0xFFFFFF)
+        /// Card / elevated surface — Charbon #222222 / blanc chaud #FDFCF9
+        static let surface = adaptive(dark: 0x222222, light: 0xFDFCF9)
 
-        /// Secondary surface (indigo-tinted in dark, cool grey in light)
-        static let surfaceElevated = adaptive(dark: 0x1A1A2E, light: 0xF0EFE9)
+        /// Slightly elevated surface — SFC indigo / Paper teinté
+        static let surfaceElevated = adaptive(dark: 0x1A1A2E, light: 0xEDEBE4)
 
-        /// Deep accent surface (indigo in dark, warm mist in light)
-        static let surfaceSecondary = adaptive(dark: 0x2B2B6E, light: 0xE8E6DF)
+        /// Deep accent surface — Indigo SFC / Paper foncé
+        static let surfaceSecondary = adaptive(dark: 0x2B2B6E, light: 0xE2E0D8)
 
         /// Subtle border
         static let border = Color(UIColor { t in
             t.userInterfaceStyle == .dark
-                ? UIColor.white.withAlphaComponent(0.1)
-                : UIColor.black.withAlphaComponent(0.08)
+                ? UIColor.white.withAlphaComponent(0.10)
+                : UIColor.black.withAlphaComponent(0.12)
         })
 
-        /// Primary text
+        /// Primary text — Paper #F5F3EE / Shadow #0A0A08
         static let textPrimary = adaptive(dark: 0xF5F3EE, light: 0x0A0A08)
 
-        /// Secondary text
-        static let textSecondary = adaptive(dark: 0xB0B0D0, light: 0x555577)
+        /// Secondary text — Mist #B0B0D0 / Graphite #555555
+        static let textSecondary = adaptive(dark: 0xB0B0D0, light: 0x555555)
 
-        /// Tertiary / disabled text
-        static let textTertiary = adaptive(dark: 0x555555, light: 0x999999)
+        /// Tertiary / disabled — Graphite #555555 / gris moyen #888888
+        static let textTertiary = adaptive(dark: 0x555555, light: 0x888888)
 
-        /// Shadow overlay (for buttons etc.)
-        static let shadow = adaptive(dark: 0x0A0A08, light: 0xF5F3EE)
+        /// Foreground on brand surface (button text etc.) — Shadow / Paper
+        static let shadow = adaptive(dark: 0x0A0A08, light: 0x0A0A08)
 
-        /// Paper tone (inverse of background)
+        /// Paper-like tone — Paper / Shadow
         static let paper = adaptive(dark: 0xF5F3EE, light: 0x0A0A08)
 
         // MARK: Semantic aliases
