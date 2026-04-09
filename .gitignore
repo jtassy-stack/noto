@@ -24,5 +24,9 @@ SourcePackages/
 .DS_Store
 *.swp
 
+# Node
+node_modules/
+package-lock.json
+
 # XcodeBuildMCP
 .xcodebuildmcp/
