@@ -5,6 +5,7 @@ import UserNotifications
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
+    @Environment(AppearanceManager.self) private var appearance
     @Query private var families: [Family]
 
     @State private var showClearDataConfirmation = false
@@ -18,6 +19,19 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // MARK: Apparence
+                Section("Apparence") {
+                    @Bindable var app = appearance
+                    Picker(selection: $app.preference) {
+                        ForEach(AppearanceManager.Preference.allCases, id: \.self) { pref in
+                            Label(pref.label, systemImage: pref.icon).tag(pref)
+                        }
+                    } label: {
+                        Label("Thème", systemImage: "circle.lefthalf.filled")
+                    }
+                    .pickerStyle(.menu)
+                }
+
                 // MARK: Connexions
                 Section("Connexions") {
                     if let children = family?.children, !children.isEmpty {
@@ -172,4 +186,5 @@ struct SettingsView: View {
 #Preview("Réglages") {
     SettingsView()
         .withPreviewData()
+        .environment(AppearanceManager.shared)
 }
