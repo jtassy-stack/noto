@@ -27,18 +27,20 @@ struct CameraQRScannerView: UIViewRepresentable {
     // MARK: - Coordinator
     //
     // Thread model:
-    // - setup() and stopSession() are called on the main thread (SwiftUI lifecycle)
-    // - metadataOutput delegate is dispatched to .main (line: setMetadataObjectsDelegate queue: .main)
-    // - startRunning() is dispatched to a background queue (it blocks until running)
+    // - setup() / stopSession() are called on the main thread (SwiftUI UIViewRepresentable lifecycle)
+    // - metadataOutput delegate fires on .main (set via setMetadataObjectsDelegate queue: .main)
+    // - startRunning() is dispatched to a background thread (it blocks until running)
     //
-    // hasDetected is only ever read/written on the main thread (delegate queue = .main),
-    // so no lock is needed. @MainActor annotation is deliberately avoided to prevent
-    // Swift 6 Sendable violations when capturing AVCaptureSession across isolation domains.
+    // AVCaptureSession is not annotated Sendable by Apple, so we use nonisolated(unsafe)
+    // to suppress the Swift 6 Sendable check. Thread safety is upheld by the access model above.
 
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         private let onDetected: (String) -> Void
         private let onError: (String) -> Void
-        private var session: AVCaptureSession?
+        // nonisolated(unsafe): AVCaptureSession is internally thread-safe for
+        // start/stop and is only accessed from main thread except for startRunning()
+        // which is explicitly dispatched to a background queue per Apple's docs.
+        nonisolated(unsafe) private var session: AVCaptureSession?
         private var hasDetected = false
 
         init(onDetected: @escaping (String) -> Void, onError: @escaping (String) -> Void) {
@@ -46,12 +48,13 @@ struct CameraQRScannerView: UIViewRepresentable {
             self.onError = onError
         }
 
+        // Called on main thread by SwiftUI
         func setup(previewView: CameraPreviewView) {
             let session = AVCaptureSession()
             self.session = session
 
             guard let device = AVCaptureDevice.default(for: .video) else {
-                DispatchQueue.main.async { self.onError("Caméra inaccessible. Vérifiez les autorisations dans Réglages > nōto.") }
+                onError("Caméra inaccessible. Vérifiez les autorisations dans Réglages > nōto.")
                 return
             }
 
@@ -59,37 +62,41 @@ struct CameraQRScannerView: UIViewRepresentable {
             do {
                 input = try AVCaptureDeviceInput(device: device)
             } catch {
-                DispatchQueue.main.async { self.onError("Impossible d'accéder à la caméra : \(error.localizedDescription)") }
+                onError("Impossible d'accéder à la caméra : \(error.localizedDescription)")
                 return
             }
 
             guard session.canAddInput(input) else {
-                DispatchQueue.main.async { self.onError("La session caméra ne peut pas démarrer.") }
+                onError("La session caméra ne peut pas démarrer.")
                 return
             }
             session.addInput(input)
 
             let output = AVCaptureMetadataOutput()
             guard session.canAddOutput(output) else {
-                DispatchQueue.main.async { self.onError("Impossible de configurer la détection QR.") }
+                onError("Impossible de configurer la détection QR.")
                 return
             }
             session.addOutput(output)
-            // Delegate dispatched to main — hasDetected is only accessed on main thread
+            // Delegate dispatched to main — hasDetected is only read/written on main thread
             output.setMetadataObjectsDelegate(self, queue: .main)
             output.metadataObjectTypes = [.qr]
 
             previewView.configure(session: session)
 
-            // startRunning() blocks until the session is running; must be off main thread
-            DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
+            // startRunning() blocks until running — must not be called on main thread
+            DispatchQueue.global(qos: .userInitiated).async { [session] in
+                session.startRunning()
+            }
         }
 
+        // Called on main thread by dismantleUIView
         func stopSession() {
             session?.stopRunning()
             session = nil
         }
 
+        // Called on main thread (delegate queue = .main)
         func metadataOutput(_ output: AVCaptureMetadataOutput,
                             didOutput metadataObjects: [AVMetadataObject],
                             from connection: AVCaptureConnection) {
