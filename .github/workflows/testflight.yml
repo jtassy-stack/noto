@@ -81,7 +81,8 @@ jobs:
             -sdk iphoneos \
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=ZU448G6529
+            DEVELOPMENT_TEAM=ZU448G6529 \
+            PROVISIONING_PROFILE_SPECIFIER="[expo] fr.noto.app AppStore 2026-03-29T13:20:58.401Z"
 
       - name: Prepare App Store Connect API key
         env:
