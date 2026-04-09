@@ -612,7 +612,10 @@ struct FeedMessageDetailView: View {
     }
 }
 
-#Preview("Actualités") {
-    ActualitesView()
-        .withPreviewData()
+#Preview("Actualités — Dark") {
+    ActualitesView().withPreviewData().preferredColorScheme(.dark)
+}
+
+#Preview("Actualités — Light") {
+    ActualitesView().withPreviewData().preferredColorScheme(.light)
 }

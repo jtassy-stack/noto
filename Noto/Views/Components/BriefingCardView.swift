@@ -56,7 +56,15 @@ struct BriefingCardView: View {
     }
 }
 
-#Preview("BriefingCard") {
+#Preview("BriefingCard — Dark", traits: .init()) {
+    sampleCards.preferredColorScheme(.dark)
+}
+
+#Preview("BriefingCard — Light", traits: .init()) {
+    sampleCards.preferredColorScheme(.light)
+}
+
+private var sampleCards: some View {
     VStack(spacing: 12) {
         BriefingCardView(card: BriefingCard(
             type: .test, childName: "Léa",
@@ -68,7 +76,7 @@ struct BriefingCardView: View {
         BriefingCardView(card: BriefingCard(
             type: .homework, childName: "Tom",
             title: "Pas de devoirs ce soir",
-            subtitle: "Bonne soirée 🎉",
+            subtitle: "Aucun devoir pour ce soir",
             priority: .positive, icon: "checkmark.circle"
         ), showChildName: true)
 

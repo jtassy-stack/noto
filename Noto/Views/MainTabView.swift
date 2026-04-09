@@ -97,7 +97,10 @@ extension Notification.Name {
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
 }
 
-#Preview("MainTabView") {
-    MainTabView()
-        .withPreviewData()
+#Preview("App — Dark") {
+    MainTabView().withPreviewData().preferredColorScheme(.dark)
+}
+
+#Preview("App — Light") {
+    MainTabView().withPreviewData().preferredColorScheme(.light)
 }
