@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var syncError: String?
     @State private var showAbsence = false
+    @State private var showPronoteReconnect = false
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
@@ -30,6 +31,13 @@ struct HomeView: View {
 
     private var hasENTChildren: Bool {
         children.contains { $0.schoolType == .ent }
+    }
+
+    /// Direct Pronote QR-login children whose bridge is lost and need manual reconnect.
+    private var pronoteChildrenNeedingReconnect: [Child] {
+        guard pronoteService.bridge == nil && !pronoteService.isReconnecting else { return [] }
+        let scope = selectedChild.map { [$0] } ?? children
+        return scope.filter { $0.schoolType == .pronote && $0.entProvider == nil }
     }
 
     private var unreadMessageCount: Int {
@@ -72,6 +80,14 @@ struct HomeView: View {
                         StoryRingsRow(children: children)
                     }
 
+                    // MARK: Pronote reconnect prompt
+                    if !pronoteChildrenNeedingReconnect.isEmpty {
+                        PronoteReconnectCard(
+                            children: pronoteChildrenNeedingReconnect,
+                            onReconnect: { showPronoteReconnect = true }
+                        )
+                    }
+
                     // MARK: Global status banner — A1: moved to second position
                     GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
 
@@ -81,7 +97,12 @@ struct HomeView: View {
                             unreadMessageCount: unreadMessageCount,
                             urgentHomeworkCount: urgentHomeworkCount,
                             recentGradesCount: recentGradesCount,
-                            children: children
+                            children: children,
+                            onTap: {
+                                let name: Notification.Name = unreadMessageCount > 0
+                                    ? .navigateToMessages : .navigateToSchool
+                                NotificationCenter.default.post(name: name, object: nil)
+                            }
                         )
                     }
 
@@ -90,7 +111,10 @@ struct HomeView: View {
                         MorningActionStrip(
                             messageCount: unreadMessageCount,
                             homeworkCount: urgentHomeworkCount,
-                            carnetCount: unsignedCarnetsCount
+                            carnetCount: unsignedCarnetsCount,
+                            onMessagesTap: { NotificationCenter.default.post(name: .navigateToMessages, object: nil) },
+                            onHomeworkTap: { NotificationCenter.default.post(name: .navigateToSchool, object: nil) },
+                            onCarnetsTap:  { NotificationCenter.default.post(name: .navigateToMessages, object: nil) }
                         )
                     }
 
@@ -176,6 +200,14 @@ struct HomeView: View {
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
                 await refreshBriefing()
+            }
+            .sheet(isPresented: $showPronoteReconnect, onDismiss: {
+                // If reconnect succeeded, trigger a full refresh automatically
+                if pronoteService.bridge != nil {
+                    Task { await performFullRefresh() }
+                }
+            }) {
+                NavigationStack { PronoteQRLoginView() }
             }
             .alert("Reconnexion requise", isPresented: $showNoConnectionAlert) {
                 Button("OK", role: .cancel) {}
@@ -715,6 +747,7 @@ private struct HeroCard: View {
     let urgentHomeworkCount: Int
     let recentGradesCount: Int
     let children: [Child]
+    var onTap: (() -> Void)? = nil
 
     private var dateString: String {
         Date.now.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "fr_FR")))
@@ -726,6 +759,7 @@ private struct HeroCard: View {
 
     var body: some View {
         // TODO: blog photo hero — use school blog photo when available from PCN
+        Button(action: { onTap?() }) {
         ZStack(alignment: .bottomLeading) {
             // Background
             RoundedRectangle(cornerRadius: NotoTheme.Radius.lg)
@@ -800,6 +834,8 @@ private struct HeroCard: View {
             }
         }
         .frame(maxWidth: .infinity)
+        } // Button
+        .buttonStyle(.plain)
     }
 }
 
@@ -809,6 +845,9 @@ private struct MorningActionStrip: View {
     let messageCount: Int
     let homeworkCount: Int
     let carnetCount: Int
+    var onMessagesTap: (() -> Void)? = nil
+    var onHomeworkTap: (() -> Void)? = nil
+    var onCarnetsTap: (() -> Void)? = nil
 
     var body: some View {
         let chips = buildChips()
@@ -816,7 +855,7 @@ private struct MorningActionStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: NotoTheme.Spacing.sm) {
                     ForEach(chips, id: \.label) { chip in
-                        ActionChip(icon: chip.icon, count: chip.count, label: chip.label, accentColor: chip.accentColor)
+                        ActionChip(icon: chip.icon, count: chip.count, label: chip.label, accentColor: chip.accentColor, onTap: chip.action)
                     }
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
@@ -830,18 +869,19 @@ private struct MorningActionStrip: View {
         let count: Int
         let label: String
         let accentColor: Color
+        var action: (() -> Void)? = nil
     }
 
     private func buildChips() -> [ChipData] {
         var result: [ChipData] = []
         if messageCount > 0 {
-            result.append(ChipData(icon: "envelope.fill", count: messageCount, label: "messages", accentColor: NotoTheme.Colors.brand))
+            result.append(ChipData(icon: "envelope.fill", count: messageCount, label: "messages", accentColor: NotoTheme.Colors.brand, action: onMessagesTap))
         }
         if homeworkCount > 0 {
-            result.append(ChipData(icon: "pencil", count: homeworkCount, label: "devoirs", accentColor: NotoTheme.Colors.cobalt))
+            result.append(ChipData(icon: "pencil", count: homeworkCount, label: "devoirs", accentColor: NotoTheme.Colors.cobalt, action: onHomeworkTap))
         }
         if carnetCount > 0 {
-            result.append(ChipData(icon: "signature", count: carnetCount, label: "carnet\(carnetCount > 1 ? "s" : "") à signer", accentColor: NotoTheme.Colors.amber))
+            result.append(ChipData(icon: "signature", count: carnetCount, label: "carnet\(carnetCount > 1 ? "s" : "") à signer", accentColor: NotoTheme.Colors.amber, action: onCarnetsTap))
         }
         return result
     }
@@ -852,24 +892,33 @@ private struct ActionChip: View {
     let count: Int
     let label: String
     let accentColor: Color
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: NotoTheme.Spacing.xs) {
-            Image(systemName: icon)
-                .font(.system(size: 12))
-                .foregroundStyle(accentColor)
-            Text("\(count) \(label)")
-                .font(NotoTheme.Typography.mono(12))
-                .foregroundStyle(NotoTheme.Colors.textPrimary)
+        Button(action: { onTap?() }) {
+            HStack(spacing: NotoTheme.Spacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundStyle(accentColor)
+                Text("\(count) \(label)")
+                    .font(NotoTheme.Typography.mono(12))
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                if onTap != nil {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10))
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+            .background(NotoTheme.Colors.card)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(accentColor.opacity(0.25), lineWidth: 1)
+            )
         }
-        .padding(.horizontal, NotoTheme.Spacing.md)
-        .padding(.vertical, NotoTheme.Spacing.sm)
-        .background(NotoTheme.Colors.card)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(accentColor.opacity(0.25), lineWidth: 1)
-        )
+        .buttonStyle(.plain)
     }
 }
 
@@ -987,6 +1036,44 @@ private struct AbsenceShortcutCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: NotoTheme.Radius.md)
                 .stroke(NotoTheme.Colors.border, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Pronote Reconnect Card
+
+private struct PronoteReconnectCard: View {
+    let children: [Child]
+    let onReconnect: () -> Void
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.md) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 18))
+                .foregroundStyle(NotoTheme.Colors.amber)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Connexion Pronote perdue")
+                    .font(NotoTheme.Typography.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text(children.map(\.firstName).joined(separator: ", ") + " · données non synchronisées")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            Spacer()
+            Button("Reconnecter", action: onReconnect)
+                .font(NotoTheme.Typography.mono(12, weight: .bold))
+                .foregroundStyle(NotoTheme.Colors.shadow)
+                .padding(.horizontal, NotoTheme.Spacing.sm)
+                .padding(.vertical, 6)
+                .background(NotoTheme.Colors.brand)
+                .clipShape(Capsule())
+        }
+        .padding(NotoTheme.Spacing.md)
+        .background(NotoTheme.Colors.amber.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: NotoTheme.Radius.md)
+                .stroke(NotoTheme.Colors.amber.opacity(0.25), lineWidth: 1)
         )
     }
 }

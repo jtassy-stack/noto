@@ -248,7 +248,7 @@ struct ActualitesView: View {
                 }
             }
             .background(NotoTheme.Colors.background)
-            .navigationTitle("Actualités")
+            .navigationTitle("Messages")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FeedDestination.self) { dest in
                 switch dest {

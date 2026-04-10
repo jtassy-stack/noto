@@ -45,7 +45,7 @@ struct MainTabView: View {
 
                 ActualitesView()
                     .tabItem {
-                        Label("Actualités", systemImage: "newspaper")
+                        Label("Messages", systemImage: "newspaper")
                     }
                     .badge(unreadMessagesBadge + unsignedCarnetsCount)
                     .tag(Tab.actualites)
@@ -73,6 +73,15 @@ struct MainTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToHome)) { _ in
             selectedTab = .home
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToMessages)) { _ in
+            selectedTab = .actualites
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToSchool)) { _ in
+            selectedTab = .school
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToDiscover)) { _ in
+            selectedTab = .discover
+        }
     }
 
     private func configureTabBarAppearance() {
@@ -97,8 +106,9 @@ enum Tab: String {
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let navigateToHome = Notification.Name("noto.navigateToHome")
-    static let navigateToHomework = Notification.Name("noto.navigateToHomework")
+    static let navigateToHome     = Notification.Name("noto.navigateToHome")
+    static let navigateToMessages = Notification.Name("noto.navigateToMessages")
+    static let navigateToSchool   = Notification.Name("noto.navigateToSchool")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
 }
 
