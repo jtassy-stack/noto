@@ -83,6 +83,21 @@ enum PreviewData {
         msgTom.child = tom
         ctx.insert(msgTom)
 
+        // Sample photos (public URLs — no auth, for UI testing in simulator)
+        let photoSources: [(String, String, String)] = [
+            ("https://picsum.photos/seed/noto1/600/600", "Sortie au Jardin des Plantes", "Mme Martin"),
+            ("https://picsum.photos/seed/noto2/600/600", "Atelier peinture", "M. Dupont"),
+            ("https://picsum.photos/seed/noto3/600/600", "Projet potager", "Mme Martin"),
+            ("https://picsum.photos/seed/noto4/600/600", "Carnaval de l'école", "Direction"),
+            ("https://picsum.photos/seed/noto5/600/600", "Spectacle de Noël", "Mme Petit"),
+        ]
+        for (url, title, author) in photoSources {
+            let photo = SchoolPhoto(entPath: url, source: .blog, title: title, authorName: author,
+                                   date: .now.addingTimeInterval(-Double.random(in: 0...86400 * 30)))
+            photo.child = tom
+            ctx.insert(photo)
+        }
+
         try? ctx.save()
     }
 

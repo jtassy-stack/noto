@@ -493,7 +493,11 @@ final class ENTClient: Sendable {
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }
+        let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+        entLog("[noto] ENT fetchData → \(http.statusCode) \(contentType) \(data.count)B \(url.lastPathComponent)")
         if http.statusCode == 401 { throw ENTError.sessionExpired }
+        // A redirect to a login page returns 200 HTML — treat as session expired
+        if contentType.contains("text/html") { throw ENTError.sessionExpired }
         return data
     }
 

@@ -762,32 +762,27 @@ private struct HeroCard: View {
 
     var body: some View {
         // TODO: blog photo hero — use school blog photo when available from PCN
-        Button(action: { onTap?() }) {
         ZStack(alignment: .bottomLeading) {
-            // Background
+            // Background with dot grid overlay
             RoundedRectangle(cornerRadius: NotoTheme.Radius.lg)
                 .fill(NotoTheme.Colors.indigo)
-                .frame(height: 180)
-
-            // Subtle grid pattern overlay
-            GeometryReader { geo in
-                Canvas { context, size in
-                    let step: CGFloat = 24
-                    var x: CGFloat = 0
-                    while x < size.width {
-                        var y: CGFloat = 0
-                        while y < size.height {
-                            let rect = CGRect(x: x, y: y, width: 1, height: 1)
-                            context.fill(Path(rect), with: .color(.white.opacity(0.06)))
-                            y += step
+                .overlay(
+                    Canvas { context, size in
+                        let step: CGFloat = 24
+                        var x: CGFloat = 0
+                        while x < size.width {
+                            var y: CGFloat = 0
+                            while y < size.height {
+                                let rect = CGRect(x: x, y: y, width: 1, height: 1)
+                                context.fill(Path(rect), with: .color(.white.opacity(0.06)))
+                                y += step
+                            }
+                            x += step
                         }
-                        x += step
                     }
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.lg))
-            }
-            .frame(height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.lg))
+                )
+                .frame(height: 180)
 
             if unreadMessageCount > 0 {
                 // Message count — kept informational, not alarming
@@ -813,7 +808,7 @@ private struct HeroCard: View {
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .textCase(.uppercase)
                     Text(dateString)
-                        .font(NotoTheme.Typography.dataLarge)
+                        .font(NotoTheme.Typography.title)
                         .foregroundStyle(NotoTheme.Colors.paper)
                     Text("Bonne journée")
                         .font(NotoTheme.Typography.body)
@@ -836,9 +831,10 @@ private struct HeroCard: View {
                 .padding(NotoTheme.Spacing.md)
             }
         }
+        .frame(height: 180)
         .frame(maxWidth: .infinity)
-        } // Button
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
     }
 }
 
