@@ -133,13 +133,11 @@ private struct FamilySchoolView: View {
         } else {
             ScrollView {
                 VStack(spacing: NotoTheme.Spacing.sm) {
-                    // Prompt
                     HStack {
-                        Image(systemName: "hand.tap")
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        Text("Sélectionnez un enfant via le sélecteur en haut")
-                            .font(NotoTheme.Typography.caption)
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        Text("Vue d'ensemble")
+                            .font(NotoTheme.Typography.headline)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Spacer()
                     }
                     .padding(.horizontal, NotoTheme.Spacing.md)
                     .padding(.top, NotoTheme.Spacing.sm)
@@ -167,6 +165,10 @@ private struct ChildSchoolCard: View {
 
     private var unreadMessages: Int {
         child.messages.filter { !$0.read }.count
+    }
+
+    private var unsignedCarnets: Int {
+        child.messages.filter { !$0.read && $0.kind == .schoolbook }.count
     }
 
     var body: some View {
@@ -201,6 +203,14 @@ private struct ChildSchoolCard: View {
                         value: "\(unreadMessages)",
                         label: "messages",
                         color: NotoTheme.Colors.brand
+                    )
+                }
+                if unsignedCarnets > 0 {
+                    StatPill(
+                        icon: "signature",
+                        value: "\(unsignedCarnets)",
+                        label: "carnet\(unsignedCarnets > 1 ? "s" : "")",
+                        color: NotoTheme.Colors.amber
                     )
                 }
             }
@@ -272,7 +282,16 @@ private struct GradesListView: View {
 
     var body: some View {
         if allGrades.isEmpty {
-            ContentUnavailableView("Pas de notes", systemImage: "chart.bar", description: Text("Les notes apparaîtront après synchronisation."))
+            VStack {
+                ContentUnavailableView("Pas de notes", systemImage: "chart.bar",
+                    description: Text("Les notes apparaîtront après synchronisation."))
+                Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NotoTheme.Colors.brand)
+                .padding(.top, NotoTheme.Spacing.sm)
+            }
         } else {
             List(allGrades, id: \.grade.id) { item in
                 GradeRow(grade: item.grade, showChild: children.count > 1, childName: item.child.firstName)
@@ -314,16 +333,31 @@ private struct GradeRow: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
             Spacer()
-            Text(String(format: "%.1f", grade.value))
-                .font(NotoTheme.Typography.data)
-                .foregroundStyle(gradeColor)
-            Text("/\(Int(grade.outOf))")
-                .font(NotoTheme.Typography.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            VStack(alignment: .trailing, spacing: NotoTheme.Spacing.xs) {
+                Text(String(format: "%.1f", grade.value))
+                    .font(NotoTheme.Typography.data)
+                    .foregroundStyle(gradeColor)
+                Text("/\(Int(grade.outOf))")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                if let avg = grade.classAverage, avg > 0 {
+                    Text("moy. \(String(format: "%.1f", avg))")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
         }
     }
 
     private var gradeColor: Color {
+        if let avg = grade.classAverage, avg > 0 {
+            let delta = grade.normalizedValue - avg
+            if delta >= 2 { return NotoTheme.Colors.success }
+            if delta >= -1 { return NotoTheme.Colors.textPrimary }
+            if delta >= -3 { return NotoTheme.Colors.warning }
+            return NotoTheme.Colors.danger
+        }
+        // fallback to absolute
         let normalized = grade.normalizedValue
         if normalized >= 14 { return NotoTheme.Colors.success }
         if normalized >= 10 { return NotoTheme.Colors.textPrimary }
@@ -440,7 +474,16 @@ private struct ScheduleListView: View {
                     description: Text("L'emploi du temps n'est pas accessible via MonLycée.\nPour l'activer, ajoutez un enfant via QR code Pronote.")
                 )
             } else {
-                ContentUnavailableView("Pas de cours", systemImage: "calendar", description: Text("L'emploi du temps apparaîtra après synchronisation."))
+                VStack {
+                    ContentUnavailableView("Pas de cours", systemImage: "calendar",
+                        description: Text("L'emploi du temps apparaîtra après synchronisation."))
+                    Button("Synchroniser maintenant") {
+                        NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(NotoTheme.Colors.brand)
+                    .padding(.top, NotoTheme.Spacing.sm)
+                }
             }
         } else {
             VStack(spacing: 0) {
@@ -584,11 +627,19 @@ private struct SchoolbookListView: View {
 
     var body: some View {
         if allWords.isEmpty {
-            ContentUnavailableView(
-                "Pas de mots",
-                systemImage: "text.book.closed",
-                description: Text("Le carnet de liaison apparaîtra après synchronisation.")
-            )
+            VStack {
+                ContentUnavailableView(
+                    "Pas de mots",
+                    systemImage: "text.book.closed",
+                    description: Text("Le carnet de liaison apparaîtra après synchronisation.")
+                )
+                Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NotoTheme.Colors.brand)
+                .padding(.top, NotoTheme.Spacing.sm)
+            }
         } else {
             List(allWords, id: \.msg.id) { item in
                 Button {
@@ -673,7 +724,16 @@ private struct HomeworkListView: View {
 
     var body: some View {
         if allHomework.isEmpty {
-            ContentUnavailableView("Pas de devoirs", systemImage: "pencil.and.list.clipboard", description: Text("Les devoirs apparaîtront après synchronisation."))
+            VStack {
+                ContentUnavailableView("Pas de devoirs", systemImage: "pencil.and.list.clipboard",
+                    description: Text("Les devoirs apparaîtront après synchronisation."))
+                Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NotoTheme.Colors.brand)
+                .padding(.top, NotoTheme.Spacing.sm)
+            }
         } else {
             List(allHomework, id: \.hw.id) { item in
                 HomeworkRow(hw: item.hw, showChild: children.count > 1, childName: item.child.firstName)

@@ -18,7 +18,12 @@ struct MainTabView: View {
 
     private var unreadMessagesBadge: Int {
         let scope = selectedChild.map { [$0] } ?? children
-        return scope.flatMap(\.messages).filter { !$0.read }.count
+        return scope.flatMap(\.messages).filter { !$0.read && $0.kind == .conversation }.count
+    }
+
+    private var unsignedCarnetsCount: Int {
+        let scope = selectedChild.map { [$0] } ?? children
+        return scope.flatMap(\.messages).filter { !$0.read && $0.kind == .schoolbook }.count
     }
 
     var body: some View {
@@ -42,7 +47,7 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Actualités", systemImage: "newspaper")
                     }
-                    .badge(unreadMessagesBadge)
+                    .badge(unreadMessagesBadge + unsignedCarnetsCount)
                     .tag(Tab.actualites)
 
                 SchoolView(selectedChild: selectedChild)

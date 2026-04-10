@@ -69,6 +69,42 @@ final class NotificationService: ObservableObject {
         try? await center.add(request)
     }
 
+    // MARK: - Carnet à signer
+
+    /// Planifie une notification immédiate quand un nouveau mot du carnet de liaison arrive.
+    func scheduleCarnetNotification(for child: Child, subject: String, wordId: String?) async {
+        // Check user preference
+        guard UserDefaults.standard.bool(forKey: "notif_carnet") else { return }
+
+        // Deduplicate: only notify for genuinely new words
+        if let wordId, hasAlreadyNotified(wordId: wordId) { return }
+        if let wordId { markNotified(wordId: wordId) }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Carnet de liaison — \(child.firstName)"
+        content.body = subject.isEmpty ? "Un nouveau mot est à signer." : subject
+        content.sound = .default
+        content.categoryIdentifier = "CARNET"
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let id = "carnet_\(child.id)_\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    private func hasAlreadyNotified(wordId: String) -> Bool {
+        let existing = UserDefaults.standard.stringArray(forKey: "notified_carnets") ?? []
+        return existing.contains(wordId)
+    }
+
+    private func markNotified(wordId: String) {
+        var existing = UserDefaults.standard.stringArray(forKey: "notified_carnets") ?? []
+        existing.append(wordId)
+        if existing.count > 200 { existing = Array(existing.suffix(200)) }
+        UserDefaults.standard.set(existing, forKey: "notified_carnets")
+    }
+
     // MARK: - Cancel
 
     /// Annule toutes les notifications en attente pour un enfant donné.

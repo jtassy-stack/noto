@@ -30,6 +30,8 @@
     <string>Pour scanner le QR code Pronote et connecter le compte de votre enfant.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Pour enregistrer les photos de l'école dans votre Pellicule.</string>
+    <key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+    <string>Pour ajouter un événement culturel recommandé à votre calendrier.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Pour afficher les événements culturels proches de vous.</string>
     <key>ITSAppUsesNonExemptEncryption</key>

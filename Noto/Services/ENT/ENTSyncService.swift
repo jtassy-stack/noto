@@ -52,7 +52,7 @@ final class ENTSyncService {
         let newPhotos = photos.filter { !existingPaths.contains($0.path) }
 
         syncMessages(conversations, for: child)
-        syncSchoolbook(words, for: child)
+        await syncSchoolbook(words, for: child)
         syncHomework(homework, for: child)
         syncPhotos(newPhotos, for: child)
 
@@ -163,7 +163,7 @@ final class ENTSyncService {
 
     // MARK: - Schoolbook
 
-    private func syncSchoolbook(_ words: [ENTSchoolbookWord], for child: Child) {
+    private func syncSchoolbook(_ words: [ENTSchoolbookWord], for child: Child) async {
         for word in words {
             let msg = Message(
                 sender: word.ownerName,
@@ -177,6 +177,13 @@ final class ENTSyncService {
             msg.link = word.id    // word ID for acknowledgment
             msg.child = child
             modelContext.insert(msg)
+
+            // Notify parent for new unsigned carnet entries
+            await NotificationService.shared.scheduleCarnetNotification(
+                for: child,
+                subject: word.title,
+                wordId: word.id
+            )
         }
     }
 

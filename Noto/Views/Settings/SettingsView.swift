@@ -13,6 +13,9 @@ struct SettingsView: View {
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
+    @AppStorage("notif_carnet") private var notifCarnet: Bool = true
+    @AppStorage("notif_grade_threshold") private var gradeThreshold: Double = 10.0
+    @AppStorage("notif_absence") private var notifAbsence: Bool = true
 
     private var family: Family? { families.first }
 
@@ -79,6 +82,45 @@ struct SettingsView: View {
                                 .font(NotoTheme.Typography.caption)
                                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                         }
+                    }
+                    .disabled(notifAuthStatus == .denied)
+
+                    Toggle(isOn: $notifCarnet) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Carnet à signer")
+                                .font(NotoTheme.Typography.headline)
+                            Text("Quand un mot de liaison arrive")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    .disabled(notifAuthStatus == .denied)
+
+                    Toggle(isOn: $notifAbsence) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Absence non justifiée")
+                                .font(NotoTheme.Typography.headline)
+                            Text("Quand une absence est détectée")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    .disabled(notifAuthStatus == .denied)
+
+                    VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                        HStack {
+                            Text("Alerte note sous")
+                                .font(NotoTheme.Typography.headline)
+                            Spacer()
+                            Text(String(format: "%.0f/20", gradeThreshold))
+                                .font(NotoTheme.Typography.mono(13))
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                        Slider(value: $gradeThreshold, in: 4...15, step: 1)
+                            .tint(NotoTheme.Colors.brand)
+                        Text("Notification quand une note est sous ce seuil")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
                     }
                     .disabled(notifAuthStatus == .denied)
 

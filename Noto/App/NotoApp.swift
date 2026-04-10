@@ -1,11 +1,13 @@
 import SwiftUI
 import SwiftData
+import TipKit
 
 @main
 struct NotoApp: App {
     private let appearance = AppearanceManager.shared
 
     init() {
+        try? Tips.configure()
         configureAppearance()
     }
 

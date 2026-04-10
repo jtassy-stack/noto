@@ -44,6 +44,11 @@ struct HomeView: View {
         children.flatMap(\.messages).filter { !$0.read && $0.kind == .schoolbook }.count
     }
 
+    private var recentGradesCount: Int {
+        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
+        return children.flatMap(\.grades).filter { $0.date >= sevenDaysAgo }.count
+    }
+
     private var lastSyncDate: Date? {
         lastSyncDateInterval > 0 ? Date(timeIntervalSince1970: lastSyncDateInterval) : nil
     }
@@ -67,10 +72,15 @@ struct HomeView: View {
                         StoryRingsRow(children: children)
                     }
 
+                    // MARK: Global status banner — A1: moved to second position
+                    GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
+
                     // MARK: Hero Card
                     if !children.isEmpty {
                         HeroCard(
                             unreadMessageCount: unreadMessageCount,
+                            urgentHomeworkCount: urgentHomeworkCount,
+                            recentGradesCount: recentGradesCount,
                             children: children
                         )
                     }
@@ -82,6 +92,17 @@ struct HomeView: View {
                             homeworkCount: urgentHomeworkCount,
                             carnetCount: unsignedCarnetsCount
                         )
+                    }
+
+                    // MARK: B2 — Discover bridge card
+                    if !children.isEmpty && !children.flatMap(\.grades).isEmpty {
+                        DiscoverBridgeCard(children: children)
+                    }
+
+                    // MARK: C2 — Photos shortcut card
+                    let allPhotos = children.flatMap(\.photos)
+                    if !allPhotos.isEmpty {
+                        PhotosShortcutCard(children: children)
                     }
 
                     // MARK: Absence Shortcut
@@ -99,9 +120,6 @@ struct HomeView: View {
                     if let name = family?.parentName {
                         GreetingHeader(parentName: name)
                     }
-
-                    // Global status banner
-                    GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
 
                     // Sync status row
                     SyncStatusRow(
@@ -445,7 +463,7 @@ private struct GlobalStatusBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, NotoTheme.Spacing.md)
             .padding(.vertical, NotoTheme.Spacing.sm)
-            .background(NotoTheme.Colors.success.opacity(0.08))
+            .background(NotoTheme.Colors.success.opacity(0.18))
             .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
         } else {
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
@@ -463,7 +481,7 @@ private struct GlobalStatusBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, NotoTheme.Spacing.md)
             .padding(.vertical, NotoTheme.Spacing.sm)
-            .background(NotoTheme.Colors.warning.opacity(0.1))
+            .background(NotoTheme.Colors.warning.opacity(0.18))
             .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
         }
     }
@@ -506,6 +524,7 @@ private struct ChildStoryRing: View {
     let child: Child
 
     @State private var isPressed = false
+    @State private var showDetail = false
 
     private var hasActivity: Bool {
         let unreadMsgs = child.messages.contains { !$0.read }
@@ -535,7 +554,7 @@ private struct ChildStoryRing: View {
     }
 
     var body: some View {
-        Button(action: {}) {
+        Button(action: { showDetail = true }) {
             VStack(spacing: NotoTheme.Spacing.xs) {
                 ZStack {
                     // Ring border
@@ -599,6 +618,75 @@ private struct ChildStoryRing: View {
                 .onChanged { _ in isPressed = true }
                 .onEnded { _ in isPressed = false }
         )
+        .sheet(isPresented: $showDetail) {
+            ChildQuickView(child: child)
+        }
+    }
+}
+
+// MARK: - Child Quick Sheet (B3)
+
+private struct ChildQuickView: View {
+    let child: Child
+    @Environment(\.dismiss) private var dismiss
+
+    private var recentGrades: [Grade] {
+        child.grades.sorted { $0.date > $1.date }.prefix(3).map { $0 }
+    }
+    private var nextHomework: Homework? {
+        child.homework.filter { !$0.done && $0.dueDate >= Calendar.current.startOfDay(for: .now) }
+            .sorted { $0.dueDate < $1.dueDate }.first
+    }
+    private var unsignedCarnets: Int {
+        child.messages.filter { $0.kind == .schoolbook && !$0.read }.count
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !recentGrades.isEmpty {
+                    Section("Notes récentes") {
+                        ForEach(recentGrades) { grade in
+                            HStack {
+                                Text(grade.subject)
+                                    .font(NotoTheme.Typography.body)
+                                Spacer()
+                                Text(String(format: "%.1f", grade.value))
+                                    .font(NotoTheme.Typography.data)
+                                Text("/\(Int(grade.outOf))")
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                        }
+                    }
+                }
+                if let hw = nextHomework {
+                    Section("Prochain devoir") {
+                        VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                            Text(hw.subject).font(NotoTheme.Typography.headline)
+                            Text(hw.descriptionText)
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+                if unsignedCarnets > 0 {
+                    Section {
+                        Label("\(unsignedCarnets) carnet\(unsignedCarnets > 1 ? "s" : "") à signer", systemImage: "signature")
+                            .foregroundStyle(NotoTheme.Colors.amber)
+                    }
+                }
+            }
+            .navigationTitle(child.firstName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fermer") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -606,6 +694,8 @@ private struct ChildStoryRing: View {
 
 private struct HeroCard: View {
     let unreadMessageCount: Int
+    let urgentHomeworkCount: Int
+    let recentGradesCount: Int
     let children: [Child]
 
     private var dateString: String {
@@ -673,6 +763,20 @@ private struct HeroCard: View {
                     Text("Bonne journée")
                         .font(NotoTheme.Typography.body)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    if urgentHomeworkCount > 0 || recentGradesCount > 0 {
+                        HStack(spacing: NotoTheme.Spacing.sm) {
+                            if urgentHomeworkCount > 0 {
+                                Label("\(urgentHomeworkCount) devoir\(urgentHomeworkCount > 1 ? "s" : "")", systemImage: "pencil")
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                            if recentGradesCount > 0 {
+                                Label("\(recentGradesCount) note\(recentGradesCount > 1 ? "s" : "")", systemImage: "chart.bar")
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                        }
+                    }
                 }
                 .padding(NotoTheme.Spacing.md)
             }
@@ -748,6 +852,88 @@ private struct ActionChip: View {
             Capsule()
                 .stroke(accentColor.opacity(0.25), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Discover Bridge Card (B2)
+
+private struct DiscoverBridgeCard: View {
+    let children: [Child]
+
+    var body: some View {
+        Button {
+            NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+        } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "safari")
+                    .font(.system(size: 20))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Découvrir")
+                        .font(NotoTheme.Typography.headline)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("Recommandations culturelles liées aux cours")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            .padding(NotoTheme.Spacing.md)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Photos Shortcut Card (C2)
+
+private struct PhotosShortcutCard: View {
+    let children: [Child]
+    @State private var showPhotos = false
+
+    private var recentPhotos: [SchoolPhoto] {
+        Array(children.flatMap(\.photos).sorted { $0.date > $1.date }.prefix(3))
+    }
+
+    var body: some View {
+        let photoCount = children.flatMap(\.photos).count
+        Button { showPhotos = true } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "photo.stack")
+                    .font(.system(size: 20))
+                    .foregroundStyle(NotoTheme.Colors.cobalt)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dernières photos")
+                        .font(NotoTheme.Typography.headline)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("\(photoCount) photo\(photoCount > 1 ? "s" : "") partagée\(photoCount > 1 ? "s" : "")")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            .padding(NotoTheme.Spacing.md)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showPhotos) {
+            NavigationStack {
+                PhotoGridView(children: children)
+                    .navigationTitle("Photos")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Fermer") { showPhotos = false }
+                        }
+                    }
+            }
+        }
     }
 }
 

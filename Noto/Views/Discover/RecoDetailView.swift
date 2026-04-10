@@ -1,8 +1,19 @@
 import SwiftUI
+import EventKit
+import EventKitUI
 
 struct RecoDetailView: View {
     let reco: CultureSearchResult
     @Environment(\.dismiss) private var dismiss
+
+    @State private var showCalendarAlert = false
+    @State private var pendingCalendarItem: CalendarItem? = nil
+
+    private struct CalendarItem: Identifiable {
+        let id = UUID()
+        let event: EKEvent
+        let store: EKEventStore
+    }
 
     var body: some View {
         NavigationStack {
@@ -171,6 +182,30 @@ struct RecoDetailView: View {
                     }
                     .padding(.top, NotoTheme.Spacing.xs)
                 }
+            }
+
+            // "Ajouter à l'agenda" button
+            // NOTE: NSCalendarsWriteOnlyAccessUsageDescription must be added to Info.plist
+            Button {
+                Task { await requestAndAddToCalendar() }
+            } label: {
+                Label("Ajouter à l'agenda", systemImage: "calendar.badge.plus")
+                    .font(NotoTheme.Typography.body)
+                    .fontWeight(.medium)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(NotoTheme.Colors.brand.opacity(0.12))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .padding(.top, NotoTheme.Spacing.xs)
+            .alert("Accès calendrier refusé", isPresented: $showCalendarAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Autorisez l'accès au calendrier dans Réglages iOS pour ajouter cet événement.")
+            }
+            .sheet(item: $pendingCalendarItem) { item in
+                EventKitAdder(event: item.event, store: item.store)
             }
         }
     }
@@ -356,6 +391,74 @@ struct RecoDetailView: View {
         df.dateStyle = .long
         df.timeStyle = .none
         return df.string(from: date)
+    }
+
+    // MARK: - Calendar
+
+    @MainActor
+    private func requestAndAddToCalendar() async {
+        let store = EKEventStore()
+        do {
+            let granted: Bool
+            if #available(iOS 17.0, *) {
+                granted = try await store.requestWriteOnlyAccessToEvents()
+            } else {
+                granted = try await store.requestAccess(to: .event)
+            }
+            guard granted else {
+                showCalendarAlert = true
+                return
+            }
+            let event = EKEvent(eventStore: store)
+            event.title = reco.title
+            event.notes = reco.description
+
+            // Parse start date from startTime, or fall back to 7 days from now
+            let startDate: Date = {
+                if let s = reco.startTime {
+                    let isoFull = ISO8601DateFormatter()
+                    isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let d = isoFull.date(from: s) { return d }
+                    if let d = ISO8601DateFormatter().date(from: s) { return d }
+                }
+                return Date.now.addingTimeInterval(7 * 24 * 3600)
+            }()
+            event.startDate = startDate
+            event.endDate = startDate.addingTimeInterval(3600) // 1 hour duration
+            event.calendar = store.defaultCalendarForNewEvents
+
+            self.pendingCalendarItem = CalendarItem(event: event, store: store)
+        } catch {
+            showCalendarAlert = true
+        }
+    }
+}
+
+// MARK: - EventKitAdder
+
+private struct EventKitAdder: UIViewControllerRepresentable {
+    let event: EKEvent
+    let store: EKEventStore
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> EKEventEditViewController {
+        let vc = EKEventEditViewController()
+        vc.event = event
+        vc.eventStore = store
+        vc.editViewDelegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ vc: EKEventEditViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(dismiss: dismiss) }
+
+    class Coordinator: NSObject, EKEventEditViewDelegate {
+        let dismiss: DismissAction
+        init(dismiss: DismissAction) { self.dismiss = dismiss }
+        func eventEditViewController(_ controller: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction) {
+            dismiss()
+        }
     }
 }
 

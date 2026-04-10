@@ -318,10 +318,12 @@ struct ActualitesView: View {
             Text("Aucun message pour le moment")
                 .font(NotoTheme.Typography.headline)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
-            Text("Tirez vers le bas pour synchroniser.")
-                .font(NotoTheme.Typography.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
+            Button("Synchroniser maintenant") {
+                Task { await syncAll() }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(NotoTheme.Colors.brand)
+            .font(NotoTheme.Typography.caption)
         }
         .padding(NotoTheme.Spacing.lg)
     }

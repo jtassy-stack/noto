@@ -1,16 +1,29 @@
 import SwiftUI
+import TipKit
+
+struct ChildSelectorTip: Tip {
+    var title: Text { Text("Sélecteur d'enfant") }
+    var message: Text? { Text("Sélectionnez un enfant pour filtrer toute l'app, ou laissez sur « Tous ».") }
+    var image: Image? { Image(systemName: "hand.tap") }
+}
 
 struct ChildSelectorBar: View {
     let children: [Child]
     @Binding var selectedChild: Child?
     var onAddChild: (() -> Void)?
 
+    @State private var selectorTip = ChildSelectorTip()
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: NotoTheme.Spacing.sm) {
-                // "Famille" = nil selection (aggregated view)
+                Text("Afficher :")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+
+                // "Tous" = nil selection (aggregated view)
                 SelectorChip(
-                    label: "Famille",
+                    label: "Tous",
                     isSelected: selectedChild == nil,
                     action: { selectedChild = nil }
                 )
@@ -39,6 +52,7 @@ struct ChildSelectorBar: View {
             .padding(.horizontal, NotoTheme.Spacing.md)
             .padding(.vertical, NotoTheme.Spacing.sm)
         }
+        .popoverTip(selectorTip)
         .background(NotoTheme.Colors.surface)
         .overlay(alignment: .bottom) {
             Rectangle()

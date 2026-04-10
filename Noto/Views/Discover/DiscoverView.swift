@@ -265,12 +265,22 @@ private struct RecoRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            // Row 1: type icon + typeLabel + source badge + bookmark
             HStack {
                 Image(systemName: iconName)
                     .foregroundStyle(NotoTheme.Colors.brand)
                 Text(typeLabel)
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
+                if let source = reco.source, !source.isEmpty {
+                    Text(source)
+                        .font(NotoTheme.Typography.dataSmall)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(NotoTheme.Colors.surfaceElevated)
+                        .clipShape(Capsule())
+                }
                 Spacer()
                 Button {
                     onBookmark()
@@ -281,10 +291,41 @@ private struct RecoRow: View {
                 .buttonStyle(.plain)
             }
 
+            // Row 2: title
             Text(reco.title)
                 .font(NotoTheme.Typography.headline)
 
-            // Podcast: show name + station above description
+            // Row 3: curriculum tags + "Pour <child>" fused inline
+            let gradeTags: [String] = {
+                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(3)) }
+                let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
+                let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
+                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(3))
+            }()
+            if !gradeTags.isEmpty || reco.linkedChildName != nil {
+                HStack(spacing: 4) {
+                    ForEach(gradeTags, id: \.self) { tag in
+                        Text(Self.formatCurriculumTag(tag))
+                            .font(NotoTheme.Typography.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(NotoTheme.Colors.brand.opacity(0.1))
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                            .clipShape(Capsule())
+                    }
+                    if let child = reco.linkedChildName {
+                        Text("Pour \(child)")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(NotoTheme.Colors.textSecondary.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            // Row 4: Podcast: show name + station
             if reco.type == "podcast" {
                 HStack(spacing: NotoTheme.Spacing.xs) {
                     if let show = reco.showName {
@@ -310,6 +351,7 @@ private struct RecoRow: View {
                 }
             }
 
+            // Row 5: description
             if let desc = reco.description, !desc.isEmpty {
                 Text(desc)
                     .font(NotoTheme.Typography.body)
@@ -317,43 +359,11 @@ private struct RecoRow: View {
                     .lineLimit(reco.type == "podcast" ? 2 : 3)
             }
 
-            // Podcast: duration / published date
+            // Row 6: Podcast published date
             if reco.type == "podcast", let published = reco.publishedAt {
                 Text(formatShortDate(published))
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
-            }
-
-            // Curriculum tags — filtered to this child's grade level only
-            let gradeTags: [String] = {
-                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(3)) }
-                let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
-                let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
-                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(3))
-            }()
-            if !gradeTags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(gradeTags, id: \.self) { tag in
-                        Text(Self.formatCurriculumTag(tag))
-                            .font(NotoTheme.Typography.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(NotoTheme.Colors.brand.opacity(0.1))
-                            .foregroundStyle(NotoTheme.Colors.brand)
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-
-            // Child / level context tag
-            if let child = reco.linkedChildName, let level = reco.linkedLevel {
-                HStack(spacing: 4) {
-                    Image(systemName: "person")
-                        .font(.system(size: 10))
-                    Text("Pour \(child) · \(level)")
-                        .font(NotoTheme.Typography.caption)
-                }
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
         }
         .padding(.vertical, NotoTheme.Spacing.xs)

@@ -217,7 +217,8 @@ final class CultureAPIClient: Sendable {
             author: json["author"] as? String,
             year: json["year"] as? Int,
             genres: json["genres"] as? [String] ?? [],
-            curriculumTags: json["curriculum_tags"] as? [String] ?? json["curriculumTags"] as? [String] ?? []
+            curriculumTags: json["curriculum_tags"] as? [String] ?? json["curriculumTags"] as? [String] ?? [],
+            source: json["source"] as? String
         )
     }
 }
@@ -258,6 +259,7 @@ struct CultureSearchResult: Sendable, Identifiable {
     let year: Int?
     let genres: [String]
     let curriculumTags: [String]
+    let source: String?
 
     // Context metadata (set by caller, not from API)
     var linkedSubject: String? = nil
