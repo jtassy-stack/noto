@@ -12,6 +12,8 @@ struct PhotoGridView: View {
     var lastSyncDate: Date? = nil
 
     @State private var fullscreenItem: FullscreenItem? = nil
+    /// Incremented when the ENT session becomes valid so thumbnails can retry loading.
+    @State private var syncVersion = 0
 
     private let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -44,7 +46,7 @@ struct PhotoGridView: View {
                             Section {
                                 LazyVGrid(columns: columns, spacing: 2) {
                                     ForEach(photos) { photo in
-                                        PhotoThumbnail(photo: photo, children: children)
+                                        PhotoThumbnail(photo: photo, children: children, syncVersion: syncVersion)
                                             .aspectRatio(1, contentMode: .fill)
                                             .clipped()
                                             .onTapGesture {
@@ -67,6 +69,9 @@ struct PhotoGridView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 syncButton
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .entSessionReady)) { _ in
+            syncVersion += 1
         }
         .fullScreenCover(item: $fullscreenItem) { item in
             PhotoBrowserView(photos: item.photos, startIndex: item.startIndex, children: children)
@@ -155,6 +160,7 @@ private struct FullscreenItem: Identifiable {
 private struct PhotoThumbnail: View {
     let photo: SchoolPhoto
     let children: [Child]
+    let syncVersion: Int
 
     @State private var image: UIImage? = nil
 
@@ -169,7 +175,7 @@ private struct PhotoThumbnail: View {
                 ShimmerView()
             }
         }
-        .task(id: photo.entPath) {
+        .task(id: "\(photo.entPath)-\(syncVersion)") {
             await loadImage()
         }
         .contextMenu {
@@ -316,6 +322,10 @@ private struct PhotoPageView: View {
             }
         }
         .task(id: photo.entPath) { await loadImage() }
+        .onReceive(NotificationCenter.default.publisher(for: .entSessionReady)) { _ in
+            guard image == nil else { return }
+            Task { await loadImage() }
+        }
     }
 
     @ViewBuilder

@@ -110,6 +110,9 @@ extension Notification.Name {
     static let navigateToMessages = Notification.Name("noto.navigateToMessages")
     static let navigateToSchool   = Notification.Name("noto.navigateToSchool")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
+    /// Posted after ENT cookies are imported and the session is valid.
+    /// PhotoGridView observes this to retry thumbnail loading.
+    static let entSessionReady    = Notification.Name("noto.entSessionReady")
 }
 
 #Preview("App — Dark") {

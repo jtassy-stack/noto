@@ -321,6 +321,9 @@ struct HomeView: View {
                     password: String(parts[1])
                 )
                 ENTClient.importCookies(cookies)
+                // Signal PhotoGridView to retry any pending thumbnail loads — the session
+                // is now valid and cookies are in URLSession.shared's cookie storage.
+                NotificationCenter.default.post(name: .entSessionReady, object: nil)
             } catch {
                 errors.append("\(provider.name) : reconnexion échouée")
                 continue
