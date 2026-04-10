@@ -47,7 +47,17 @@ final class ENTSyncService {
         // Now safe to delete old data and insert new
         for msg in child.messages { modelContext.delete(msg) }
         for hw in child.homework { modelContext.delete(hw) }
-        // Keep existing photos not in new set to avoid re-download; only add new ones
+        // Keep existing photos not in new set to avoid re-download; only add new ones.
+        // Exception: delete entries that are NOT in the fresh sync AND never successfully cached
+        // (these are bad entries — e.g. audio/video paths captured by a previous overly-broad regex).
+        let freshPaths = Set(photos.map(\.path))
+        var toDelete: [SchoolPhoto] = []
+        for existing in child.photos {
+            guard !freshPaths.contains(existing.entPath) else { continue }
+            let neverCached = await !ENTPhotoCache.shared.isCached(existing.entPath)
+            if neverCached { toDelete.append(existing) }
+        }
+        for stale in toDelete { modelContext.delete(stale) }
         let existingPaths = Set(child.photos.map(\.entPath))
         let newPhotos = photos.filter { !existingPaths.contains($0.path) }
 

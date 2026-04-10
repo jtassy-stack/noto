@@ -321,10 +321,11 @@ final class ENTClient: Sendable {
         return attachments
     }
 
-    /// Extract /workspace/document/<id> paths from HTML string.
+    /// Extract /workspace/document/<id> paths from <img> elements only.
+    /// Restricting to <img> avoids capturing <audio>/<video>/<source> workspace documents.
     private func extractWorkspacePaths(from html: String) -> [String] {
-        // Match src="/workspace/document/<id>" or src="https://host/workspace/document/<id>"
-        let pattern = #"src=[\"']((?:https?://[^\"']*)?/workspace/document/[a-zA-Z0-9\-_]+)[\"']"#
+        // Match only <img src="..."> — not audio/video/source elements
+        let pattern = #"<img[^>]+src=[\"']((?:https?://[^\"']*)?/workspace/document/[a-zA-Z0-9\-_]+)[\"']"#
         let regex: NSRegularExpression
         do {
             regex = try NSRegularExpression(pattern: pattern)

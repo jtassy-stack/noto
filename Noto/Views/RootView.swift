@@ -8,6 +8,38 @@ struct RootView: View {
 
     private var family: Family? { families.first }
 
+    /// Re-establish ENT session on cold launch using stored Keychain credentials.
+    /// Must run before preloadENTPhotos() so cookies are valid when fetching.
+    private func reAuthENT() async {
+        guard let family else { return }
+        let entChildren = family.children.filter { $0.schoolType == .ent }
+        guard !entChildren.isEmpty else { return }
+
+        var providers = Set<ENTProvider>()
+        for child in entChildren { providers.insert(child.entProvider ?? .pcn) }
+
+        for provider in providers {
+            let key = "ent_credentials_\(provider.rawValue)"
+            guard let credsData = try? KeychainService.load(key: key),
+                  let creds = String(data: credsData, encoding: .utf8) else { continue }
+            let parts = creds.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let loginURL = provider.baseURL.appendingPathComponent("auth/login")
+            do {
+                let cookies = try await HeadlessENTAuth.login(
+                    loginURL: loginURL,
+                    email: String(parts[0]),
+                    password: String(parts[1])
+                )
+                ENTClient.importCookies(cookies)
+                NotificationCenter.default.post(name: .entSessionReady, object: nil)
+                NSLog("[noto] RootView: ENT auto-auth OK for %@", provider.name)
+            } catch {
+                NSLog("[noto] RootView: ENT auto-auth failed for %@: %@", provider.name, error.localizedDescription)
+            }
+        }
+    }
+
     /// Preload photos that are already in SwiftData but not yet in the disk cache.
     /// Uses whatever ENT session cookies are in memory — works on warm launch, no-ops on cold.
     private func preloadENTPhotos() async {
@@ -75,8 +107,11 @@ struct RootView: View {
             // Runs in background — UI is not blocked.
             await PronoteAutoConnect.autoConnect(modelContext: modelContext)
 
-            // Attempt to pre-warm ENT photo cache using cookies still in memory from
-            // a previous foreground session. Silently fails on cold launch (401 → ignored).
+            // Re-establish ENT session on cold launch (cookies don't survive app restart).
+            // Must run before preloadENTPhotos so the session is valid when fetching.
+            await reAuthENT()
+
+            // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
         }
     }
