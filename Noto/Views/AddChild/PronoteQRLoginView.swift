@@ -392,13 +392,22 @@ struct PronoteQRLoginView: View {
                 step = .success(childName: addedName)
             }
         } catch {
-            let msg = error.localizedDescription
-            if msg.contains("page does not exist") || msg.contains("requested page") {
+            let raw: String
+            if case PronoteError.invalidResponse(let msg) = error {
+                raw = msg.lowercased()
+            } else {
+                raw = error.localizedDescription.lowercased()
+            }
+
+            if raw.contains("page does not exist") || raw.contains("requested page") {
                 errorMessage = "QR code expiré ou URL Pronote invalide. Régénérez le QR code dans Pronote et réessayez."
-            } else if msg.contains("network") || msg.contains("connection") || msg.contains("timeout") {
+            } else if raw.contains("challenge") || raw.contains("credentials") || raw.contains("badcredentials") {
+                errorMessage = "Code PIN incorrect. Vérifiez le code à 4 chiffres choisi dans Pronote et réessayez."
+            } else if raw.contains("network") || raw.contains("timeout") || raw.contains("connexion") {
                 errorMessage = "Impossible de joindre le serveur Pronote. Vérifiez votre connexion."
             } else {
-                errorMessage = "Erreur de connexion : \(msg)"
+                logger.error("Pronote QR auth failed: \(error.localizedDescription)")
+                errorMessage = "Erreur de connexion. Régénérez le QR code dans Pronote et réessayez."
             }
             pin = ""
             step = .pin
