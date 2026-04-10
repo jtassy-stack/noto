@@ -48,6 +48,7 @@ struct ActualitesView: View {
 
     @State private var activeFilter: FeedFilter = .tous
     @State private var isRefreshing = false
+    @State private var lastSyncDate: Date? = nil
     @State private var path: [FeedDestination] = []
     @State private var showMonLyceeSetup = false
     @State private var imapConfigured = false
@@ -128,6 +129,12 @@ struct ActualitesView: View {
 
     @MainActor
     private func syncAll() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer {
+            isRefreshing = false
+            lastSyncDate = .now
+        }
         for child in children {
             switch child.schoolType {
             case .ent:
@@ -227,7 +234,12 @@ struct ActualitesView: View {
 
                 // Feed
                 if activeFilter == .photos {
-                    PhotoGridView(children: children)
+                    PhotoGridView(
+                        children: children,
+                        onSync: { await syncAll() },
+                        isSyncing: isRefreshing,
+                        lastSyncDate: lastSyncDate
+                    )
                 } else if filteredItems.isEmpty {
                     emptyState
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
