@@ -249,7 +249,7 @@ struct ActualitesView: View {
             }
             .background(NotoTheme.Colors.background)
             .navigationTitle("Actualités")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FeedDestination.self) { dest in
                 switch dest {
                 case .conversation(let msg):

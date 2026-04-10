@@ -296,11 +296,12 @@ private struct RecoRow: View {
                 .font(NotoTheme.Typography.headline)
 
             // Row 3: curriculum tags + "Pour <child>" fused inline
+            // Show at most 1 curriculum tag — more creates visual clutter
             let gradeTags: [String] = {
-                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(3)) }
+                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
                 let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
                 let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
-                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(3))
+                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
             }()
             if !gradeTags.isEmpty || reco.linkedChildName != nil {
                 HStack(spacing: 4) {

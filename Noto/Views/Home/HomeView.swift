@@ -753,18 +753,18 @@ private struct HeroCard: View {
             .frame(height: 180)
 
             if unreadMessageCount > 0 {
-                // Message count hero
+                // Message count — kept informational, not alarming
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-                    HStack(alignment: .firstTextBaseline, spacing: NotoTheme.Spacing.sm) {
-                        Text("\(unreadMessageCount)")
-                            .font(NotoTheme.Typography.dataLarge)
+                    HStack(spacing: NotoTheme.Spacing.sm) {
+                        Image(systemName: "envelope.badge")
+                            .font(.system(size: 18))
                             .foregroundStyle(NotoTheme.Colors.brand)
-                        Image(systemName: "envelope.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(NotoTheme.Colors.brand)
+                        Text("\(unreadMessageCount) message\(unreadMessageCount > 1 ? "s" : "") non lu\(unreadMessageCount > 1 ? "s" : "")")
+                            .font(NotoTheme.Typography.title)
+                            .foregroundStyle(NotoTheme.Colors.paper)
                     }
-                    Text("message\(unreadMessageCount > 1 ? "s" : "") non lu\(unreadMessageCount > 1 ? "s" : "")")
-                        .font(NotoTheme.Typography.body)
+                    Text("Consultez l'onglet Actualités")
+                        .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                 }
                 .padding(NotoTheme.Spacing.md)

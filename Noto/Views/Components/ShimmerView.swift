@@ -8,12 +8,15 @@ struct ShimmerView: View {
         GeometryReader { geo in
             let width = geo.size.width * 2.5
             Rectangle()
+                // Dark-mode shimmer: base #222 → visible highlight #3A3A3A → base
+                // surfaceElevated (#1A1A2E) is darker than surface (#222222), so
+                // we use explicit grays to guarantee a visible sweep.
                 .fill(
                     LinearGradient(
                         stops: [
-                            .init(color: NotoTheme.Colors.surface, location: 0),
-                            .init(color: NotoTheme.Colors.surfaceElevated, location: 0.4),
-                            .init(color: NotoTheme.Colors.surface, location: 0.8),
+                            .init(color: Color(white: 0.13), location: 0),
+                            .init(color: Color(white: 0.24), location: 0.4),
+                            .init(color: Color(white: 0.13), location: 0.8),
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
