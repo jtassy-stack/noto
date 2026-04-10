@@ -474,6 +474,8 @@ final class ENTClient: Sendable {
     }
 
     /// Authenticated data fetch for workspace documents (images, attachments).
+    /// Uses URLSession.shared so all image requests share a single HTTP/2 connection
+    /// instead of opening a new TCP+TLS connection per photo thumbnail.
     func fetchData(path: String) async throws -> Data {
         let urlString: String
         if path.hasPrefix("http") {
@@ -487,7 +489,7 @@ final class ENTClient: Sendable {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         entLog("[noto] ENT fetchData \(url.absoluteString)")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }

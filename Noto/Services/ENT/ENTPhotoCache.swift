@@ -42,6 +42,15 @@ actor ENTPhotoCache {
         return img
     }
 
+    /// Pre-warms the disk cache for a list of workspace paths.
+    /// Already-cached photos return instantly from disk; others are downloaded sequentially
+    /// at background priority. Silently ignores failures (e.g. expired session → 401).
+    func preload(paths: [String], client: ENTClient) async {
+        for path in paths {
+            _ = await image(for: path, client: client)
+        }
+    }
+
     /// True if the image is already on disk (no network needed).
     func isCached(_ path: String) -> Bool {
         let fileURL = cacheDir.appendingPathComponent(cacheKey(for: path))

@@ -8,6 +8,29 @@ struct RootView: View {
 
     private var family: Family? { families.first }
 
+    /// Preload photos that are already in SwiftData but not yet in the disk cache.
+    /// Uses whatever ENT session cookies are in memory — works on warm launch, no-ops on cold.
+    private func preloadENTPhotos() async {
+        guard let family else { return }
+        let entChildren = family.children.filter { $0.schoolType == .ent }
+
+        // Group by provider to share one ENTClient (and its URLSession) per provider
+        var byProvider: [ENTProvider: [String]] = [:]
+        for child in entChildren {
+            let provider = child.entProvider ?? .pcn
+            let paths = child.photos.map(\.entPath)
+            byProvider[provider, default: []].append(contentsOf: paths)
+        }
+
+        for (provider, paths) in byProvider {
+            guard !paths.isEmpty else { continue }
+            let client = ENTClient(provider: provider)
+            Task.detached(priority: .background) {
+                await ENTPhotoCache.shared.preload(paths: paths, client: client)
+            }
+        }
+    }
+
     var body: some View {
         Group {
             if families.isEmpty {
@@ -51,6 +74,10 @@ struct RootView: View {
             // Attempt silent reconnect on every launch using stored refresh tokens.
             // Runs in background — UI is not blocked.
             await PronoteAutoConnect.autoConnect(modelContext: modelContext)
+
+            // Attempt to pre-warm ENT photo cache using cookies still in memory from
+            // a previous foreground session. Silently fails on cold launch (401 → ignored).
+            await preloadENTPhotos()
         }
     }
 }

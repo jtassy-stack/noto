@@ -203,6 +203,14 @@ struct HomeView: View {
 
         // Direct Pronote sync (QR code login)
         if !directPronoteChildren.isEmpty {
+            if pronoteService.bridge == nil && !pronoteService.isReconnecting {
+                await PronoteAutoConnect.autoConnect(modelContext: modelContext)
+            } else if pronoteService.isReconnecting {
+                // RootView already started auto-connect — wait for it rather than spawning a second
+                while pronoteService.isReconnecting {
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+            }
             if let bridge = pronoteService.bridge {
                 let syncService = PronoteSyncService(modelContext: modelContext)
                 for (index, child) in directPronoteChildren.enumerated() {
@@ -295,6 +303,16 @@ struct HomeView: View {
                     )
                 } catch {
                     errors.append("\(child.firstName) : sync échouée")
+                }
+            }
+
+            // Pre-warm photo cache in background — auth is valid right now, ideal moment to download.
+            // Collect paths here (main actor) before crossing into the detached task.
+            let photoPaths = children.flatMap(\.photos).map(\.entPath)
+            if !photoPaths.isEmpty {
+                let preloadClient = client
+                Task.detached(priority: .background) {
+                    await ENTPhotoCache.shared.preload(paths: photoPaths, client: preloadClient)
                 }
             }
         }
