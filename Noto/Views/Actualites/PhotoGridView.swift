@@ -175,25 +175,11 @@ private struct PhotoThumbnail: View {
         guard let child = children.first(where: {
             $0.photos.contains(where: { $0.entPath == photo.entPath })
         }) else { return }
-
-        let client = makeClient(for: child)
-        guard let client else { return }
-
-        // Login before fetching
-        let credKey = "ent_credentials_\(child.entProvider?.rawValue ?? "pcn")"
-        guard let credData = try? KeychainService.load(key: credKey),
-              let credString = String(data: credData, encoding: .utf8) else { return }
-        let parts = credString.split(separator: ":", maxSplits: 1)
-        guard parts.count == 2,
-              let _ = try? await client.login(email: String(parts[0]), password: String(parts[1]))
-        else { return }
-
+        guard let provider = child.entProvider else { return }
+        // Cookies were imported into HTTPCookieStorage.shared during sync (HeadlessENTAuth).
+        // No re-login needed here — ENTClient reuses the shared cookie jar.
+        let client = ENTClient(provider: provider)
         image = await ENTPhotoCache.shared.image(for: photo.entPath, client: client)
-    }
-
-    private func makeClient(for child: Child) -> ENTClient? {
-        guard let provider = child.entProvider else { return nil }
-        return ENTClient(provider: provider)
     }
 }
 
@@ -294,18 +280,8 @@ struct PhotoDetailView: View {
         guard let child = children.first(where: {
             $0.photos.contains(where: { $0.entPath == photo.entPath })
         }) else { return }
-
         guard let provider = child.entProvider else { return }
         let client = ENTClient(provider: provider)
-
-        let credKey = "ent_credentials_\(provider.rawValue)"
-        guard let credData = try? KeychainService.load(key: credKey),
-              let credString = String(data: credData, encoding: .utf8) else { return }
-        let parts = credString.split(separator: ":", maxSplits: 1)
-        guard parts.count == 2,
-              let _ = try? await client.login(email: String(parts[0]), password: String(parts[1]))
-        else { return }
-
         image = await ENTPhotoCache.shared.image(for: photo.entPath, client: client)
     }
 
