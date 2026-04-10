@@ -166,47 +166,44 @@ final class ENTClient: Sendable {
 
     // MARK: - Blog
 
+    /// Fetch blogs accessible to parents via the timeline.
+    /// /blog/list returns 401 for parent accounts — the timeline gives us blog IDs directly.
     func fetchBlogPosts() async throws -> [ENTBlogPost] {
-        // PCN/Edifice ENT: parents access shared blogs via filter=all
-        // Fallback to /blog/list/all for other providers
-        let data = try await get("/blog/list?filter=all&page=0&limit=100")
+        let data = try await get("/timeline/lastNotifications")
 
-        let root = try JSONSerialization.jsonObject(with: data)
-        // Response is either a raw array or {rows: [...], total: N}
-        let list: [[String: Any]]
-        if let arr = root as? [[String: Any]] {
-            list = arr
-        } else if let obj = root as? [String: Any], let rows = obj["rows"] as? [[String: Any]] {
-            list = rows
-        } else {
-            NSLog("[noto] fetchBlogPosts: unexpected format — %@", String(data: data.prefix(200), encoding: .utf8) ?? "")
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else {
             return []
         }
-        NSLog("[noto] fetchBlogPosts parsed %d blogs", list.count)
 
-        return list.compactMap { json in
-            guard let id = json["_id"] as? String ?? json["id"] as? String else { return nil }
-            return ENTBlogPost(
-                id: id,
-                title: json["title"] as? String ?? "",
-                modified: parseMongoDate(json["modified"]) ?? .now,
-                thumbnail: json["thumbnail"] as? String
-            )
+        // Extract unique blog IDs from BLOG-type notifications
+        var seen = Set<String>()
+        let blogs: [ENTBlogPost] = results.compactMap { notif in
+            guard (notif["type"] as? String) == "BLOG",
+                  let blogId = notif["resource"] as? String,
+                  seen.insert(blogId).inserted else { return nil }
+            let params = notif["params"] as? [String: Any]
+            let title = params?["blogTitle"] as? String ?? ""
+            let date = parseMongoDate(notif["date"]) ?? .now
+            return ENTBlogPost(id: blogId, title: title, modified: date, thumbnail: nil)
         }
+        NSLog("[noto] fetchBlogPosts via timeline: %d unique blogs", blogs.count)
+        return blogs
     }
 
     /// Fetch all posts for a blog and extract photo workspace paths from their HTML content.
+    /// Uses /blog/post/list/all/<blogId> — the correct parent-accessible endpoint (confirmed via React bundle analysis).
     func fetchBlogPhotoAttachments(blogId: String) async throws -> [ENTPhotoAttachment] {
-        let data = try await get("/blog/\(blogId)/posts?page=0&pageSize=50")
+        let data = try await get("/blog/post/list/all/\(blogId)?page=0&content=true&comments=false&nbComments=true")
 
         let posts: [[String: Any]]
         let root2 = try JSONSerialization.jsonObject(with: data)
-        if let json = root2 as? [String: Any], let p = json["posts"] as? [[String: Any]] {
-            posts = p
+        if let arr = root2 as? [[String: Any]] {
+            posts = arr
         } else if let json = root2 as? [String: Any], let p = json["rows"] as? [[String: Any]] {
             posts = p
-        } else if let arr = root2 as? [[String: Any]] {
-            posts = arr
+        } else if let json = root2 as? [String: Any], let p = json["posts"] as? [[String: Any]] {
+            posts = p
         } else {
             NSLog("[noto] fetchBlogPhotoAttachments %@: unexpected format — %@", blogId, String(data: data.prefix(200), encoding: .utf8) ?? "")
             return []
@@ -243,6 +240,42 @@ final class ENTClient: Sendable {
             }
         }
         return attachments
+    }
+
+    /// Fetch photos embedded in Actualités posts (parent-accessible on PCN).
+    /// Extracts workspace image src paths from the HTML content of each news item.
+    func fetchActualitesPhotos() async throws -> [ENTPhotoAttachment] {
+        let data = try await get("/actualites/list?filter=all&page=0&limit=100")
+
+        let items: [[String: Any]]
+        let root = try JSONSerialization.jsonObject(with: data)
+        if let arr = root as? [[String: Any]] {
+            items = arr
+        } else if let obj = root as? [String: Any], let rows = obj["rows"] as? [[String: Any]] {
+            items = rows
+        } else {
+            NSLog("[noto] fetchActualitesPhotos: unexpected format — %@", String(data: data.prefix(200), encoding: .utf8) ?? "")
+            return []
+        }
+        NSLog("[noto] fetchActualitesPhotos: %d items", items.count)
+
+        var photos: [ENTPhotoAttachment] = []
+        for item in items {
+            let title = item["title"] as? String ?? ""
+            let content = item["content"] as? String ?? item["text"] as? String ?? ""
+            let date = parseMongoDate(item["modified"] ?? item["publicationDate"] ?? item["created"]) ?? .now
+            let ownerName: String?
+            if let owner = item["owner"] as? [String: Any] {
+                ownerName = owner["displayName"] as? String
+            } else {
+                ownerName = nil
+            }
+            for path in extractWorkspacePaths(from: content) {
+                photos.append(ENTPhotoAttachment(path: path, title: title, authorName: ownerName, date: date, source: .blog))
+            }
+        }
+        NSLog("[noto] fetchActualitesPhotos: %d photos extracted", photos.count)
+        return photos
     }
 
     /// Fetch schoolbook word detail and extract photo attachment paths.

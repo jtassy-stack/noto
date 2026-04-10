@@ -163,7 +163,7 @@ struct ActualitesView: View {
                     let photoCount = child.photos.count
                     NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, photoCount)
                     if photoCount == 0 {
-                        syncError = "\(child.firstName) : sync OK mais aucune photo trouvée (pas de blog avec photos sur PCN)."
+                        syncError = "\(child.firstName) : aucune photo partagée trouvée sur l'ENT."
                     }
                 } catch ENTError.sessionExpired, ENTError.badCredentials {
                     NSLog("[noto][error] ENT bad credentials for %@", child.firstName)

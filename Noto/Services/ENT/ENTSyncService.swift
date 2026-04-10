@@ -64,23 +64,33 @@ final class ENTSyncService {
     private func fetchAllPhotos(client: ENTClient, words: [ENTSchoolbookWord]) async throws -> [ENTPhotoAttachment] {
         var photos: [ENTPhotoAttachment] = []
 
-        // Blog photos
-        let blogs: [ENTBlogPost]
+        // Blog photos via timeline — fetchBlogPosts uses /timeline/lastNotifications to get blog IDs,
+        // then fetches posts via /blog/post/list/all/<id> (parent-accessible on PCN).
         do {
-            blogs = try await client.fetchBlogPosts()
+            let blogs = try await client.fetchBlogPosts()
             NSLog("[noto] fetchBlogPosts → %d blogs", blogs.count)
+            for blog in blogs {
+                do {
+                    let attachments = try await client.fetchBlogPhotoAttachments(blogId: blog.id)
+                    NSLog("[noto] blog %@ → %d photo attachments", blog.id, attachments.count)
+                    photos += attachments
+                } catch {
+                    NSLog("[noto][error] fetchBlogPhotoAttachments %@ failed: %@", blog.id, error.localizedDescription)
+                }
+            }
         } catch {
             NSLog("[noto][error] fetchBlogPosts failed: %@", error.localizedDescription)
-            blogs = []
         }
-        for blog in blogs {
-            do {
-                let attachments = try await client.fetchBlogPhotoAttachments(blogId: blog.id)
-                NSLog("[noto] blog %@ → %d photo attachments", blog.id, attachments.count)
-                photos += attachments
-            } catch {
-                NSLog("[noto][error] fetchBlogPhotoAttachments %@ failed: %@", blog.id, error.localizedDescription)
+
+        // Actualités photos — supplemental source (embedded images in news posts)
+        do {
+            let actPhotos = try await client.fetchActualitesPhotos()
+            if !actPhotos.isEmpty {
+                NSLog("[noto] fetchActualitesPhotos → %d photos", actPhotos.count)
+                photos += actPhotos
             }
+        } catch {
+            NSLog("[noto][error] fetchActualitesPhotos failed: %@", error.localizedDescription)
         }
 
         // Schoolbook word photo attachments (images embedded in words or attached)
