@@ -286,8 +286,10 @@ private struct GradesListView: View {
                 ContentUnavailableView("Pas de notes", systemImage: "chart.bar",
                     description: Text("Les notes apparaîtront après synchronisation."))
                 Button("Synchroniser maintenant") {
-                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
+                    // Navigate first so HomeView is on-screen and subscribed
+                    // by the time the sync trigger fires (avoid drop).
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.brand)
@@ -479,8 +481,10 @@ private struct ScheduleListView: View {
                     ContentUnavailableView("Pas de cours", systemImage: "calendar",
                         description: Text("L'emploi du temps apparaîtra après synchronisation."))
                     Button("Synchroniser maintenant") {
-                        NotificationCenter.default.post(name: .triggerFullSync, object: nil)
+                        // Navigate first so HomeView is on-screen and subscribed
+                        // by the time the sync trigger fires (avoid drop).
                         NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                        NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(NotoTheme.Colors.brand)
@@ -636,8 +640,10 @@ private struct SchoolbookListView: View {
                     description: Text("Le carnet de liaison apparaîtra après synchronisation.")
                 )
                 Button("Synchroniser maintenant") {
-                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
+                    // Navigate first so HomeView is on-screen and subscribed
+                    // by the time the sync trigger fires (avoid drop).
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.brand)
@@ -731,8 +737,10 @@ private struct HomeworkListView: View {
                 ContentUnavailableView("Pas de devoirs", systemImage: "pencil.and.list.clipboard",
                     description: Text("Les devoirs apparaîtront après synchronisation."))
                 Button("Synchroniser maintenant") {
-                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
+                    // Navigate first so HomeView is on-screen and subscribed
+                    // by the time the sync trigger fires (avoid drop).
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(NotoTheme.Colors.brand)

@@ -104,8 +104,10 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .task {
             // Attempt silent reconnect on every launch using stored refresh tokens.
-            // Runs in background — UI is not blocked.
-            let pronoteReconnected = await PronoteAutoConnect.autoConnect(modelContext: modelContext)
+            // Runs in background — UI is not blocked. HomeView observes
+            // PronoteService.isConnected and fires an initial sync when the
+            // bridge becomes available, so no notification is needed here.
+            await PronoteAutoConnect.autoConnect(modelContext: modelContext)
 
             // Re-establish ENT session on cold launch (cookies don't survive app restart).
             // Must run before preloadENTPhotos so the session is valid when fetching.
@@ -113,14 +115,6 @@ struct RootView: View {
 
             // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
-
-            // Kick off an initial sync after reconnect: autoConnect recreates
-            // the PawnoteBridge but does not fetch data, so without this
-            // trigger direct-Pronote children stay empty until the user
-            // manually pulls-to-refresh on Home.
-            if pronoteReconnected {
-                NotificationCenter.default.post(name: .triggerFullSync, object: nil)
-            }
         }
     }
 }

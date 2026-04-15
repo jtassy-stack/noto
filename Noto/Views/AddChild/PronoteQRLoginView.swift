@@ -23,6 +23,9 @@ struct PronoteQRLoginView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showLiveCamera = false
     @State private var cameraPermission: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    /// Set synchronously inside the PIN `onChange` before spawning the auth
+    /// Task, so two rapid onChange fires can't both queue an authenticate().
+    @State private var isAuthenticating = false
 
     private var family: Family? { families.first }
 
@@ -161,10 +164,12 @@ struct PronoteQRLoginView: View {
                 .onChange(of: pin) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(4))
                     if filtered != newValue { pin = filtered }
-                    // Guard against concurrent authenticate() calls when the
-                    // field re-fires on a reset (failure path sets pin = "").
-                    // Only fire while we're still on the .pin step.
-                    if filtered.count == 4, case .pin = step {
+                    // Guard against concurrent authenticate() calls: the flag
+                    // is flipped synchronously before the Task is scheduled so
+                    // two rapid fires (fast typing, failure reset) can't both
+                    // pass the check. Reset in authenticate() when it returns.
+                    if filtered.count == 4, !isAuthenticating, case .pin = step {
+                        isAuthenticating = true
                         Task { await authenticate() }
                     }
                 }
@@ -300,6 +305,10 @@ struct PronoteQRLoginView: View {
 
     private func authenticate() async {
         guard let qrData, pin.count == 4 else { return }
+        // The onChange guard already flipped isAuthenticating; this defer
+        // makes sure every exit path (success, thrown error, SwiftData save
+        // failure, Keychain failure) resets it so the user can retry.
+        defer { isAuthenticating = false }
 
         step = .loading
         errorMessage = nil
@@ -486,14 +495,12 @@ struct PronoteQRLoginView: View {
     }
 
     private func inferGrade(from className: String) -> String {
-        // Normalize common French accents so "3ème" / "1ère" match the canonical
-        // forms used by CurriculumService ("3e" → "3eme", etc.)
-        let normalized = className
-            .lowercased()
-            .replacingOccurrences(of: "è", with: "e")
-            .replacingOccurrences(of: "é", with: "e")
-            .replacingOccurrences(of: "ê", with: "e")
-        // Longest patterns first so "1re" doesn't steal from "1ere".
+        // Strip any diacritic (è, é, ê, ï, ü…) and lowercase in a single pass
+        // so "3ème" / "1ère" / "1re A" all match the canonical collège/lycée
+        // forms that CurriculumService keys on ("3e", "1re", …).
+        let normalized = className.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr"))
+        // Longest patterns first so a long form can't be stolen by its prefix
+        // (e.g. "6eme" must match before "6e", "1ere" before "1re").
         let patterns: [(match: String, canonical: String)] = [
             ("2nde", "2nde"),
             ("1ere", "1re"),

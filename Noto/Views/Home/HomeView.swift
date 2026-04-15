@@ -236,6 +236,20 @@ struct HomeView: View {
                 await refreshBriefing()
             }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
+                guard !isSyncing else { return }
+                Task { await performFullRefresh() }
+            }
+            // Cold-launch initial sync: when PronoteAutoConnect re-establishes
+            // the bridge, fire a refresh if direct-Pronote children have no
+            // data yet. Race-free alternative to posting a notification from
+            // RootView (which could be dropped if HomeView hasn't subscribed).
+            .onChange(of: pronoteService.isConnected) { _, connected in
+                guard connected, !isSyncing else { return }
+                let directPronote = children.filter { $0.schoolType == .pronote && $0.entProvider == nil }
+                let hasEmpty = directPronote.contains {
+                    $0.grades.isEmpty && $0.homework.isEmpty && $0.schedule.isEmpty
+                }
+                guard hasEmpty else { return }
                 Task { await performFullRefresh() }
             }
             .sheet(isPresented: $showPronoteReconnect, onDismiss: {
