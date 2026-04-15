@@ -615,17 +615,12 @@ private struct ChildStoryRing: View {
     @State private var isPressed = false
     @State private var showDetail = false
 
-    private var hasActivity: Bool {
-        let unreadMsgs = child.messages.contains { !$0.read }
-        return unreadMsgs
-    }
-
     private var ringColor: Color {
-        hasActivity ? NotoTheme.Colors.brand : NotoTheme.Colors.border
+        child.hasAlert ? NotoTheme.Colors.brand : NotoTheme.Colors.border
     }
 
     private var ringWidth: CGFloat {
-        hasActivity ? 3 : 1.5
+        child.hasAlert ? 3 : 1.5
     }
 
     private var schoolBadgeColor: Color {
