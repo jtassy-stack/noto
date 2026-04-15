@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var syncError: String?
     @State private var showAbsence = false
+    @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
 
     private var family: Family? { families.first }
@@ -88,8 +89,20 @@ struct HomeView: View {
                         )
                     }
 
-                    // MARK: Global status banner — A1: moved to second position
+                    // MARK: Global status banner — A1: first signal line
                     GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
+
+                    // MARK: Greeting (moved up — audit finding UX-A4)
+                    if let name = family?.parentName {
+                        GreetingHeader(parentName: name)
+                    }
+
+                    // MARK: Briefing text summary (moved up — audit finding UX-A4)
+                    // Previously buried after all action cards; Nathalie flagged
+                    // that the briefing was "tout en bas", forcing 3 scrolls.
+                    if !engine.briefingText.isEmpty {
+                        BriefingSummaryView(text: engine.briefingText)
+                    }
 
                     // MARK: Hero Card
                     if !children.isEmpty {
@@ -140,36 +153,61 @@ struct HomeView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
-                    // Greeting
-                    if let name = family?.parentName {
-                        GreetingHeader(parentName: name)
-                    }
-
-                    // Sync status row
+                    // Sync status row (kept near the briefing list as metadata)
                     SyncStatusRow(
                         isSyncing: isSyncing,
                         lastSyncLabel: lastSyncLabel,
                         syncError: syncError
                     )
 
-                    // Briefing text summary
-                    if !engine.briefingText.isEmpty {
-                        BriefingSummaryView(text: engine.briefingText)
-                    }
-
-                    // Cards
+                    // Cards — split primary (actionable) vs celebrations (collapsed)
+                    // Audit finding UX-A5: Sophie M. flagged the "Points forts"
+                    // flood that buried actionable signals.
                     if engine.isLoading {
                         ProgressView()
                             .padding(.vertical, NotoTheme.Spacing.xl)
                     } else if engine.cards.isEmpty {
                         EmptyBriefingView()
                     } else {
-                        ForEach(engine.cards) { card in
+                        let primaryCards = engine.cards.filter { $0.priority != .positive }
+                        let celebrationCards = engine.cards.filter { $0.priority == .positive }
+
+                        ForEach(primaryCards) { card in
                             BriefingCardView(
                                 card: card,
                                 showChildName: isFamilyMode
                             )
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
+                        if !celebrationCards.isEmpty {
+                            DisclosureGroup(
+                                isExpanded: $celebrationsExpanded,
+                                content: {
+                                    VStack(spacing: NotoTheme.Spacing.md) {
+                                        ForEach(celebrationCards) { card in
+                                            BriefingCardView(
+                                                card: card,
+                                                showChildName: isFamilyMode
+                                            )
+                                        }
+                                    }
+                                    .padding(.top, NotoTheme.Spacing.sm)
+                                },
+                                label: {
+                                    HStack(spacing: NotoTheme.Spacing.xs) {
+                                        Image(systemName: "star.fill")
+                                            .foregroundStyle(NotoTheme.Colors.success)
+                                            .font(.system(size: 13))
+                                        Text("Bonne nouvelle (\(celebrationCards.count))")
+                                            .font(NotoTheme.Typography.headline)
+                                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                    }
+                                }
+                            )
+                            .tint(NotoTheme.Colors.textSecondary)
+                            .padding(NotoTheme.Spacing.md)
+                            .notoCard()
                         }
                     }
                 }
