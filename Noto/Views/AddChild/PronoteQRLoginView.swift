@@ -352,22 +352,51 @@ struct PronoteQRLoginView: View {
                 return
             }
 
-            var newlyInserted: [Child] = []
+            // Re-login from the same parent must NOT insert a new Child row
+            // for kids we already track. We dedupe against `family.children`
+            // via ChildDedupe — primary key is pawnoteID, with a composite
+            // fallback for legacy rows that predate this field.
+            var resolved: [Child] = []
             for pc in pronoteChildren {
                 let nameParts = pc.name.split(separator: " ")
                 let firstName = nameParts.count > 1
                     ? String(nameParts.dropFirst().joined(separator: " "))
                     : pc.name
+
+                if let existing = ChildDedupe.match(
+                    in: family.children,
+                    pawnoteID: pc.id,
+                    firstName: firstName,
+                    schoolType: .pronote
+                ) {
+                    // Refresh fields that may have shifted on the school side
+                    // (grade change at year roll-over, establishment rename).
+                    // firstName is intentionally NOT touched so a parent
+                    // who edited it in Settings keeps their preferred label.
+                    existing.level = GradeInference.level(from: pc.className)
+                    existing.grade = GradeInference.grade(from: pc.className)
+                    existing.establishment = refreshToken.url
+                    if existing.pawnoteID == nil || existing.pawnoteID?.isEmpty == true {
+                        // Backfill the stable key onto legacy rows matched
+                        // via the composite fallback so the next re-login
+                        // is resolved by the primary path.
+                        existing.pawnoteID = pc.id
+                    }
+                    resolved.append(existing)
+                    continue
+                }
+
                 let child = Child(
                     firstName: firstName,
                     level: GradeInference.level(from: pc.className),
                     grade: GradeInference.grade(from: pc.className),
                     schoolType: .pronote,
-                    establishment: refreshToken.url
+                    establishment: refreshToken.url,
+                    pawnoteID: pc.id.isEmpty ? nil : pc.id
                 )
                 child.family = family
                 modelContext.insert(child)
-                newlyInserted.append(child)
+                resolved.append(child)
             }
 
             if pronoteChildren.isEmpty {
@@ -377,16 +406,26 @@ struct PronoteQRLoginView: View {
                 // Use an empty grade (not "?") so CurriculumService doesn't
                 // store a corrupt value that breaks culture-api filtering.
                 logger.warning("Pronote login returned no children; creating synthetic child for \(refreshToken.username, privacy: .private)")
-                let child = Child(
+                if let existing = ChildDedupe.match(
+                    in: family.children,
+                    pawnoteID: nil,
                     firstName: refreshToken.username,
-                    level: .college,
-                    grade: "",
-                    schoolType: .pronote,
-                    establishment: refreshToken.url
-                )
-                child.family = family
-                modelContext.insert(child)
-                newlyInserted.append(child)
+                    schoolType: .pronote
+                ) {
+                    existing.establishment = refreshToken.url
+                    resolved.append(existing)
+                } else {
+                    let child = Child(
+                        firstName: refreshToken.username,
+                        level: .college,
+                        grade: "",
+                        schoolType: .pronote,
+                        establishment: refreshToken.url
+                    )
+                    child.family = family
+                    modelContext.insert(child)
+                    resolved.append(child)
+                }
             }
 
             do {
@@ -403,7 +442,7 @@ struct PronoteQRLoginView: View {
             // the child row and refresh token are already persisted; missing sections
             // will retry on the next sync cycle.
             let syncService = PronoteSyncService(modelContext: modelContext)
-            for (index, child) in newlyInserted.enumerated() {
+            for (index, child) in resolved.enumerated() {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
                 if !syncService.failedCategories.isEmpty {
                     logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
@@ -412,7 +451,7 @@ struct PronoteQRLoginView: View {
 
             PronoteService.shared.setBridge(bridge)
 
-            let addedName = newlyInserted.last?.firstName ?? refreshToken.username
+            let addedName = resolved.last?.firstName ?? refreshToken.username
             step = .success(childName: addedName)
         } catch {
             let raw: String
