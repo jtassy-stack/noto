@@ -286,6 +286,7 @@ private struct GradesListView: View {
                 ContentUnavailableView("Pas de notes", systemImage: "chart.bar",
                     description: Text("Les notes apparaîtront après synchronisation."))
                 Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
@@ -478,6 +479,7 @@ private struct ScheduleListView: View {
                     ContentUnavailableView("Pas de cours", systemImage: "calendar",
                         description: Text("L'emploi du temps apparaîtra après synchronisation."))
                     Button("Synchroniser maintenant") {
+                        NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                         NotificationCenter.default.post(name: .navigateToHome, object: nil)
                     }
                     .buttonStyle(.borderedProminent)
@@ -634,6 +636,7 @@ private struct SchoolbookListView: View {
                     description: Text("Le carnet de liaison apparaîtra après synchronisation.")
                 )
                 Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
@@ -728,6 +731,7 @@ private struct HomeworkListView: View {
                 ContentUnavailableView("Pas de devoirs", systemImage: "pencil.and.list.clipboard",
                     description: Text("Les devoirs apparaîtront après synchronisation."))
                 Button("Synchroniser maintenant") {
+                    NotificationCenter.default.post(name: .triggerFullSync, object: nil)
                     NotificationCenter.default.post(name: .navigateToHome, object: nil)
                 }
                 .buttonStyle(.borderedProminent)

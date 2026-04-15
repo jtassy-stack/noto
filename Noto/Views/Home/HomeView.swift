@@ -235,6 +235,9 @@ struct HomeView: View {
                 engine.configure(modelContext: modelContext)
                 await refreshBriefing()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
+                Task { await performFullRefresh() }
+            }
             .sheet(isPresented: $showPronoteReconnect, onDismiss: {
                 // If reconnect succeeded, trigger a full refresh automatically
                 if pronoteService.bridge != nil {
