@@ -73,4 +73,19 @@ extension Child {
         }
         return host.contains("index-education") ? "Pronote" : host
     }
+
+    /// Binary status used to paint per-child alert dots across the UI.
+    /// Covers urgent homework (< 24h), unread messages, and recent low grades.
+    /// Centralized so ChildSelectorBar and ChildStoryRing share the same rule.
+    var hasAlert: Bool {
+        let now = Date.now
+        let in24h = now.addingTimeInterval(86_400)
+        let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
+        let urgentHomework = homework.contains { !$0.done && $0.dueDate <= in24h }
+        let unreadMessages = messages.contains { !$0.read }
+        let recentLowGrade = grades.contains {
+            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
+        }
+        return urgentHomework || unreadMessages || recentLowGrade
+    }
 }

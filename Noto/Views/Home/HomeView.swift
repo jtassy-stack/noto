@@ -692,6 +692,27 @@ private struct ChildStoryRing: View {
                         }
                     }
                     .frame(width: 60, height: 60)
+
+                    // Alert dot (audit finding UX-A1) — shows at top-right
+                    // when the child has urgent homework, unread messages,
+                    // or recent low grades. Shared rule with ChildSelectorBar.
+                    if child.hasAlert {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Circle()
+                                    .fill(NotoTheme.Colors.danger)
+                                    .frame(width: 12, height: 12)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(NotoTheme.Colors.background, lineWidth: 2)
+                                    )
+                                    .offset(x: 2, y: -2)
+                            }
+                            Spacer()
+                        }
+                        .frame(width: 60, height: 60)
+                    }
                 }
 
                 Text(child.firstName)

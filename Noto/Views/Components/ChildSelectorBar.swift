@@ -32,7 +32,7 @@ struct ChildSelectorBar: View {
                     SelectorChip(
                         label: child.firstName,
                         isSelected: selectedChild?.id == child.id,
-                        hasAlert: childHasAlert(child),
+                        hasAlert: child.hasAlert,
                         action: { selectedChild = child }
                     )
                 }
@@ -61,16 +61,6 @@ struct ChildSelectorBar: View {
         }
     }
 
-    private func childHasAlert(_ child: Child) -> Bool {
-        let now = Date.now
-        let in24h = now.addingTimeInterval(86_400)
-        let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
-        let urgentHomework = child.homework.contains { !$0.done && $0.dueDate <= in24h }
-        let recentLowGrade = child.grades.contains {
-            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
-        }
-        return urgentHomework || recentLowGrade
-    }
 }
 
 // MARK: - Chip
