@@ -38,3 +38,22 @@ targets:
         DEVELOPMENT_ASSET_PATHS: "\"Noto/Preview Content\""
     entitlements:
       path: Noto/App/Noto.entitlements
+
+  NotoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: NotoTests
+    dependencies:
+      - target: Noto
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.noto.app.tests
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Noto.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Noto"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: "NO"
+    scheme:
+      testTargets:
+        - NotoTests
+      gatherCoverageData: true
