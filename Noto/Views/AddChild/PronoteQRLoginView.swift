@@ -360,8 +360,8 @@ struct PronoteQRLoginView: View {
                     : pc.name
                 let child = Child(
                     firstName: firstName,
-                    level: inferLevel(from: pc.className),
-                    grade: inferGrade(from: pc.className),
+                    level: GradeInference.level(from: pc.className),
+                    grade: GradeInference.grade(from: pc.className),
                     schoolType: .pronote,
                     establishment: refreshToken.url
                 )
@@ -487,38 +487,6 @@ struct PronoteQRLoginView: View {
         return uuid
     }
 
-    private func inferLevel(from className: String) -> SchoolLevel {
-        let lower = className.lowercased()
-        if lower.contains("6e") || lower.contains("5e") || lower.contains("4e") || lower.contains("3e") { return .college }
-        if lower.contains("2nde") || lower.contains("1re") || lower.contains("1ere") || lower.contains("tle") { return .lycee }
-        return .college
-    }
-
-    private func inferGrade(from className: String) -> String {
-        // Strip any diacritic (è, é, ê, ï, ü…) and lowercase in a single pass
-        // so "3ème" / "1ère" / "1re A" all match the canonical collège/lycée
-        // forms that CurriculumService keys on ("3e", "1re", …).
-        let normalized = className.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr"))
-        // Longest patterns first so a long form can't be stolen by its prefix
-        // (e.g. "6eme" must match before "6e", "1ere" before "1re").
-        let patterns: [(match: String, canonical: String)] = [
-            ("2nde", "2nde"),
-            ("1ere", "1re"),
-            ("1re", "1re"),
-            ("tle", "Tle"),
-            ("6eme", "6e"), ("6e", "6e"),
-            ("5eme", "5e"), ("5e", "5e"),
-            ("4eme", "4e"), ("4e", "4e"),
-            ("3eme", "3e"), ("3e", "3e"),
-        ]
-        for (match, canonical) in patterns where normalized.contains(match) {
-            return canonical
-        }
-        // No recognizable level — return empty so CurriculumService can decide
-        // how to handle it (fall back to general recos) instead of storing a
-        // three-character garbage prefix that would corrupt later filtering.
-        return ""
-    }
 }
 
 // MARK: - Step
