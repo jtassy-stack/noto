@@ -6,7 +6,9 @@ import SwiftData
 @MainActor
 final class PronoteSyncService {
     private let modelContext: ModelContext
-    var lastSyncError: String?
+    /// Labels of categories that failed during the most recent `sync()` call.
+    /// Accumulates across endpoints so callers see every failure, not just the last one.
+    var failedCategories: [String] = []
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -15,7 +17,7 @@ final class PronoteSyncService {
     /// Full sync using PawnoteBridge (pawnote via JavaScriptCore).
     func sync(child: Child, bridge: PawnoteBridge, childIndex: Int) async {
         NSLog("[noto] Starting sync for \(child.firstName) (index \(childIndex))")
-        lastSyncError = nil
+        failedCategories = []
 
         bridge.setActiveChild(index: childIndex)
 
@@ -137,7 +139,7 @@ final class PronoteSyncService {
             return result
         } catch {
             NSLog("[noto] ❌ \(label) failed: \(error)")
-            lastSyncError = "\(label): \(error)"
+            failedCategories.append(label)
             return []
         }
     }

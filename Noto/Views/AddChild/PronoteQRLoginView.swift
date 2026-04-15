@@ -387,8 +387,8 @@ struct PronoteQRLoginView: View {
             let syncService = PronoteSyncService(modelContext: modelContext)
             for (index, child) in newlyInserted.enumerated() {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
-                if let err = syncService.lastSyncError {
-                    logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .public): \(err, privacy: .public)")
+                if !syncService.failedCategories.isEmpty {
+                    logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
                 }
             }
 
