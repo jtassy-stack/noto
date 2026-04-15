@@ -74,6 +74,20 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             | xcpretty || true
 
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Noto.xcodeproj \
+            -scheme NotoTests \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty
+
       - name: Fix build with Claude
         if: failure()
         uses: anthropics/claude-code-action@beta
