@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+import OSLog
+
+private let logger = Logger(subsystem: "com.pmf.noto", category: "HomeView")
 
 struct HomeView: View {
     let selectedChild: Child?
@@ -295,9 +298,18 @@ struct HomeView: View {
                 }
             }
             if let bridge = pronoteService.bridge {
+                // Resolve each child to its pawnote-session index via
+                // pawnoteID (or firstName fallback) — SwiftData order
+                // has no relation to the bridge's internal child list,
+                // so enumerated() would silently sync the wrong kid.
+                let pawnoteRoster = bridge.getChildren()
                 let syncService = PronoteSyncService(modelContext: modelContext)
-                for (index, child) in directPronoteChildren.enumerated() {
-                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                for child in directPronoteChildren {
+                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
+                        logger.warning("Skipping sync for \(child.firstName, privacy: .private): no matching pawnote resource")
+                        continue
+                    }
+                    await syncService.sync(child: child, bridge: bridge, childIndex: idx)
                 }
             } else {
                 showNoConnectionAlert = true
@@ -311,9 +323,14 @@ struct HomeView: View {
                 await PronoteAutoConnect.autoConnect(modelContext: modelContext)
             }
             if let bridge = pronoteService.bridge {
+                let pawnoteRoster = bridge.getChildren()
                 let syncService = PronoteSyncService(modelContext: modelContext)
-                for (index, child) in monlyceeChildren.enumerated() {
-                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                for child in monlyceeChildren {
+                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
+                        logger.warning("Skipping monlycee sync for \(child.firstName, privacy: .private): no matching pawnote resource")
+                        continue
+                    }
+                    await syncService.sync(child: child, bridge: bridge, childIndex: idx)
                 }
             } else {
                 // Fallback: sync from stored logbook data
