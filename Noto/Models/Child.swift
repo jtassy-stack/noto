@@ -64,16 +64,29 @@ final class Child {
 }
 
 extension Child {
+    /// Generic fallback label when the stored establishment is URL-shaped.
+    /// Prefers the ENT provider name when available, then a schoolType-derived label.
+    private var genericSchoolLabel: String {
+        if schoolType == .ent {
+            return entProvider?.name ?? "ENT"
+        }
+        return "École"
+    }
+
     /// Parent-facing label for the school. Masks raw URLs that leak from the
     /// refresh-token login path — parents should never see a server hostname.
+    /// Case-insensitive on the scheme and host checks; RFC 3986 says both are.
     var displayEstablishment: String {
-        guard establishment.hasPrefix("http"),
-              let host = URL(string: establishment)?.host else {
-            return establishment
+        let lowered = establishment.lowercased()
+        // URL-shaped: mask the hostname regardless of parseability
+        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") {
+            if let host = URL(string: establishment)?.host?.lowercased(),
+               host.contains("index-education") {
+                return "Pronote"
+            }
+            return genericSchoolLabel
         }
-        if host.contains("index-education") { return "Pronote" }
-        // Any other URL-shaped value is a leak too — fall back to a generic label.
-        return schoolType == .ent ? (entProvider?.name ?? "ENT") : "École"
+        return establishment
     }
 
     /// Binary status used to paint per-child alert dots across the UI.

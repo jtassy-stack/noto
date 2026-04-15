@@ -14,17 +14,15 @@ struct ChildHasAlertTests {
     // MARK: - Container
 
     private func makeContext() throws -> ModelContext {
+        // Only the models that `hasAlert` actually reaches. If a new model
+        // gets woven into the rule, the compiler will force us to widen
+        // this list — that's the signal to also widen the test coverage.
         let schema = Schema([
             Family.self,
             Child.self,
             Grade.self,
-            ScheduleEntry.self,
             Homework.self,
             Message.self,
-            SchoolPhoto.self,
-            Insight.self,
-            CultureReco.self,
-            Curriculum.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: config)
@@ -85,6 +83,28 @@ struct ChildHasAlertTests {
         #expect(child.hasAlert == false)
     }
 
+    @Test("Homework due just inside 24h triggers alert (boundary pin)")
+    func homeworkJustInside24h() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        // 24h minus 5s — unambiguously inside the window even with scheduler jitter
+        let hw = Homework(subject: "Maths", description: "Ex", dueDate: .now.addingTimeInterval(86_400 - 5))
+        hw.child = child
+        ctx.insert(hw)
+        #expect(child.hasAlert == true)
+    }
+
+    @Test("Homework due just outside 24h does not trigger alert (boundary pin)")
+    func homeworkJustOutside24h() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        // 24h plus 5s — unambiguously outside the window
+        let hw = Homework(subject: "Maths", description: "Ex", dueDate: .now.addingTimeInterval(86_400 + 5))
+        hw.child = child
+        ctx.insert(hw)
+        #expect(child.hasAlert == false)
+    }
+
     // MARK: - Messages
 
     @Test("Unread message triggers alert")
@@ -92,7 +112,7 @@ struct ChildHasAlertTests {
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         let msg = Message(sender: "Prof", subject: "Hi", body: "", date: .now, source: .pronote)
-        // Message.init sets read = false by default
+        msg.read = false // explicit — don't rely on Message.init defaults
         msg.child = child
         ctx.insert(msg)
         #expect(child.hasAlert == true)
@@ -142,6 +162,22 @@ struct ChildHasAlertTests {
         #expect(child.hasAlert == false)
     }
 
+    @Test("Low grade just inside the 7-day window triggers alert (boundary pin)")
+    func lowGradeJustInside7Days() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        // 7 days minus 5 minutes — safely inside
+        let grade = Grade(
+            subject: "Maths",
+            value: 5,
+            outOf: 20,
+            date: .now.addingTimeInterval(-(7 * 86_400 - 300))
+        )
+        grade.child = child
+        ctx.insert(grade)
+        #expect(child.hasAlert == true)
+    }
+
     @Test("Low grade on a non-/20 scale still normalizes (6/10 = 12/20, no alert)")
     func scaleNormalization() throws {
         let ctx = try makeContext()
@@ -161,6 +197,7 @@ struct ChildHasAlertTests {
         let child = makeChild(in: ctx)
         // Only an unread message, no homework or grades
         let msg = Message(sender: "Prof", subject: "Hi", body: "", date: .now, source: .ent)
+        msg.read = false
         msg.child = child
         ctx.insert(msg)
         #expect(child.hasAlert == true)

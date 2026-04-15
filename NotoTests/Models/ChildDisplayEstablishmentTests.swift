@@ -29,6 +29,33 @@ struct ChildDisplayEstablishmentTests {
         #expect(child.displayEstablishment == "Pronote")
     }
 
+    @Test("Uppercase HTTPS scheme is still masked (RFC 3986 case-insensitive)")
+    func uppercaseScheme() {
+        let child = makeChild(
+            schoolType: .pronote,
+            establishment: "HTTPS://0752546k.index-education.net/pronote/"
+        )
+        #expect(child.displayEstablishment == "Pronote")
+    }
+
+    @Test("Uppercase host is still masked")
+    func uppercaseHost() {
+        let child = makeChild(
+            schoolType: .pronote,
+            establishment: "https://0752546K.INDEX-EDUCATION.NET/pronote/"
+        )
+        #expect(child.displayEstablishment == "Pronote")
+    }
+
+    @Test("Pronote URL with explicit port is masked")
+    func pronoteURLWithPort() {
+        let child = makeChild(
+            schoolType: .pronote,
+            establishment: "https://0752546k.index-education.net:443/pronote/"
+        )
+        #expect(child.displayEstablishment == "Pronote")
+    }
+
     @Test("PCN ENT URL falls back to provider name")
     func entPCNURL() {
         let child = makeChild(
@@ -76,15 +103,15 @@ struct ChildDisplayEstablishmentTests {
         #expect(child.displayEstablishment == "")
     }
 
-    @Test("Malformed http:// with no host returns raw value")
+    @Test("Malformed http:// with no host masks via generic fallback")
     func malformedNoHost() {
-        // No host → guard falls through, raw value returned.
-        // Acceptable because this is a parser edge case, not a real leak path.
+        // Anything URL-shaped must never pass through to the parent-facing label —
+        // even a host-less http:// is treated as a leak vector and replaced.
         let child = makeChild(
             schoolType: .pronote,
             establishment: "http://"
         )
-        #expect(child.displayEstablishment == "http://")
+        #expect(child.displayEstablishment == "École")
     }
 
     // MARK: - Helpers
