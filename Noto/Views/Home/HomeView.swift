@@ -89,17 +89,15 @@ struct HomeView: View {
                         )
                     }
 
-                    // MARK: Global status banner — A1: first signal line
+                    // MARK: Global status banner
                     GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
 
-                    // MARK: Greeting (moved up — audit finding UX-A4)
                     if let name = family?.parentName {
                         GreetingHeader(parentName: name)
                     }
 
-                    // MARK: Briefing text summary (moved up — audit finding UX-A4)
-                    // Previously buried after all action cards; Nathalie flagged
-                    // that the briefing was "tout en bas", forcing 3 scrolls.
+                    // Briefing summary sits above the fold: it is the primary
+                    // "everything OK?" signal for skim-and-go parents.
                     if !engine.briefingText.isEmpty {
                         BriefingSummaryView(text: engine.briefingText)
                     }
@@ -153,16 +151,14 @@ struct HomeView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
-                    // Sync status row (kept near the briefing list as metadata)
                     SyncStatusRow(
                         isSyncing: isSyncing,
                         lastSyncLabel: lastSyncLabel,
                         syncError: syncError
                     )
 
-                    // Cards — split primary (actionable) vs celebrations (collapsed)
-                    // Audit finding UX-A5: Sophie M. flagged the "Points forts"
-                    // flood that buried actionable signals.
+                    // Celebrations collapse into a disclosure so actionable cards
+                    // aren't drowned by "points forts" when things are going well.
                     if engine.isLoading {
                         ProgressView()
                             .padding(.vertical, NotoTheme.Spacing.xl)
@@ -523,23 +519,21 @@ private struct GlobalStatusBanner: View {
         let in24h = Date.now.addingTimeInterval(86_400)
         let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
 
-        // Contextualized urgent homework per child (prénom + matière)
         for child in children {
             let urgent = child.homework.filter { !$0.done && $0.dueDate <= in24h }
             guard !urgent.isEmpty else { continue }
             if urgent.count == 1, let hw = urgent.first {
-                msgs.append("\(child.firstName) — 1 devoir de \(hw.subject) pour demain")
+                msgs.append("\(child.firstName) a 1 devoir de \(hw.subject.localizedCapitalized) pour demain")
             } else {
-                let subjects = urgent.prefix(3).map(\.subject).joined(separator: ", ")
-                msgs.append("\(child.firstName) — \(urgent.count) devoirs pour demain (\(subjects))")
+                let subjects = urgent.prefix(3).map(\.subject.localizedCapitalized).joined(separator: ", ")
+                msgs.append("\(child.firstName) a \(urgent.count) devoirs pour demain (\(subjects))")
             }
         }
 
-        // Contextualized recent low grades per child
         for child in children {
             let lows = child.grades.filter { $0.date >= sevenDaysAgo && $0.normalizedValue < 10 }
             guard !lows.isEmpty else { continue }
-            msgs.append("\(child.firstName) — \(lows.count) note\(lows.count > 1 ? "s" : "") sous 10 cette semaine")
+            msgs.append("\(child.firstName) a \(lows.count) note\(lows.count > 1 ? "s" : "") sous 10 cette semaine")
         }
 
         return msgs
@@ -692,26 +686,18 @@ private struct ChildStoryRing: View {
                         }
                     }
                     .frame(width: 60, height: 60)
-
-                    // Alert dot (audit finding UX-A1) — shows at top-right
-                    // when the child has urgent homework, unread messages,
-                    // or recent low grades. Shared rule with ChildSelectorBar.
+                }
+                // Alert dot mirrors Child.hasAlert — keep in sync with ChildSelectorBar.
+                .overlay(alignment: .topTrailing) {
                     if child.hasAlert {
-                        VStack {
-                            HStack {
-                                Spacer()
+                        Circle()
+                            .fill(NotoTheme.Colors.danger)
+                            .frame(width: 12, height: 12)
+                            .overlay(
                                 Circle()
-                                    .fill(NotoTheme.Colors.danger)
-                                    .frame(width: 12, height: 12)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(NotoTheme.Colors.background, lineWidth: 2)
-                                    )
-                                    .offset(x: 2, y: -2)
-                            }
-                            Spacer()
-                        }
-                        .frame(width: 60, height: 60)
+                                    .stroke(NotoTheme.Colors.background, lineWidth: 2)
+                            )
+                            .offset(x: 2, y: -2)
                     }
                 }
 

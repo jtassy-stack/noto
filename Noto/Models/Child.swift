@@ -64,14 +64,16 @@ final class Child {
 }
 
 extension Child {
-    /// Parent-facing label for the school, hiding raw Pronote URLs
-    /// that leak from the refresh-token login path.
+    /// Parent-facing label for the school. Masks raw URLs that leak from the
+    /// refresh-token login path — parents should never see a server hostname.
     var displayEstablishment: String {
         guard establishment.hasPrefix("http"),
               let host = URL(string: establishment)?.host else {
             return establishment
         }
-        return host.contains("index-education") ? "Pronote" : host
+        if host.contains("index-education") { return "Pronote" }
+        // Any other URL-shaped value is a leak too — fall back to a generic label.
+        return schoolType == .ent ? (entProvider?.name ?? "ENT") : "École"
     }
 
     /// Binary status used to paint per-child alert dots across the UI.

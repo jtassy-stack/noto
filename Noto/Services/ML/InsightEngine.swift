@@ -44,8 +44,8 @@ final class InsightEngine {
             var label = str.improving
                 ? "Point fort en progression (\(String(format: "%.1f", str.average))/20)"
                 : "Point fort (\(String(format: "%.1f", str.average))/20)"
-            // Append class average so the card shows "17.1/20 · moy. classe 13.6"
-            // (Nathalie: a note without a class reference is anxiety-inducing noise.)
+            // Append class average so the card reads "17.1/20 · moy. classe 13.6" —
+            // a bare grade has no frame of reference.
             let classAverages = (gradesBySubject[str.subject] ?? []).compactMap(\.classAverage)
             if !classAverages.isEmpty {
                 let classAvg = classAverages.reduce(0, +) / Double(classAverages.count)
