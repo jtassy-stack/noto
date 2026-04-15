@@ -161,7 +161,10 @@ struct PronoteQRLoginView: View {
                 .onChange(of: pin) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(4))
                     if filtered != newValue { pin = filtered }
-                    if filtered.count == 4 {
+                    // Guard against concurrent authenticate() calls when the
+                    // field re-fires on a reset (failure path sets pin = "").
+                    // Only fire while we're still on the .pin step.
+                    if filtered.count == 4, case .pin = step {
                         Task { await authenticate() }
                     }
                 }
