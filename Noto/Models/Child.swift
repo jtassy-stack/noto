@@ -62,3 +62,15 @@ final class Child {
         self.photos = []
     }
 }
+
+extension Child {
+    /// Parent-facing label for the school, hiding raw Pronote URLs
+    /// that leak from the refresh-token login path.
+    var displayEstablishment: String {
+        guard establishment.hasPrefix("http"),
+              let host = URL(string: establishment)?.host else {
+            return establishment
+        }
+        return host.contains("index-education") ? "Pronote" : host
+    }
+}
