@@ -340,6 +340,7 @@ struct PronoteQRLoginView: View {
                 return
             }
 
+            var newlyInserted: [Child] = []
             for pc in pronoteChildren {
                 let nameParts = pc.name.split(separator: " ")
                 let firstName = nameParts.count > 1
@@ -354,6 +355,7 @@ struct PronoteQRLoginView: View {
                 )
                 child.family = family
                 modelContext.insert(child)
+                newlyInserted.append(child)
             }
 
             if pronoteChildren.isEmpty {
@@ -366,6 +368,7 @@ struct PronoteQRLoginView: View {
                 )
                 child.family = family
                 modelContext.insert(child)
+                newlyInserted.append(child)
             }
 
             do {
@@ -377,20 +380,22 @@ struct PronoteQRLoginView: View {
                 return
             }
 
+            // Sync only children from THIS login session, using bridge-local indices.
+            // Partial fetch failures (e.g. school blocks one endpoint) are non-fatal:
+            // the child row and refresh token are already persisted; missing sections
+            // will retry on the next sync cycle.
             let syncService = PronoteSyncService(modelContext: modelContext)
-            for (index, child) in family.children.enumerated() where child.schoolType == .pronote {
+            for (index, child) in newlyInserted.enumerated() {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                if !syncService.failedCategories.isEmpty {
+                    logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
+                }
             }
 
             PronoteService.shared.setBridge(bridge)
 
-            if let syncError = syncService.lastSyncError {
-                errorMessage = "Sync: \(syncError)"
-                step = .pin
-            } else {
-                let addedName = family.children.last?.firstName ?? refreshToken.username
-                step = .success(childName: addedName)
-            }
+            let addedName = newlyInserted.last?.firstName ?? refreshToken.username
+            step = .success(childName: addedName)
         } catch {
             let raw: String
             if case PronoteError.invalidResponse(let msg) = error {
