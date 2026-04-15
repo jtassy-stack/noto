@@ -110,6 +110,10 @@ extension Notification.Name {
     static let navigateToMessages = Notification.Name("noto.navigateToMessages")
     static let navigateToSchool   = Notification.Name("noto.navigateToSchool")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
+    /// Request a full sync from any surface. HomeView observes it and runs
+    /// `performFullRefresh()`. Pair with `navigateToHome` when the caller
+    /// also wants the user to see the result.
+    static let triggerFullSync    = Notification.Name("noto.triggerFullSync")
     /// Posted after ENT cookies are imported and the session is valid.
     /// PhotoGridView observes this to retry thumbnail loading.
     static let entSessionReady    = Notification.Name("noto.entSessionReady")

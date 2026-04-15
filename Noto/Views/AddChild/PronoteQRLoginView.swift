@@ -23,6 +23,9 @@ struct PronoteQRLoginView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showLiveCamera = false
     @State private var cameraPermission: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    /// Set synchronously inside the PIN `onChange` before spawning the auth
+    /// Task, so two rapid onChange fires can't both queue an authenticate().
+    @State private var isAuthenticating = false
 
     private var family: Family? { families.first }
 
@@ -161,7 +164,12 @@ struct PronoteQRLoginView: View {
                 .onChange(of: pin) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(4))
                     if filtered != newValue { pin = filtered }
-                    if filtered.count == 4 {
+                    // Guard against concurrent authenticate() calls: the flag
+                    // is flipped synchronously before the Task is scheduled so
+                    // two rapid fires (fast typing, failure reset) can't both
+                    // pass the check. Reset in authenticate() when it returns.
+                    if filtered.count == 4, !isAuthenticating, case .pin = step {
+                        isAuthenticating = true
                         Task { await authenticate() }
                     }
                 }
@@ -297,6 +305,10 @@ struct PronoteQRLoginView: View {
 
     private func authenticate() async {
         guard let qrData, pin.count == 4 else { return }
+        // The onChange guard already flipped isAuthenticating; this defer
+        // makes sure every exit path (success, thrown error, SwiftData save
+        // failure, Keychain failure) resets it so the user can retry.
+        defer { isAuthenticating = false }
 
         step = .loading
         errorMessage = nil
@@ -359,10 +371,16 @@ struct PronoteQRLoginView: View {
             }
 
             if pronoteChildren.isEmpty {
+                // Pawnote returned no children — either a single-child parent
+                // account where the resource isn't listed, or a student login.
+                // Fall back to the parent username as a synthetic Child.
+                // Use an empty grade (not "?") so CurriculumService doesn't
+                // store a corrupt value that breaks culture-api filtering.
+                logger.warning("Pronote login returned no children; creating synthetic child for \(refreshToken.username, privacy: .private)")
                 let child = Child(
                     firstName: refreshToken.username,
                     level: .college,
-                    grade: "?",
+                    grade: "",
                     schoolType: .pronote,
                     establishment: refreshToken.url
                 )
@@ -477,9 +495,29 @@ struct PronoteQRLoginView: View {
     }
 
     private func inferGrade(from className: String) -> String {
-        let patterns = ["6e", "5e", "4e", "3e", "2nde", "1re", "Tle"]
-        for p in patterns where className.lowercased().contains(p.lowercased()) { return p }
-        return className.prefix(3).trimmingCharacters(in: .whitespaces)
+        // Strip any diacritic (è, é, ê, ï, ü…) and lowercase in a single pass
+        // so "3ème" / "1ère" / "1re A" all match the canonical collège/lycée
+        // forms that CurriculumService keys on ("3e", "1re", …).
+        let normalized = className.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr"))
+        // Longest patterns first so a long form can't be stolen by its prefix
+        // (e.g. "6eme" must match before "6e", "1ere" before "1re").
+        let patterns: [(match: String, canonical: String)] = [
+            ("2nde", "2nde"),
+            ("1ere", "1re"),
+            ("1re", "1re"),
+            ("tle", "Tle"),
+            ("6eme", "6e"), ("6e", "6e"),
+            ("5eme", "5e"), ("5e", "5e"),
+            ("4eme", "4e"), ("4e", "4e"),
+            ("3eme", "3e"), ("3e", "3e"),
+        ]
+        for (match, canonical) in patterns where normalized.contains(match) {
+            return canonical
+        }
+        // No recognizable level — return empty so CurriculumService can decide
+        // how to handle it (fall back to general recos) instead of storing a
+        // three-character garbage prefix that would corrupt later filtering.
+        return ""
     }
 }
 

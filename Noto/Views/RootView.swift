@@ -104,7 +104,9 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .task {
             // Attempt silent reconnect on every launch using stored refresh tokens.
-            // Runs in background — UI is not blocked.
+            // Runs in background — UI is not blocked. HomeView observes
+            // PronoteService.isConnected and fires an initial sync when the
+            // bridge becomes available, so no notification is needed here.
             await PronoteAutoConnect.autoConnect(modelContext: modelContext)
 
             // Re-establish ENT session on cold launch (cookies don't survive app restart).
