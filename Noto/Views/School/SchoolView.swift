@@ -178,7 +178,7 @@ private struct ChildSchoolCard: View {
                     Text(child.firstName)
                         .font(NotoTheme.Typography.headline)
                         .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Text("\(child.grade) — \(child.establishment)")
+                    Text("\(child.grade) — \(child.displayEstablishment)")
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .lineLimit(1)

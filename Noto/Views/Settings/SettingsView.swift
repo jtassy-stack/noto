@@ -43,7 +43,7 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(child.firstName)
                                         .font(NotoTheme.Typography.headline)
-                                    Text("\(child.establishment) · \(child.grade)")
+                                    Text("\(child.displayEstablishment) · \(child.grade)")
                                         .font(NotoTheme.Typography.caption)
                                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 }

@@ -62,3 +62,32 @@ final class Child {
         self.photos = []
     }
 }
+
+extension Child {
+    /// Parent-facing label for the school. Masks raw URLs that leak from the
+    /// refresh-token login path — parents should never see a server hostname.
+    var displayEstablishment: String {
+        guard establishment.hasPrefix("http"),
+              let host = URL(string: establishment)?.host else {
+            return establishment
+        }
+        if host.contains("index-education") { return "Pronote" }
+        // Any other URL-shaped value is a leak too — fall back to a generic label.
+        return schoolType == .ent ? (entProvider?.name ?? "ENT") : "École"
+    }
+
+    /// Binary status used to paint per-child alert dots across the UI.
+    /// Covers urgent homework (< 24h), unread messages, and recent low grades.
+    /// Centralized so ChildSelectorBar and ChildStoryRing share the same rule.
+    var hasAlert: Bool {
+        let now = Date.now
+        let in24h = now.addingTimeInterval(86_400)
+        let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
+        let urgentHomework = homework.contains { !$0.done && $0.dueDate <= in24h }
+        let unreadMessages = messages.contains { !$0.read }
+        let recentLowGrade = grades.contains {
+            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
+        }
+        return urgentHomework || unreadMessages || recentLowGrade
+    }
+}

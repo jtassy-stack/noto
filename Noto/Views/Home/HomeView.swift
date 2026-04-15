@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var syncError: String?
     @State private var showAbsence = false
+    @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
 
     private var family: Family? { families.first }
@@ -88,8 +89,18 @@ struct HomeView: View {
                         )
                     }
 
-                    // MARK: Global status banner — A1: moved to second position
+                    // MARK: Global status banner
                     GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
+
+                    if let name = family?.parentName {
+                        GreetingHeader(parentName: name)
+                    }
+
+                    // Briefing summary sits above the fold: it is the primary
+                    // "everything OK?" signal for skim-and-go parents.
+                    if !engine.briefingText.isEmpty {
+                        BriefingSummaryView(text: engine.briefingText)
+                    }
 
                     // MARK: Hero Card
                     if !children.isEmpty {
@@ -140,36 +151,59 @@ struct HomeView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
-                    // Greeting
-                    if let name = family?.parentName {
-                        GreetingHeader(parentName: name)
-                    }
-
-                    // Sync status row
                     SyncStatusRow(
                         isSyncing: isSyncing,
                         lastSyncLabel: lastSyncLabel,
                         syncError: syncError
                     )
 
-                    // Briefing text summary
-                    if !engine.briefingText.isEmpty {
-                        BriefingSummaryView(text: engine.briefingText)
-                    }
-
-                    // Cards
+                    // Celebrations collapse into a disclosure so actionable cards
+                    // aren't drowned by "points forts" when things are going well.
                     if engine.isLoading {
                         ProgressView()
                             .padding(.vertical, NotoTheme.Spacing.xl)
                     } else if engine.cards.isEmpty {
                         EmptyBriefingView()
                     } else {
-                        ForEach(engine.cards) { card in
+                        let primaryCards = engine.cards.filter { $0.priority != .positive }
+                        let celebrationCards = engine.cards.filter { $0.priority == .positive }
+
+                        ForEach(primaryCards) { card in
                             BriefingCardView(
                                 card: card,
                                 showChildName: isFamilyMode
                             )
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
+                        if !celebrationCards.isEmpty {
+                            DisclosureGroup(
+                                isExpanded: $celebrationsExpanded,
+                                content: {
+                                    VStack(spacing: NotoTheme.Spacing.md) {
+                                        ForEach(celebrationCards) { card in
+                                            BriefingCardView(
+                                                card: card,
+                                                showChildName: isFamilyMode
+                                            )
+                                        }
+                                    }
+                                    .padding(.top, NotoTheme.Spacing.sm)
+                                },
+                                label: {
+                                    HStack(spacing: NotoTheme.Spacing.xs) {
+                                        Image(systemName: "star.fill")
+                                            .foregroundStyle(NotoTheme.Colors.success)
+                                            .font(.system(size: 13))
+                                        Text("Bonne nouvelle (\(celebrationCards.count))")
+                                            .font(NotoTheme.Typography.headline)
+                                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                    }
+                                }
+                            )
+                            .tint(NotoTheme.Colors.textSecondary)
+                            .padding(NotoTheme.Spacing.md)
+                            .notoCard()
                         }
                     }
                 }
@@ -480,26 +514,28 @@ private struct ReconnectingBanner: View {
 private struct GlobalStatusBanner: View {
     let children: [Child]
 
-    private var urgentHomeworkCount: Int {
-        let in24h = Date.now.addingTimeInterval(86_400)
-        return children.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
-    }
-
-    private var recentLowGrades: [Grade] {
-        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
-        return children.flatMap(\.grades).filter {
-            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
-        }
-    }
-
     private var alertMessages: [String] {
         var msgs: [String] = []
-        if urgentHomeworkCount > 0 {
-            msgs.append("\(urgentHomeworkCount) devoir\(urgentHomeworkCount > 1 ? "s" : "") à rendre demain")
+        let in24h = Date.now.addingTimeInterval(86_400)
+        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
+
+        for child in children {
+            let urgent = child.homework.filter { !$0.done && $0.dueDate <= in24h }
+            guard !urgent.isEmpty else { continue }
+            if urgent.count == 1, let hw = urgent.first {
+                msgs.append("\(child.firstName) a 1 devoir de \(hw.subject.localizedCapitalized) pour demain")
+            } else {
+                let subjects = urgent.prefix(3).map(\.subject.localizedCapitalized).joined(separator: ", ")
+                msgs.append("\(child.firstName) a \(urgent.count) devoirs pour demain (\(subjects))")
+            }
         }
-        if !recentLowGrades.isEmpty {
-            msgs.append("\(recentLowGrades.count) note\(recentLowGrades.count > 1 ? "s" : "") sous 10 cette semaine")
+
+        for child in children {
+            let lows = child.grades.filter { $0.date >= sevenDaysAgo && $0.normalizedValue < 10 }
+            guard !lows.isEmpty else { continue }
+            msgs.append("\(child.firstName) a \(lows.count) note\(lows.count > 1 ? "s" : "") sous 10 cette semaine")
         }
+
         return msgs
     }
 
@@ -650,6 +686,19 @@ private struct ChildStoryRing: View {
                         }
                     }
                     .frame(width: 60, height: 60)
+                }
+                // Alert dot mirrors Child.hasAlert — keep in sync with ChildSelectorBar.
+                .overlay(alignment: .topTrailing) {
+                    if child.hasAlert {
+                        Circle()
+                            .fill(NotoTheme.Colors.danger)
+                            .frame(width: 12, height: 12)
+                            .overlay(
+                                Circle()
+                                    .stroke(NotoTheme.Colors.background, lineWidth: 2)
+                            )
+                            .offset(x: 2, y: -2)
+                    }
                 }
 
                 Text(child.firstName)
