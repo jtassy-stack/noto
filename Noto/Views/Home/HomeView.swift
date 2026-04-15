@@ -480,26 +480,30 @@ private struct ReconnectingBanner: View {
 private struct GlobalStatusBanner: View {
     let children: [Child]
 
-    private var urgentHomeworkCount: Int {
-        let in24h = Date.now.addingTimeInterval(86_400)
-        return children.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
-    }
-
-    private var recentLowGrades: [Grade] {
-        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
-        return children.flatMap(\.grades).filter {
-            $0.date >= sevenDaysAgo && $0.normalizedValue < 10
-        }
-    }
-
     private var alertMessages: [String] {
         var msgs: [String] = []
-        if urgentHomeworkCount > 0 {
-            msgs.append("\(urgentHomeworkCount) devoir\(urgentHomeworkCount > 1 ? "s" : "") à rendre demain")
+        let in24h = Date.now.addingTimeInterval(86_400)
+        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
+
+        // Contextualized urgent homework per child (prénom + matière)
+        for child in children {
+            let urgent = child.homework.filter { !$0.done && $0.dueDate <= in24h }
+            guard !urgent.isEmpty else { continue }
+            if urgent.count == 1, let hw = urgent.first {
+                msgs.append("\(child.firstName) — 1 devoir de \(hw.subject) pour demain")
+            } else {
+                let subjects = urgent.prefix(3).map(\.subject).joined(separator: ", ")
+                msgs.append("\(child.firstName) — \(urgent.count) devoirs pour demain (\(subjects))")
+            }
         }
-        if !recentLowGrades.isEmpty {
-            msgs.append("\(recentLowGrades.count) note\(recentLowGrades.count > 1 ? "s" : "") sous 10 cette semaine")
+
+        // Contextualized recent low grades per child
+        for child in children {
+            let lows = child.grades.filter { $0.date >= sevenDaysAgo && $0.normalizedValue < 10 }
+            guard !lows.isEmpty else { continue }
+            msgs.append("\(child.firstName) — \(lows.count) note\(lows.count > 1 ? "s" : "") sous 10 cette semaine")
         }
+
         return msgs
     }
 
