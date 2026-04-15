@@ -359,10 +359,16 @@ struct PronoteQRLoginView: View {
             }
 
             if pronoteChildren.isEmpty {
+                // Pawnote returned no children — either a single-child parent
+                // account where the resource isn't listed, or a student login.
+                // Fall back to the parent username as a synthetic Child.
+                // Use an empty grade (not "?") so CurriculumService doesn't
+                // store a corrupt value that breaks culture-api filtering.
+                logger.warning("Pronote login returned no children; creating synthetic child for \(refreshToken.username, privacy: .private)")
                 let child = Child(
                     firstName: refreshToken.username,
                     level: .college,
-                    grade: "?",
+                    grade: "",
                     schoolType: .pronote,
                     establishment: refreshToken.url
                 )
@@ -477,9 +483,31 @@ struct PronoteQRLoginView: View {
     }
 
     private func inferGrade(from className: String) -> String {
-        let patterns = ["6e", "5e", "4e", "3e", "2nde", "1re", "Tle"]
-        for p in patterns where className.lowercased().contains(p.lowercased()) { return p }
-        return className.prefix(3).trimmingCharacters(in: .whitespaces)
+        // Normalize common French accents so "3ème" / "1ère" match the canonical
+        // forms used by CurriculumService ("3e" → "3eme", etc.)
+        let normalized = className
+            .lowercased()
+            .replacingOccurrences(of: "è", with: "e")
+            .replacingOccurrences(of: "é", with: "e")
+            .replacingOccurrences(of: "ê", with: "e")
+        // Longest patterns first so "1re" doesn't steal from "1ere".
+        let patterns: [(match: String, canonical: String)] = [
+            ("2nde", "2nde"),
+            ("1ere", "1re"),
+            ("1re", "1re"),
+            ("tle", "Tle"),
+            ("6eme", "6e"), ("6e", "6e"),
+            ("5eme", "5e"), ("5e", "5e"),
+            ("4eme", "4e"), ("4e", "4e"),
+            ("3eme", "3e"), ("3e", "3e"),
+        ]
+        for (match, canonical) in patterns where normalized.contains(match) {
+            return canonical
+        }
+        // No recognizable level — return empty so CurriculumService can decide
+        // how to handle it (fall back to general recos) instead of storing a
+        // three-character garbage prefix that would corrupt later filtering.
+        return ""
     }
 }
 
