@@ -134,7 +134,9 @@ struct HomeView: View {
 
                     // MARK: B2 — Discover bridge card
                     if !children.isEmpty && !children.flatMap(\.grades).isEmpty {
-                        DiscoverBridgeCard(children: children)
+                        DiscoverBridgeCard(
+                            teaser: engine.cards.first { $0.type == .cultureReco }
+                        )
                     }
 
                     // MARK: C2 — Photos shortcut card
@@ -988,23 +990,44 @@ private struct ActionChip: View {
 // MARK: - Discover Bridge Card (B2)
 
 private struct DiscoverBridgeCard: View {
-    let children: [Child]
+    let teaser: BriefingCard?
 
     var body: some View {
         Button {
             NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
         } label: {
             HStack(spacing: NotoTheme.Spacing.sm) {
-                Image(systemName: "safari")
+                Image(systemName: teaser?.icon ?? "safari")
                     .font(.system(size: 20))
                     .foregroundStyle(NotoTheme.Colors.brand)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Découvrir")
-                        .font(NotoTheme.Typography.headline)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Text("Recommandations culturelles liées aux cours")
-                        .font(NotoTheme.Typography.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    if let teaser {
+                        Text(teaser.title)
+                            .font(NotoTheme.Typography.headline)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                        HStack(spacing: NotoTheme.Spacing.xs) {
+                            Text(teaser.childName)
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.brand)
+                            if !teaser.subtitle.isEmpty {
+                                Text("·")
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                Text(teaser.subtitle)
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    } else {
+                        Text("Découvrir")
+                            .font(NotoTheme.Typography.headline)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text("Recommandations culturelles liées aux cours")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
