@@ -283,6 +283,7 @@ struct DiscoverView: View {
                     if let match = Self.bestChapterMatch(for: r, index: chapterIndex) {
                         r.linkedChapterText = match.text
                         r.linkedChapterDate = match.date
+                        r.linkedChapterIsHomework = match.isHomework
                     }
                     return r
                 }
@@ -355,7 +356,7 @@ private struct RecoRow: View {
             // Row 3: chapter link (preferred) or curriculum tag + "Pour <child>"
             if let chapter = reco.linkedChapterText {
                 HStack(spacing: 4) {
-                    Text(chapterLabel(text: chapter, date: reco.linkedChapterDate))
+                    Text(chapterLabel(text: chapter, date: reco.linkedChapterDate, isHomework: reco.linkedChapterIsHomework))
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.brand)
                         .lineLimit(1)
@@ -369,12 +370,7 @@ private struct RecoRow: View {
                     }
                 }
             } else {
-                let gradeTags: [String] = {
-                    guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
-                    let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
-                    let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
-                    return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
-                }()
+                let gradeTags = Self.filteredGradeTags(for: reco)
                 if !gradeTags.isEmpty || reco.linkedChildName != nil {
                     HStack(spacing: 4) {
                         ForEach(gradeTags, id: \.self) { tag in
@@ -473,14 +469,26 @@ private struct RecoRow: View {
         }
     }
 
-    /// "Lié à : Grèce antique — devoir du 17 avril"
-    private func chapterLabel(text: String, date: Date?) -> String {
-        let truncated = text.count > 40 ? String(text.prefix(37)) + "…" : text
-        guard let date else { return "Lié à : \(truncated)" }
+    private static let chapterDateFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "fr_FR")
         df.setLocalizedDateFormatFromTemplate("d MMMM")
-        return "Lié à : \(truncated) — devoir du \(df.string(from: date))"
+        return df
+    }()
+
+    /// "Lié à : Grèce antique — devoir du 17 avril" or "cours du"
+    private func chapterLabel(text: String, date: Date?, isHomework: Bool) -> String {
+        let truncated = text.count > 40 ? String(text.prefix(37)) + "…" : text
+        guard let date else { return "Lié à : \(truncated)" }
+        let source = isHomework ? "devoir du" : "cours du"
+        return "Lié à : \(truncated) — \(source) \(Self.chapterDateFormatter.string(from: date))"
+    }
+
+    private static func filteredGradeTags(for reco: CultureSearchResult) -> [String] {
+        guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
+        let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
+        let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
+        return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
     }
 
     /// Formats "3eme-histoire" → "Histoire · 3e"
@@ -504,50 +512,44 @@ private struct SourceBadge: View {
     let source: String
 
     var body: some View {
+        let style = resolved
         HStack(spacing: 3) {
-            Text(monogram)
+            Text(style.monogram)
                 .font(.system(size: 10, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(width: 18, height: 18)
-                .background(badgeColor)
+                .background(style.color)
                 .clipShape(Circle())
             Text(source)
                 .font(NotoTheme.Typography.dataSmall)
-                .foregroundStyle(badgeColor)
+                .foregroundStyle(style.color)
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(badgeColor.opacity(0.1))
+        .background(style.color.opacity(0.1))
         .clipShape(Capsule())
     }
 
-    private var monogram: String {
-        let known: [String: String] = [
-            "arte": "A",
-            "france culture": "FC",
-            "france inter": "FI",
-            "france musique": "FM",
-            "radio france": "RF",
-            "lumni": "L",
-            "bnf": "B",
-            "rmn": "R",
-            "philharmonie": "P",
-            "universcience": "U",
-        ]
-        let key = source.lowercased()
-        if let m = known[key] { return m }
-        if let first = source.first { return String(first).uppercased() }
-        return "?"
-    }
+    private static let sourceStyles: [(pattern: String, monogram: String, color: Color)] = [
+        ("arte", "A", Color(red: 0.94, green: 0.45, blue: 0.08)),
+        ("france culture", "FC", Color(red: 0.0, green: 0.35, blue: 0.65)),
+        ("france inter", "FI", Color(red: 0.0, green: 0.35, blue: 0.65)),
+        ("france musique", "FM", Color(red: 0.0, green: 0.35, blue: 0.65)),
+        ("radio france", "RF", Color(red: 0.0, green: 0.35, blue: 0.65)),
+        ("lumni", "L", Color(red: 0.2, green: 0.6, blue: 0.2)),
+        ("bnf", "B", Color(red: 0.55, green: 0.15, blue: 0.15)),
+        ("rmn", "R", NotoTheme.Colors.textSecondary),
+        ("philharmonie", "P", Color(red: 0.3, green: 0.3, blue: 0.3)),
+        ("universcience", "U", NotoTheme.Colors.textSecondary),
+    ]
 
-    private var badgeColor: Color {
+    private var resolved: (monogram: String, color: Color) {
         let key = source.lowercased()
-        if key.contains("arte") { return Color(red: 0.94, green: 0.45, blue: 0.08) }
-        if key.contains("france culture") || key.contains("france inter") || key.contains("radio france") { return Color(red: 0.0, green: 0.35, blue: 0.65) }
-        if key.contains("lumni") { return Color(red: 0.2, green: 0.6, blue: 0.2) }
-        if key.contains("bnf") { return Color(red: 0.55, green: 0.15, blue: 0.15) }
-        if key.contains("philharmonie") { return Color(red: 0.3, green: 0.3, blue: 0.3) }
-        return NotoTheme.Colors.textSecondary
+        if let match = Self.sourceStyles.first(where: { key.contains($0.pattern) }) {
+            return (match.monogram, match.color)
+        }
+        let m = source.first.map { String($0).uppercased() } ?? "?"
+        return (m, NotoTheme.Colors.textSecondary)
     }
 }
 

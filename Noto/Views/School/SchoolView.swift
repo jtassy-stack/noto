@@ -748,9 +748,13 @@ private struct HomeworkListView: View {
             }
         } else {
             List(allHomework, id: \.hw.id) { item in
-                HomeworkRow(hw: item.hw, showChild: children.count > 1, childName: item.child.firstName)
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedHW = item.hw }
+                Button {
+                    selectedHW = item.hw
+                } label: {
+                    HomeworkRow(hw: item.hw, showChild: children.count > 1, childName: item.child.firstName)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             .listStyle(.plain)
             .sheet(item: $selectedHW) { hw in
