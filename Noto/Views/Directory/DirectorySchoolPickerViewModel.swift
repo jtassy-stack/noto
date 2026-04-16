@@ -67,14 +67,20 @@ final class DirectorySchoolPickerViewModel {
         debounceTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.count < Self.minQueryLength {
+            // Below min length is idle, regardless of whatever state the
+            // in-flight request was about to leave us in.
             state = .idle
             return
         }
-        state = .searching
+        // Note: .searching is set INSIDE the Task after the debounce
+        // sleep. Setting it here would show a spinner on every keystroke,
+        // defeating the debounce's coalescing UX.
         debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: Self.debounceNanoseconds)
             if Task.isCancelled { return }
-            await self?.performSearch(for: trimmed)
+            guard let self else { return }
+            self.state = .searching
+            await self.performSearch(for: trimmed)
         }
     }
 
@@ -86,11 +92,23 @@ final class DirectorySchoolPickerViewModel {
         }
         do {
             let results = try await search(trimmed)
-            // Another keystroke may have arrived — bail if our query
-            // no longer matches what the user is looking at.
-            guard trimmed == self.query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            // Stale-response guard — by the time the request returned,
+            // the user may have typed more, typed less (below min), or
+            // cleared the field entirely. Sync state back to what the
+            // user is actually looking at.
+            let currentTrimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed == currentTrimmed else {
+                if currentTrimmed.count < Self.minQueryLength {
+                    state = .idle
+                }
+                return
+            }
             state = results.isEmpty ? .empty : .results(results)
         } catch {
+            // Only surface the error if it's still about the current query —
+            // an error from a stale request would confuse the user.
+            let currentTrimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed == currentTrimmed else { return }
             state = .error(error.localizedDescription)
         }
     }
