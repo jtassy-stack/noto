@@ -462,9 +462,11 @@ private struct StatusBadge: View {
 // MARK: - Child row
 
 private struct ChildSettingsRow: View {
+    @Environment(\.modelContext) private var modelContext
     let child: Child
     let onDisconnect: (Child) -> Void
     @State private var showDisconnectConfirm = false
+    @State private var showSchoolPicker = false
 
     private var systemName: String {
         switch child.schoolType {
@@ -473,7 +475,46 @@ private struct ChildSettingsRow: View {
         }
     }
 
+    private var isLinkedToDirectory: Bool { child.rneCode != nil }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            mainRow
+            if !isLinkedToDirectory {
+                linkCTA
+            }
+        }
+        .sheet(isPresented: $showSchoolPicker) {
+            DirectorySchoolPickerView { summary in
+                child.rneCode = summary.rne
+                try? modelContext.save()
+            }
+        }
+    }
+
+    private var linkCTA: some View {
+        Button {
+            showSchoolPicker = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.system(size: 11))
+                Text("Lier à l'annuaire officiel pour un filtrage mail plus précis")
+                    .font(NotoTheme.Typography.caption)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(0.5)
+            }
+            .foregroundStyle(NotoTheme.Colors.info)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.bottom, 12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var mainRow: some View {
         HStack(spacing: NotoTheme.Spacing.md) {
             // Avatar
             ZStack {
