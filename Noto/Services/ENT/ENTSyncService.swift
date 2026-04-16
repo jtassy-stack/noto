@@ -38,10 +38,20 @@ final class ENTSyncService {
             fetchErrors.append("photos: \(error.localizedDescription)")
         }
 
-        // Only proceed if we got at least some data
+        // Decide whether to wipe-and-insert, preserve, or fail.
+        // Extracted as a pure function (`ENTSyncGate.decide`) so every
+        // branch has behavioural test coverage — the old inline guard
+        // silently wiped local data when PCN returned 200-with-empty
+        // lists (stale session cookie that the server didn't 401).
         let hasData = !conversations.isEmpty || !words.isEmpty || !homework.isEmpty
-        guard hasData || fetchErrors.isEmpty else {
-            throw ENTError.invalidResponse("Aucune donnée récupérée (\(fetchErrors.joined(separator: ", ")))")
+        switch ENTSyncGate.decide(hasData: hasData, fetchErrors: fetchErrors) {
+        case .proceed:
+            break
+        case .preserve:
+            NSLog("[noto][warn] ENT sync for %@ returned empty payload — preserving existing local data", child.firstName)
+            return
+        case .fail(let detail):
+            throw ENTError.invalidResponse("Aucune donnée récupérée (\(detail))")
         }
 
         // Now safe to delete old data and insert new
@@ -209,5 +219,27 @@ final class ENTSyncService {
             homework.child = child
             modelContext.insert(homework)
         }
+    }
+}
+
+// MARK: - Sync decision gate
+
+/// Decides what to do after an ENT fetch round. Split from `sync(...)`
+/// so every branch has test coverage — the previous inline guard
+/// silently wiped local data when PCN returned 200-with-empty lists.
+enum ENTSyncGate {
+    enum Decision: Equatable {
+        /// Fresh data arrived — safe to wipe local rows and insert new ones.
+        case proceed
+        /// No data and no errors — treat as a no-op to avoid losing local state.
+        case preserve
+        /// No data and at least one error — fail loudly so the caller can retry.
+        case fail(String)
+    }
+
+    static func decide(hasData: Bool, fetchErrors: [String]) -> Decision {
+        if hasData { return .proceed }
+        if !fetchErrors.isEmpty { return .fail(fetchErrors.joined(separator: ", ")) }
+        return .preserve
     }
 }
