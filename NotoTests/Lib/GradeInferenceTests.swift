@@ -85,22 +85,40 @@ struct GradeInferenceTests {
         #expect(GradeInference.level(from: "CM1") == .college)
     }
 
-    // MARK: - Known substring gotchas (pinning current behavior)
+    // MARK: - Word boundary behavior (P4 fix)
 
-    /// `inferLevel` does a naive `.contains("3e")`. A className like
-    /// "subtle" contains "tle" as a substring, so it matches the lycée
-    /// branch. Pinning current behavior so we notice when anyone
-    /// tightens this to word boundaries.
-    @Test("'subtle' trips the naive tle substring → lycee (pin)")
-    func subtleGotcha() {
-        #expect(GradeInference.level(from: "subtle") == .lycee)
+    @Test("'subtle' no longer trips the tle substring → college default")
+    func subtleFixed() {
+        #expect(GradeInference.level(from: "subtle") == .college)
     }
 
-    /// Numbers like "16e" contain "6e" — naive substring match classifies
-    /// this as college. Pinning current behavior; see backlog P4 for the
-    /// word-boundary fix.
-    @Test("'16e' trips the 6e substring → college (pin)")
-    func sixteenthGotcha() {
+    @Test("'16e' no longer trips the 6e substring → college default")
+    func sixteenthFixed() {
         #expect(GradeInference.level(from: "16e") == .college)
+    }
+
+    @Test("'3e' at start of string still matches → college")
+    func startOfString() {
+        #expect(GradeInference.level(from: "3e") == .college)
+    }
+
+    @Test("'3e' after space matches → college")
+    func afterSpace() {
+        #expect(GradeInference.level(from: "Groupe 3e A") == .college)
+    }
+
+    @Test("'3e' after dash matches → college")
+    func afterDash() {
+        #expect(GradeInference.level(from: "G-3e") == .college)
+    }
+
+    @Test("'tle' at word boundary → lycee")
+    func tleWordBoundary() {
+        #expect(GradeInference.level(from: "Tle S") == .lycee)
+    }
+
+    @Test("'13e' does not match 3e → college default (digit prefix blocks)")
+    func thirteenthNoMatch() {
+        #expect(GradeInference.level(from: "13e") == .college)
     }
 }
