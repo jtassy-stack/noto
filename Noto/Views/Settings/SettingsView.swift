@@ -21,6 +21,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @Environment(AppearanceManager.self) private var appearance
+    @Environment(\.dismiss) private var dismiss
     @Query private var families: [Family]
 
     @State private var showClearDataConfirmation = false
@@ -69,7 +70,15 @@ struct SettingsView: View {
                 .padding(.vertical, NotoTheme.Spacing.md)
             }
             .background(NotoTheme.Colors.background)
-            .navigationBarHidden(true)
+            // Keep the inline DM Serif "Réglages" header above — use an
+            // empty nav title so only the close button appears in the bar.
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fermer") { dismiss() }
+                }
+            }
             .confirmationDialog(
                 "Effacer toutes les données ?",
                 isPresented: $showClearDataConfirmation,
