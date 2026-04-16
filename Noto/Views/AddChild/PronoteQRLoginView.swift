@@ -38,8 +38,8 @@ struct PronoteQRLoginView: View {
                 pinView
             case .loading:
                 loadingView
-            case .success(let childName):
-                successView(childName: childName)
+            case .success(let childName, let partialSyncNote):
+                successView(childName: childName, partialSyncNote: partialSyncNote)
             }
         }
         .navigationTitle("QR Code Pronote")
@@ -197,7 +197,7 @@ struct PronoteQRLoginView: View {
 
     // MARK: - Success
 
-    private func successView(childName: String) -> some View {
+    private func successView(childName: String, partialSyncNote: String? = nil) -> some View {
         VStack(spacing: NotoTheme.Spacing.xl) {
             Spacer()
 
@@ -213,6 +213,14 @@ struct PronoteQRLoginView: View {
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, NotoTheme.Spacing.xl)
+
+            if let note = partialSyncNote {
+                Label(note, systemImage: "info.circle")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.warning)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, NotoTheme.Spacing.xl)
+            }
 
             Spacer()
 
@@ -442,9 +450,11 @@ struct PronoteQRLoginView: View {
             // the child row and refresh token are already persisted; missing sections
             // will retry on the next sync cycle.
             let syncService = PronoteSyncService(modelContext: modelContext)
+            var hadPartialFailure = false
             for (index, child) in resolved.enumerated() {
                 await syncService.sync(child: child, bridge: bridge, childIndex: index)
                 if !syncService.failedCategories.isEmpty {
+                    hadPartialFailure = true
                     logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
                 }
             }
@@ -452,7 +462,10 @@ struct PronoteQRLoginView: View {
             PronoteService.shared.setBridge(bridge)
 
             let addedName = resolved.last?.firstName ?? refreshToken.username
-            step = .success(childName: addedName)
+            let note: String? = hadPartialFailure
+                ? "Certaines données seront disponibles après la prochaine synchronisation."
+                : nil
+            step = .success(childName: addedName, partialSyncNote: note)
         } catch {
             let raw: String
             if case PronoteError.invalidResponse(let msg) = error {
@@ -534,7 +547,7 @@ private enum QRStep {
     case scan
     case pin
     case loading
-    case success(childName: String)
+    case success(childName: String, partialSyncNote: String? = nil)
 }
 
 // MARK: - PhotosPicker Transferable
