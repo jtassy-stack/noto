@@ -4,7 +4,6 @@ import SwiftData
 struct MainTabView: View {
     @Query private var families: [Family]
     @State private var selectedTab: Tab = .home
-    @State private var selectedChild: Child?
     @State private var showAddChild = false
 
     private var family: Family? { families.first }
@@ -12,59 +11,46 @@ struct MainTabView: View {
 
     private var urgentHomeworkBadge: Int {
         let in24h = Date.now.addingTimeInterval(86_400)
-        let scope = selectedChild.map { [$0] } ?? children
-        return scope.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
+        return children.flatMap(\.homework).filter { !$0.done && $0.dueDate <= in24h }.count
     }
 
     private var unreadMessagesBadge: Int {
-        let scope = selectedChild.map { [$0] } ?? children
-        return scope.flatMap(\.messages).filter { !$0.read && $0.kind == .conversation }.count
+        children.flatMap(\.messages).filter { !$0.read && $0.kind == .conversation }.count
     }
 
     private var unsignedCarnetsCount: Int {
-        let scope = selectedChild.map { [$0] } ?? children
-        return scope.flatMap(\.messages).filter { !$0.read && $0.kind == .schoolbook }.count
+        children.flatMap(\.messages).filter { !$0.read && $0.kind == .schoolbook }.count
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Fratrie selector
-            ChildSelectorBar(
-                children: children,
-                selectedChild: $selectedChild,
-                onAddChild: { showAddChild = true }
-            )
+        TabView(selection: $selectedTab) {
+            HomeView(onAddChild: { showAddChild = true })
+                .tabItem {
+                    Label("Accueil", systemImage: "house")
+                }
+                .tag(Tab.home)
 
-            // Tab content
-            TabView(selection: $selectedTab) {
-                HomeView(selectedChild: selectedChild)
-                    .tabItem {
-                        Label("Accueil", systemImage: "house")
-                    }
-                    .tag(Tab.home)
+            ActualitesView()
+                .tabItem {
+                    Label("Messages", systemImage: "newspaper")
+                }
+                .badge(unreadMessagesBadge + unsignedCarnetsCount)
+                .tag(Tab.actualites)
 
-                ActualitesView()
-                    .tabItem {
-                        Label("Messages", systemImage: "newspaper")
-                    }
-                    .badge(unreadMessagesBadge + unsignedCarnetsCount)
-                    .tag(Tab.actualites)
+            SchoolView()
+                .tabItem {
+                    Label("École", systemImage: "book")
+                }
+                .badge(urgentHomeworkBadge)
+                .tag(Tab.school)
 
-                SchoolView(selectedChild: selectedChild)
-                    .tabItem {
-                        Label("École", systemImage: "book")
-                    }
-                    .badge(urgentHomeworkBadge)
-                    .tag(Tab.school)
-
-                DiscoverView(selectedChild: selectedChild)
-                    .tabItem {
-                        Label("Découvrir", systemImage: "safari")
-                    }
-                    .tag(Tab.discover)
-            }
-            .tint(NotoTheme.Colors.brand)
+            DiscoverView()
+                .tabItem {
+                    Label("Découvrir", systemImage: "safari")
+                }
+                .tag(Tab.discover)
         }
+        .tint(NotoTheme.Colors.brand)
         .background(NotoTheme.Colors.background.ignoresSafeArea())
         .sheet(isPresented: $showAddChild) {
             AddChildView()

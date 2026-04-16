@@ -2,39 +2,57 @@ import SwiftUI
 import SwiftData
 import SafariServices
 
-// MARK: - SchoolView (per-child, adaptive tabs)
+// MARK: - SchoolView (local child selection, no "Tous" mode)
 
 struct SchoolView: View {
-    let selectedChild: Child?
-
     @Query private var families: [Family]
+    @State private var selectedChild: Child?
     @State private var activeTab: SchoolTab? = nil
     @State private var showAbsence = false
-    @State private var absenceChild: Child? = nil
 
-    private var allChildren: [Child] {
+    private var children: [Child] {
         families.first?.children ?? []
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let child = selectedChild {
-                    ChildSchoolView(
-                        child: child,
-                        activeTab: tabBinding(for: child),
-                        showAbsence: $showAbsence,
-                        absenceChild: $absenceChild
+                if children.isEmpty {
+                    ContentUnavailableView(
+                        "Aucun enfant",
+                        systemImage: "person.2",
+                        description: Text("Ajoutez un enfant dans les réglages pour commencer.")
                     )
+                } else if children.count == 1 {
+                    ChildSchoolView(
+                        child: children[0],
+                        activeTab: $activeTab,
+                        showAbsence: $showAbsence
+                    )
+                } else if let child = selectedChild {
+                    VStack(spacing: 0) {
+                        SchoolChildPicker(
+                            children: children,
+                            selectedChild: $selectedChild
+                        )
+                        ChildSchoolView(
+                            child: child,
+                            activeTab: $activeTab,
+                            showAbsence: $showAbsence
+                        )
+                    }
                 } else {
-                    FamilySchoolView(children: allChildren)
+                    SchoolChildInterstitial(
+                        children: children,
+                        selectedChild: $selectedChild
+                    )
                 }
             }
             .navigationTitle("École")
             .navigationBarTitleDisplayMode(.large)
         }
         .sheet(isPresented: $showAbsence) {
-            if let child = absenceChild {
+            if let child = selectedChild ?? children.first {
                 AbsenceView(preselectedChild: child)
             }
         }
@@ -42,13 +60,124 @@ struct SchoolView: View {
             activeTab = nil
         }
     }
+}
 
-    /// Binding that resets to nil (resolved to default) when child changes.
-    private func tabBinding(for child: Child) -> Binding<SchoolTab?> {
-        Binding(
-            get: { activeTab },
-            set: { activeTab = $0 }
-        )
+// MARK: - Child picker (compact, inline)
+
+private struct SchoolChildPicker: View {
+    let children: [Child]
+    @Binding var selectedChild: Child?
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                ForEach(children) { child in
+                    Button {
+                        selectedChild = child
+                    } label: {
+                        HStack(spacing: NotoTheme.Spacing.xs) {
+                            if child.hasAlert {
+                                Circle()
+                                    .fill(NotoTheme.Colors.danger)
+                                    .frame(width: 6, height: 6)
+                            }
+                            Text(child.firstName)
+                                .font(NotoTheme.Typography.caption)
+                        }
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                        .background(selectedChild?.id == child.id ? NotoTheme.Colors.brand : NotoTheme.Colors.card)
+                        .foregroundStyle(selectedChild?.id == child.id ? NotoTheme.Colors.shadow : NotoTheme.Colors.textPrimary)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(
+                                selectedChild?.id == child.id ? Color.clear : NotoTheme.Colors.border,
+                                lineWidth: 1
+                            )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+        }
+        .background(NotoTheme.Colors.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(NotoTheme.Colors.border)
+                .frame(height: 0.5)
+        }
+    }
+}
+
+// MARK: - Interstitial (multi-child, no selection yet)
+
+private struct SchoolChildInterstitial: View {
+    let children: [Child]
+    @Binding var selectedChild: Child?
+
+    var body: some View {
+        VStack(spacing: NotoTheme.Spacing.xl) {
+            Spacer()
+
+            Image(systemName: "person.2.circle")
+                .font(.system(size: 56))
+                .foregroundStyle(NotoTheme.Colors.brand)
+
+            Text("Quel enfant ?")
+                .font(NotoTheme.Typography.title)
+
+            Text("Sélectionnez un enfant pour consulter ses données scolaires.")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, NotoTheme.Spacing.xl)
+
+            VStack(spacing: NotoTheme.Spacing.md) {
+                ForEach(children) { child in
+                    Button {
+                        selectedChild = child
+                    } label: {
+                        HStack(spacing: NotoTheme.Spacing.md) {
+                            Text(String(child.firstName.prefix(1)).uppercased())
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .background(NotoTheme.Colors.brand)
+                                .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(child.firstName)
+                                    .font(NotoTheme.Typography.headline)
+                                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                Text(child.displayEstablishment)
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            if child.hasAlert {
+                                Circle()
+                                    .fill(NotoTheme.Colors.danger)
+                                    .frame(width: 10, height: 10)
+                            }
+
+                            Image(systemName: "chevron.right")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                        .padding(NotoTheme.Spacing.md)
+                        .notoCard()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, NotoTheme.Spacing.xl)
+
+            Spacer()
+        }
     }
 }
 
@@ -58,7 +187,6 @@ private struct ChildSchoolView: View {
     let child: Child
     @Binding var activeTab: SchoolTab?
     @Binding var showAbsence: Bool
-    @Binding var absenceChild: Child?
 
     private var availableTabs: [SchoolTab] {
         switch child.schoolType {
@@ -76,18 +204,27 @@ private struct ChildSchoolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Adaptive tab picker
-            Picker("Onglet", selection: Binding(
-                get: { resolvedTab },
-                set: { activeTab = $0 }
-            )) {
-                ForEach(availableTabs, id: \.self) { tab in
-                    Text(tab.title).tag(tab)
+            // Visual capsule tab picker
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: NotoTheme.Spacing.sm) {
+                    ForEach(availableTabs, id: \.self) { tab in
+                        Button {
+                            activeTab = tab
+                        } label: {
+                            Label(tab.title, systemImage: tab.icon)
+                                .font(NotoTheme.Typography.caption)
+                                .padding(.horizontal, NotoTheme.Spacing.md)
+                                .padding(.vertical, NotoTheme.Spacing.sm)
+                                .background(resolvedTab == tab ? NotoTheme.Colors.brand : NotoTheme.Colors.card)
+                                .foregroundStyle(resolvedTab == tab ? NotoTheme.Colors.shadow : NotoTheme.Colors.textPrimary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(.horizontal, NotoTheme.Spacing.md)
+                .padding(.vertical, NotoTheme.Spacing.sm)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, NotoTheme.Spacing.md)
-            .padding(.vertical, NotoTheme.Spacing.sm)
 
             // Tab content
             switch resolvedTab {
@@ -106,7 +243,6 @@ private struct ChildSchoolView: View {
             if child.schoolType == .ent {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        absenceChild = child
                         showAbsence = true
                     } label: {
                         Image(systemName: "envelope.badge.person.crop")
@@ -117,142 +253,6 @@ private struct ChildSchoolView: View {
         }
     }
 }
-
-// MARK: - Family mode (no child selected)
-
-private struct FamilySchoolView: View {
-    let children: [Child]
-
-    var body: some View {
-        if children.isEmpty {
-            ContentUnavailableView(
-                "Aucun enfant",
-                systemImage: "person.2",
-                description: Text("Ajoutez un enfant dans les réglages pour commencer.")
-            )
-        } else {
-            ScrollView {
-                VStack(spacing: NotoTheme.Spacing.sm) {
-                    HStack {
-                        Text("Vue d'ensemble")
-                            .font(NotoTheme.Typography.headline)
-                            .foregroundStyle(NotoTheme.Colors.textPrimary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, NotoTheme.Spacing.md)
-                    .padding(.top, NotoTheme.Spacing.sm)
-
-                    ForEach(children) { child in
-                        ChildSchoolCard(child: child)
-                            .padding(.horizontal, NotoTheme.Spacing.md)
-                    }
-                }
-                .padding(.bottom, NotoTheme.Spacing.lg)
-            }
-            .background(NotoTheme.Colors.background)
-        }
-    }
-}
-
-// MARK: - Child summary card (family mode)
-
-private struct ChildSchoolCard: View {
-    let child: Child
-
-    private var pendingHomework: Int {
-        child.homework.filter { !$0.done && $0.dueDate >= Calendar.current.startOfDay(for: .now) }.count
-    }
-
-    private var unreadMessages: Int {
-        child.messages.filter { !$0.read }.count
-    }
-
-    private var unsignedCarnets: Int {
-        child.messages.filter { !$0.read && $0.kind == .schoolbook }.count
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            HStack {
-                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-                    Text(child.firstName)
-                        .font(NotoTheme.Typography.headline)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Text("\(child.grade) — \(child.displayEstablishment)")
-                        .font(NotoTheme.Typography.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                SchoolTypeBadge(schoolType: child.schoolType)
-            }
-
-            Divider()
-                .background(NotoTheme.Colors.border)
-
-            HStack(spacing: NotoTheme.Spacing.md) {
-                StatPill(
-                    icon: "pencil.and.list.clipboard",
-                    value: "\(pendingHomework)",
-                    label: "devoirs",
-                    color: pendingHomework > 0 ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary
-                )
-                if unreadMessages > 0 {
-                    StatPill(
-                        icon: "envelope.badge",
-                        value: "\(unreadMessages)",
-                        label: "messages",
-                        color: NotoTheme.Colors.brand
-                    )
-                }
-                if unsignedCarnets > 0 {
-                    StatPill(
-                        icon: "signature",
-                        value: "\(unsignedCarnets)",
-                        label: "carnet\(unsignedCarnets > 1 ? "s" : "")",
-                        color: NotoTheme.Colors.amber
-                    )
-                }
-            }
-        }
-        .padding(NotoTheme.Spacing.md)
-        .notoCard()
-    }
-}
-
-private struct SchoolTypeBadge: View {
-    let schoolType: SchoolType
-
-    var body: some View {
-        Text(schoolType == .pronote ? "Pronote" : "PCN")
-            .font(NotoTheme.Typography.dataSmall)
-            .foregroundStyle(schoolType == .pronote ? NotoTheme.Colors.pronote : NotoTheme.Colors.ent)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                (schoolType == .pronote ? NotoTheme.Colors.pronote : NotoTheme.Colors.ent).opacity(0.15)
-            )
-            .clipShape(Capsule())
-    }
-}
-
-private struct StatPill: View {
-    let icon: String
-    let value: String
-    let label: String
-    var color: Color = NotoTheme.Colors.textSecondary
-
-    var body: some View {
-        HStack(spacing: NotoTheme.Spacing.xs) {
-            Image(systemName: icon)
-                .font(NotoTheme.Typography.caption)
-            Text("\(value) \(label)")
-                .font(NotoTheme.Typography.caption)
-        }
-        .foregroundStyle(color)
-    }
-}
-
 // MARK: - SchoolTab enum (per-child-type)
 
 enum SchoolTab: String, CaseIterable {
@@ -264,6 +264,15 @@ enum SchoolTab: String, CaseIterable {
         case .edt:     "EDT"
         case .carnet:  "Carnet"
         case .devoirs: "Devoirs"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .notes:   "chart.bar"
+        case .edt:     "calendar"
+        case .carnet:  "book.closed"
+        case .devoirs: "pencil.and.list.clipboard"
         }
     }
 }
@@ -1081,6 +1090,6 @@ extension Homework: Identifiable {}
 extension Message: Identifiable {}
 
 #Preview("École") {
-    SchoolView(selectedChild: nil)
+    SchoolView()
         .withPreviewData()
 }

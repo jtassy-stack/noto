@@ -5,7 +5,7 @@ import OSLog
 private let logger = Logger(subsystem: "com.pmf.noto", category: "Discover")
 
 struct DiscoverView: View {
-    let selectedChild: Child?
+    @State private var selectedChild: Child?
 
     @Query private var families: [Family]
     @State private var recos: [CultureSearchResult] = []
@@ -148,7 +148,15 @@ struct DiscoverView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                if children.count > 1 {
+                    ChildSelectorBar(
+                        children: children,
+                        selectedChild: $selectedChild
+                    )
+                }
+
+                Group {
                 if isLoading {
                     ProgressView("Chargement des recommandations…")
                 } else if let error = loadError, recos.isEmpty {
@@ -204,6 +212,7 @@ struct DiscoverView: View {
                 }
             }
             .background(NotoTheme.Colors.background)
+            } // VStack (child selector + content)
             .navigationTitle(isFamilyMode ? "Découvrir · Famille" : selectedChild.map { "Découvrir · \($0.firstName)" } ?? "Découvrir")
             .navigationBarTitleDisplayMode(.large)
             .task(id: selectedChild?.id) {
@@ -554,6 +563,6 @@ private struct SourceBadge: View {
 }
 
 #Preview("Découvrir") {
-    DiscoverView(selectedChild: nil)
+    DiscoverView()
         .withPreviewData()
 }
