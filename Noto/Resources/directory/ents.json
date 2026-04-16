@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "curatedAt": "2026-04-16",
+  "ents": [
+    {
+      "id": "monlycee",
+      "name": "MonLycée.net",
+      "domains": ["monlycee.net", "ent.iledefrance.fr"],
+      "regions": ["Île-de-France"],
+      "imapHost": "imaps.monlycee.net",
+      "imapPort": 993,
+      "authMethod": "imap"
+    },
+    {
+      "id": "pcn",
+      "name": "Paris Classe Numérique",
+      "domains": ["ent.parisclassenumerique.fr", "parisclassenumerique.fr"],
+      "regions": ["Île-de-France"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "oze92",
+      "name": "Oze — Hauts-de-Seine",
+      "domains": ["oze.hauts-de-seine.fr", "oze92.fr"],
+      "regions": ["Île-de-France"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "enthdf",
+      "name": "ENT Hauts-de-France",
+      "domains": ["enthdf.fr"],
+      "regions": ["Hauts-de-France"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "kdecole",
+      "name": "K-d'école",
+      "domains": ["kdecole.org"],
+      "regions": ["Seine-Saint-Denis", "Moselle"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "sn5962",
+      "name": "Savoirs Numériques 5962",
+      "domains": ["sn5962.fr"],
+      "regions": ["Nord", "Pas-de-Calais"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-occitanie",
+      "name": "Mon ENT Occitanie",
+      "domains": ["mon-ent-occitanie.fr"],
+      "regions": ["Occitanie"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-aura",
+      "name": "ENT Auvergne-Rhône-Alpes",
+      "domains": ["ent.auvergnerhonealpes.fr"],
+      "regions": ["Auvergne-Rhône-Alpes"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent77",
+      "name": "Eduline ENT77 (Seine-et-Marne)",
+      "domains": ["ent77.seine-et-marne.fr", "ent77.fr"],
+      "regions": ["Île-de-France"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ecoledirecte",
+      "name": "École Directe",
+      "domains": ["ecoledirecte.com"],
+      "regions": ["France entière — enseignement privé"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "toutatice",
+      "name": "Toutatice",
+      "domains": ["toutatice.fr"],
+      "regions": ["Bretagne"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-na",
+      "name": "ENT Nouvelle-Aquitaine / Lycée Connecté",
+      "domains": ["lyceeconnecte.fr"],
+      "regions": ["Nouvelle-Aquitaine"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-cvl",
+      "name": "ENT Centre-Val de Loire",
+      "domains": ["ent.netocentre.fr"],
+      "regions": ["Centre-Val de Loire"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-bfc",
+      "name": "ENT Bourgogne-Franche-Comté / ECLAT-BFC",
+      "domains": ["eclat-bfc.fr"],
+      "regions": ["Bourgogne-Franche-Comté"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-paca",
+      "name": "ATRIUM — Région Sud",
+      "domains": ["atrium-sud.fr"],
+      "regions": ["Provence-Alpes-Côte d'Azur"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-grandest",
+      "name": "Mon Bureau Numérique",
+      "domains": ["monbureaunumerique.fr"],
+      "regions": ["Grand Est"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-pdl",
+      "name": "e-lyco",
+      "domains": ["e-lyco.fr"],
+      "regions": ["Pays de la Loire"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-normandie",
+      "name": "Educ de Normandie / L'Educ de Normandie",
+      "domains": ["l-educdenormandie.fr"],
+      "regions": ["Normandie"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-corse",
+      "name": "Skolengo Corse",
+      "domains": ["skolengo-corse.fr"],
+      "regions": ["Corse"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "laclasse",
+      "name": "Laclasse.com",
+      "domains": ["laclasse.com"],
+      "regions": ["Rhône — collèges"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "neo",
+      "name": "NEO / Open Digital Education",
+      "domains": ["opendigitaleducation.com", "neo-ent.fr"],
+      "regions": ["Multi-régions (opérateur transverse)"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "skolengo",
+      "name": "Skolengo",
+      "domains": ["skolengo.com"],
+      "regions": ["Multi-régions (opérateur transverse)"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "arsene76",
+      "name": "Arsène 76 (Seine-Maritime)",
+      "domains": ["arsene76.fr"],
+      "regions": ["Seine-Maritime"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-savoie",
+      "name": "ENT Savoie",
+      "domains": ["ent.savoie.fr"],
+      "regions": ["Savoie"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-hautesavoie",
+      "name": "ENT Haute-Savoie",
+      "domains": ["ent.hautesavoie.fr"],
+      "regions": ["Haute-Savoie"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-loire",
+      "name": "ENT Loire — Cybercollèges42",
+      "domains": ["cybercolleges42.fr"],
+      "regions": ["Loire"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-isere",
+      "name": "ENT Isère — Collèges Isère",
+      "domains": ["ent.college-isere.fr"],
+      "regions": ["Isère"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "ent-drome",
+      "name": "ENT Drôme-Ardèche",
+      "domains": ["ent.drome-ardeche.fr"],
+      "regions": ["Drôme", "Ardèche"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "pronote",
+      "name": "Pronote / Index Éducation",
+      "domains": ["index-education.net", "index-education.fr"],
+      "regions": ["France entière"],
+      "imapHost": null,
+      "authMethod": null
+    },
+    {
+      "id": "beneylu",
+      "name": "Beneylu School",
+      "domains": ["beneylu.com"],
+      "regions": ["France entière — école primaire"],
+      "imapHost": null,
+      "authMethod": null
+    }
+  ]
+}
