@@ -178,34 +178,15 @@ struct MonLyceeIMAPSetupView: View {
             try IMAPService.saveConfig(config)
             dismiss()
         } catch {
-            let msg = error.localizedDescription.lowercased()
             // Gmail/iCloud/Outlook reject the account's main password with
             // provider-specific text ("application-specific password
-            // required", "web login required", …). Surface the app-password
-            // guidance explicitly so the user doesn't re-enter the same
-            // wrong credential.
-            let needsAppPassword =
-                msg.contains("application-specific password") ||
-                msg.contains("app password") ||
-                msg.contains("web login required") ||
-                msg.contains("invalidsecondfactor")
-            if needsAppPassword, let guidance = AppPasswordGuidance.forProviderID(preset.providerID) {
-                errorMessage = "\(guidance.label) refuse votre mot de passe de compte. Utilisez un mot de passe d'application (voir ci-dessus)."
-            } else if msg.contains("authentication") || msg.contains("login") || msg.contains("credentials") {
-                if let guidance = AppPasswordGuidance.forProviderID(preset.providerID) {
-                    errorMessage = "Identifiants refusés. \(guidance.label) demande un mot de passe d'application (voir ci-dessus), pas votre mot de passe de compte."
-                } else {
-                    errorMessage = "Identifiants incorrects. Vérifiez votre e-mail et mot de passe."
-                }
-            } else if msg.contains("network") || msg.contains("connection") || msg.contains("timeout") {
-                if preset.providerID == "custom" {
-                    errorMessage = "Impossible de joindre \(preset.host). Vérifiez votre adresse e-mail ou votre connexion."
-                } else {
-                    errorMessage = "Impossible de joindre le serveur. Vérifiez votre connexion."
-                }
-            } else {
-                errorMessage = "Erreur : \(error.localizedDescription)"
-            }
+            // required", "web login required", …). These substrings are
+            // provider error text and may drift; the generic `else if`
+            // branch on auth keywords is the safety net for iCloud/Outlook
+            // which often return a bare `AUTHENTICATIONFAILED` instead.
+            // Kept strict (no bare "app password" match) to avoid misrouting
+            // "rate-limited" or "app password expired" errors.
+            errorMessage = AppPasswordGuidance.userErrorMessage(for: error, preset: preset)
         }
     }
 }
@@ -213,24 +194,31 @@ struct MonLyceeIMAPSetupView: View {
 // MARK: - App-password guidance
 
 /// Providers that force third-party IMAP clients to use a short-lived
-/// app-specific password instead of the account's main password. For
-/// Gmail/iCloud/Outlook this is non-optional — basic IMAP LOGIN with the
-/// account password has been disabled on consumer accounts since ~2022.
+/// app-specific password instead of the account's main password. Basic
+/// IMAP LOGIN with the account password has been disabled for years on
+/// these providers (Gmail May 2022, iCloud since 2017 when 2FA became
+/// mandatory, Outlook.com rolling through 2022–2023).
 ///
 /// Rendered by `AppPasswordHelpCard` above the password field so users
-/// don't waste a login attempt with their main password.
+/// don't waste a login attempt with their main password. The init is
+/// private so instances can only come from the curated `forProviderID`
+/// factory — no empty `steps` or empty `label` can be fabricated.
 struct AppPasswordGuidance: Equatable {
-    let label: String                // "Gmail", "iCloud", …
-    let requiresTwoFactor: Bool      // true for Gmail; iCloud/Outlook may vary
+    let label: String
     let setupURL: URL
     let steps: [String]
+
+    private init(label: String, setupURL: URL, steps: [String]) {
+        self.label = label
+        self.setupURL = setupURL
+        self.steps = steps
+    }
 
     static func forProviderID(_ id: String) -> AppPasswordGuidance? {
         switch id {
         case "gmail":
             return AppPasswordGuidance(
                 label: "Gmail",
-                requiresTwoFactor: true,
                 setupURL: URL(string: "https://myaccount.google.com/apppasswords")!,
                 steps: [
                     "Activez la validation en deux étapes sur votre compte Google (obligatoire).",
@@ -242,7 +230,6 @@ struct AppPasswordGuidance: Equatable {
         case "icloud":
             return AppPasswordGuidance(
                 label: "iCloud",
-                requiresTwoFactor: true,
                 setupURL: URL(string: "https://account.apple.com/account/manage")!,
                 steps: [
                     "Ouvrez appleid.apple.com et connectez-vous.",
@@ -254,7 +241,6 @@ struct AppPasswordGuidance: Equatable {
         case "outlook":
             return AppPasswordGuidance(
                 label: "Outlook / Hotmail",
-                requiresTwoFactor: true,
                 setupURL: URL(string: "https://account.microsoft.com/security/app-passwords")!,
                 steps: [
                     "Activez la validation en deux étapes sur votre compte Microsoft.",
@@ -266,6 +252,45 @@ struct AppPasswordGuidance: Equatable {
         default:
             return nil
         }
+    }
+
+    /// Maps an IMAP `validate`/`saveConfig` failure to a parent-addressed
+    /// French message. Extracted from the view so the classification
+    /// logic (which branch is chosen for which error text) can be tested
+    /// without spinning up SwiftUI or mocking `IMAPService`.
+    static func userErrorMessage(for error: Error, preset: IMAPServerConfig.Preset) -> String {
+        let msg = error.localizedDescription.lowercased()
+        let guidance = forProviderID(preset.providerID)
+
+        // Tight match on provider-specific "you used the wrong kind of
+        // password" signatures. Bare "app password" is intentionally not
+        // matched — it would false-positive on "app password expired" or
+        // "app password rate-limited" which are different failure modes.
+        let needsAppPasswordHint =
+            msg.contains("application-specific password") ||
+            msg.contains("web login required") ||
+            msg.contains("invalidsecondfactor")
+
+        if needsAppPasswordHint, let g = guidance {
+            return "\(g.label) refuse votre mot de passe de compte. Utilisez un mot de passe d'application (voir l'aide ci-dessus)."
+        }
+        if msg.contains("authentication") || msg.contains("login") || msg.contains("credentials") {
+            if let g = guidance {
+                // User likely followed the guidance but typoed the 16-char
+                // code — don't send them back to regenerate a fresh one.
+                return "Mot de passe refusé. Vérifiez que votre mot de passe d'application \(g.label) a bien été copié sans espace (voir l'aide ci-dessus)."
+            }
+            return "Identifiants incorrects. Vérifiez votre e-mail et mot de passe."
+        }
+        if msg.contains("network") || msg.contains("connection") || msg.contains("timeout") {
+            if preset.providerID == "custom" {
+                return "Impossible de joindre \(preset.host). Vérifiez votre adresse e-mail ou votre connexion."
+            }
+            return "Impossible de joindre le serveur. Vérifiez votre connexion."
+        }
+        // Raw `localizedDescription` is often an English SSL/TLS string —
+        // wrap it so the parent doesn't see "errSSLPeerHandshakeFail" bare.
+        return "Une erreur inattendue est survenue. Détail technique : \(error.localizedDescription)"
     }
 }
 
