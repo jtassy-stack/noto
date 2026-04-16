@@ -15,11 +15,12 @@ final class DirectoryAPIClient: Sendable {
 
     init(
         baseURL: URL = URL(string: "https://celyn.io/api/directory")!,
-        apiKey: String = DirectoryAPIClient.defaultAPIKey
+        apiKey: String = DirectoryAPIClient.defaultAPIKey,
+        session: URLSession = URLSession(configuration: .ephemeral)
     ) {
         self.baseURL = baseURL
         self.apiKey = apiKey
-        self.session = URLSession(configuration: .ephemeral)
+        self.session = session
     }
 
     // MARK: - ENT registry
@@ -52,8 +53,10 @@ final class DirectoryAPIClient: Sendable {
         limit: Int = 20
     ) async throws -> [DirectorySchoolSummary] {
         var params: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
-        if let q { params.append(URLQueryItem(name: "q", value: q)) }
-        if let insee { params.append(URLQueryItem(name: "insee", value: insee)) }
+        // Skip empty `q` — UI often binds a @State String that's "" before
+        // the user types; server FTS on empty is unspecified.
+        if let q, !q.isEmpty { params.append(URLQueryItem(name: "q", value: q)) }
+        if let insee, !insee.isEmpty { params.append(URLQueryItem(name: "insee", value: insee)) }
 
         let data = try await get("/schools/search", params: params)
         return try decode(SchoolsSearchResponse.self, from: data).schools
@@ -89,8 +92,18 @@ final class DirectoryAPIClient: Sendable {
         switch http.statusCode {
         case 200: return data
         case 404: throw DirectoryAPIError.notFound
-        default:  throw DirectoryAPIError.httpError(http.statusCode)
+        default:  throw DirectoryAPIError.httpError(http.statusCode, bodySnippet(data))
         }
+    }
+
+    /// Extracts up to 512 bytes of the response body as UTF-8 for
+    /// diagnostic context in error messages (Sentry, logs). celyn's
+    /// error responses carry `{"error":"..."}` — without this, 4xx/5xx
+    /// surface as opaque status codes.
+    private func bodySnippet(_ data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        let slice = data.prefix(512)
+        return String(data: slice, encoding: .utf8)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
@@ -170,15 +183,20 @@ struct DirectoryCommuneService: Codable, Sendable, Equatable {
 enum DirectoryAPIError: Error, LocalizedError {
     case invalidResponse
     case notFound
-    case httpError(Int)
+    case httpError(Int, String?)
     case decoding(Error)
 
     var errorDescription: String? {
         switch self {
-        case .invalidResponse:     "Réponse invalide du service annuaire"
-        case .notFound:            "Entrée introuvable dans l'annuaire"
-        case .httpError(let code): "Erreur HTTP \(code)"
-        case .decoding(let err):   "Décodage: \(err.localizedDescription)"
+        case .invalidResponse:
+            return "Réponse invalide du service annuaire"
+        case .notFound:
+            return "Entrée introuvable dans l'annuaire"
+        case .httpError(let code, let body):
+            if let body, !body.isEmpty { return "Erreur HTTP \(code): \(body)" }
+            return "Erreur HTTP \(code)"
+        case .decoding(let err):
+            return "Décodage: \(err.localizedDescription)"
         }
     }
 }
