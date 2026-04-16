@@ -251,6 +251,11 @@ struct HomeView: View {
                 engine.configure(modelContext: modelContext)
                 await refreshBriefing()
             }
+            .onChange(of: children.map(\.id)) { _, childIds in
+                if let sel = selectedChild, !childIds.contains(sel.id) {
+                    selectedChild = nil
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
                 guard !isSyncing else { return }
                 Task { await performFullRefresh() }

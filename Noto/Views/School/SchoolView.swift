@@ -59,6 +59,11 @@ struct SchoolView: View {
         .onChange(of: selectedChild?.id) { _, _ in
             activeTab = nil
         }
+        .onChange(of: children.map(\.id)) { _, childIds in
+            if let sel = selectedChild, !childIds.contains(sel.id) {
+                selectedChild = nil
+            }
+        }
     }
 }
 
