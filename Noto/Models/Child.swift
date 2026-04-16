@@ -21,6 +21,10 @@ final class Child {
     var grade: String // "6e", "CE1", "PS", etc.
     var schoolType: SchoolType
     var establishment: String
+    /// Stable identifier returned by pawnote for Pronote children.
+    /// Used as the primary dedupe key when a parent re-runs QR login.
+    /// Nil for ENT children and for synthetic fallback children.
+    var pawnoteID: String?
     var entChildId: String?        // ENT user ID for schoolbook API
     var entProvider: ENTProvider?   // pcn or monlycee
     var entClassName: String?      // Full class name from ENT (e.g. "CM1 - CM2 A - M. Lucas") for message filtering
@@ -46,13 +50,15 @@ final class Child {
         level: SchoolLevel,
         grade: String,
         schoolType: SchoolType,
-        establishment: String
+        establishment: String,
+        pawnoteID: String? = nil
     ) {
         self.firstName = firstName
         self.level = level
         self.grade = grade
         self.schoolType = schoolType
         self.establishment = establishment
+        self.pawnoteID = pawnoteID
         self.createdAt = .now
         self.grades = []
         self.schedule = []
