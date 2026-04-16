@@ -187,7 +187,12 @@ struct MailDomainsView: View {
     }
 
     private func remove(_ entry: MailWhitelistEntry) {
-        try? MailWhitelist.removeManual(id: entry.id)
-        manualEntries = MailWhitelist.loadManual()
+        do {
+            try MailWhitelist.removeManual(id: entry.id)
+            manualEntries = MailWhitelist.loadManual()
+        } catch {
+            addError = "Impossible de supprimer : \(error.localizedDescription)"
+            showAddPrompt = true
+        }
     }
 }

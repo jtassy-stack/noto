@@ -274,7 +274,7 @@ struct ActualitesView: View {
     // MARK: - Sub-views
 
     private func refreshIMAPState() {
-        imapConfigured = IMAPService.loadCredentials() != nil
+        imapConfigured = IMAPService.isConfigured
     }
 
     private var monLyceePrompt: some View {

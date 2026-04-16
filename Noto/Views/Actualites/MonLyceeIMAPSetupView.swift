@@ -110,14 +110,21 @@ struct MonLyceeIMAPSetupView: View {
         isValidating = true
         errorMessage = nil
 
-        let creds = IMAPCredentials(
-            email: email.trimmingCharacters(in: .whitespaces),
-            password: password
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+        // MonLycée-specific setup — force the MonLycée preset even if
+        // the user enters an address whose domain would resolve
+        // elsewhere (e.g. a forwarding alias).
+        let config = IMAPServerConfig(
+            host: "imaps.monlycee.net",
+            port: 993,
+            username: trimmedEmail,
+            password: password,
+            providerID: "monlycee"
         )
 
         do {
-            try await IMAPService.validate(credentials: creds)
-            try IMAPService.saveCredentials(creds)
+            try await IMAPService.validate(config: config)
+            try IMAPService.saveConfig(config)
             dismiss()
         } catch {
             let msg = error.localizedDescription

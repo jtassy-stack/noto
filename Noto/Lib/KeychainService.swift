@@ -47,17 +47,38 @@ enum KeychainService {
         }
     }
 
-    static func delete(key: String) {
+    /// Delete a key. `errSecItemNotFound` is treated as success (idempotent).
+    /// Any other OSStatus error is thrown so callers can decide whether
+    /// to surface it — silently discarding delete failures produced
+    /// "Déconnecter la boîte mail" no-ops when the device was locked,
+    /// which then led to credentials lingering after the user thought
+    /// they were gone.
+    static func delete(key: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.deleteFailed(status)
+        }
     }
 }
 
-enum KeychainError: Error {
+enum KeychainError: LocalizedError {
     case saveFailed(OSStatus)
     case loadFailed(OSStatus)
+    case deleteFailed(OSStatus)
+
+    var errorDescription: String? {
+        switch self {
+        case .saveFailed(let status):
+            return "Échec d'enregistrement sécurisé (code \(status)). Vérifiez que votre iPhone est déverrouillé et réessayez."
+        case .loadFailed(let status):
+            return "Échec de lecture sécurisée (code \(status)). Redémarrez l'application."
+        case .deleteFailed(let status):
+            return "Échec de suppression sécurisée (code \(status))."
+        }
+    }
 }

@@ -21,23 +21,26 @@ struct IMAPSyncService {
 
         let fetched = try await IMAPService.fetchInbox(config: config)
 
-        // Build whitelist once per sync for performance. If it is empty
-        // (no school domain detected yet + no manual entries), fall back
-        // to permissive mode — otherwise a fresh install would drop
-        // every mail until the parent re-runs QR login.
+        // Build whitelist once per sync for performance.
+        // If it is empty, throw rather than let personal mail into
+        // SwiftData — the onboarding copy promises "only school mail
+        // is synced", honouring that promise is non-negotiable under
+        // the CLAUDE.md privacy contract.
         let whitelist = MailWhitelist.build(from: [child])
-        let filterEnabled = !whitelist.isEmpty
+        guard !whitelist.isEmpty else {
+            NSLog("[noto][warn] IMAP sync aborted — empty whitelist for %@", child.firstName)
+            throw IMAPSyncError.emptyWhitelist
+        }
 
         var keptCount = 0
         var droppedCount = 0
 
         for info in fetched {
-            if filterEnabled,
-               !MailFilter.shouldKeep(
-                   senderAddress: info.from,
-                   subject: info.subject,
-                   whitelist: whitelist
-               ) {
+            if !MailFilter.shouldKeep(
+                senderAddress: info.from,
+                subject: info.subject,
+                whitelist: whitelist
+            ) {
                 droppedCount += 1
                 continue
             }
@@ -80,19 +83,24 @@ struct IMAPSyncService {
             keptCount += 1
         }
 
-        #if DEBUG
-        NSLog("[noto] IMAP sync: fetched=\(fetched.count) kept=\(keptCount) dropped=\(droppedCount) for \(child.firstName)")
-        #endif
+        // Unconditionally log metrics (not DEBUG-gated) — a parent
+        // seeing an empty Messages tab after a successful sync needs
+        // a trail for support/diagnostics. No PII logged.
+        NSLog("[noto] IMAP sync: fetched=%d kept=%d dropped=%d for %@",
+              fetched.count, keptCount, droppedCount, child.firstName)
     }
 
     // MARK: - Dedupe helpers
 
-    private func findLegacyMatch(child: Child, info: IMAPMessageInfo) -> Message? {
+    /// Fallback dedupe for legacy IMAP-sourced rows without UID.
+    /// Strictly scoped to `source == .imap` so authentic ENT
+    /// conversations (which may legitimately collide on sender+subject+day
+    /// when the school forwards ENT messages to parent email) are
+    /// never absorbed or source-upgraded into IMAP.
+    func findLegacyMatch(child: Child, info: IMAPMessageInfo) -> Message? {
         let cal = Calendar.current
         return child.messages.first { msg in
-            // Scope to mail-sourced rows; Pronote conversations have
-            // their own source and kind and shouldn't be absorbed here.
-            guard msg.source == .imap || msg.source == .ent else { return false }
+            guard msg.source == .imap else { return false }
             guard msg.kind == .conversation else { return false }
             guard msg.subject == info.subject else { return false }
             guard msg.sender == info.from else { return false }
@@ -100,12 +108,7 @@ struct IMAPSyncService {
         }
     }
 
-    private func updateIfNeeded(existing: Message, with info: IMAPMessageInfo) {
-        // Upgrade legacy `.ent` rows to `.imap` so they stop appearing
-        // in the Pronote messages list incorrectly.
-        if existing.source == .ent {
-            existing.source = .imap
-        }
+    func updateIfNeeded(existing: Message, with info: IMAPMessageInfo) {
         // Clean up sender format if previously stored as full RFC 5322.
         if existing.sender.contains("<") {
             existing.sender = info.from
@@ -125,10 +128,14 @@ struct IMAPSyncService {
 
 enum IMAPSyncError: LocalizedError {
     case noCredentials
+    case emptyWhitelist
 
     var errorDescription: String? {
         switch self {
-        case .noCredentials: "Messagerie non configurée"
+        case .noCredentials:
+            return "Messagerie non configurée"
+        case .emptyWhitelist:
+            return "Aucun domaine scolaire détecté. Ouvrez Réglages → Boîte mail → Domaines autorisés pour en ajouter un."
         }
     }
 }
