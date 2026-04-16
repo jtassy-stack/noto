@@ -46,7 +46,7 @@ struct MainTabView: View {
 
             DiscoverView()
                 .tabItem {
-                    Label("Découvrir", systemImage: "safari")
+                    Label("Accompagner", systemImage: "safari")
                 }
                 .tag(Tab.discover)
         }
