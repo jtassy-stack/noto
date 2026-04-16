@@ -336,13 +336,7 @@ private struct RecoRow: View {
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                 if let source = reco.source, !source.isEmpty {
-                    Text(source)
-                        .font(NotoTheme.Typography.dataSmall)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(NotoTheme.Colors.surfaceElevated)
-                        .clipShape(Capsule())
+                    SourceBadge(source: source)
                 }
                 Spacer()
                 Button {
@@ -498,6 +492,62 @@ private struct RecoRow: View {
             .replacingOccurrences(of: "ere", with: "re")
         let subject = String(parts[1]).prefix(1).uppercased() + String(parts[1]).dropFirst()
         return "\(subject) · \(grade)"
+    }
+}
+
+// MARK: - Source Badge
+
+/// Colored monogram badge for editorial sources (ARTE, France Culture,
+/// Lumni, etc.). Sophie C. wants these to "jump out in 1 second" —
+/// a color-coded initial achieves that without bundling SVG assets.
+private struct SourceBadge: View {
+    let source: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(monogram)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(badgeColor)
+                .clipShape(Circle())
+            Text(source)
+                .font(NotoTheme.Typography.dataSmall)
+                .foregroundStyle(badgeColor)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(badgeColor.opacity(0.1))
+        .clipShape(Capsule())
+    }
+
+    private var monogram: String {
+        let known: [String: String] = [
+            "arte": "A",
+            "france culture": "FC",
+            "france inter": "FI",
+            "france musique": "FM",
+            "radio france": "RF",
+            "lumni": "L",
+            "bnf": "B",
+            "rmn": "R",
+            "philharmonie": "P",
+            "universcience": "U",
+        ]
+        let key = source.lowercased()
+        if let m = known[key] { return m }
+        if let first = source.first { return String(first).uppercased() }
+        return "?"
+    }
+
+    private var badgeColor: Color {
+        let key = source.lowercased()
+        if key.contains("arte") { return Color(red: 0.94, green: 0.45, blue: 0.08) }
+        if key.contains("france culture") || key.contains("france inter") || key.contains("radio france") { return Color(red: 0.0, green: 0.35, blue: 0.65) }
+        if key.contains("lumni") { return Color(red: 0.2, green: 0.6, blue: 0.2) }
+        if key.contains("bnf") { return Color(red: 0.55, green: 0.15, blue: 0.15) }
+        if key.contains("philharmonie") { return Color(red: 0.3, green: 0.3, blue: 0.3) }
+        return NotoTheme.Colors.textSecondary
     }
 }
 
