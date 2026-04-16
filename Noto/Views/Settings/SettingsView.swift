@@ -44,6 +44,12 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
+                    Text("Réglages")
+                        .font(NotoTheme.Typography.screenTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        .padding(.top, NotoTheme.Spacing.sm)
+                        .padding(.horizontal, NotoTheme.Spacing.xs)
+
                     childrenSection
                     integrationsSection
                     if imapCredentials != nil {
@@ -57,15 +63,7 @@ struct SettingsView: View {
                 .padding(.vertical, NotoTheme.Spacing.md)
             }
             .background(NotoTheme.Colors.background)
-            .navigationTitle("Réglages")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Réglages")
-                        .font(NotoTheme.Typography.screenTitle)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                }
-            }
+            .navigationBarHidden(true)
             .confirmationDialog(
                 "Effacer toutes les données ?",
                 isPresented: $showClearDataConfirmation,
