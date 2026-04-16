@@ -221,6 +221,7 @@ struct MailDomainsView: View {
     private func sourceLabel(_ source: MailWhitelistEntry.Source) -> String {
         switch source {
         case .schoolDomain:       "Domaine de l'école"
+        case .entProvider:        "ENT connu"
         case .teacherFromPronote: "Enseignant Pronote"
         case .manual:             "Ajouté par vous"
         }

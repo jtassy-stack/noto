@@ -23,6 +23,10 @@ struct HomeView: View {
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
 
+    // Card-tap destinations
+    @State private var selectedHomework: Homework?
+    @State private var selectedInsightContext: InsightContext?
+
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
     private var isFamilyMode: Bool { selectedChild == nil }
@@ -138,7 +142,8 @@ struct HomeView: View {
                             ForEach(engine.cards.sorted { $0.priority > $1.priority }) { card in
                                 BriefingCardView(
                                     card: card,
-                                    showChildName: children.count > 1
+                                    showChildName: children.count > 1,
+                                    onTap: { handleCardTap(card) }
                                 )
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
@@ -243,6 +248,62 @@ struct HomeView: View {
             } message: {
                 Text("Aucune session Pronote active. Reconnectez-vous pour synchroniser les données.")
             }
+            .sheet(item: $selectedHomework) { hw in
+                HomeworkDetailView(hw: hw)
+            }
+            .sheet(item: $selectedInsightContext) { ctx in
+                TrendDetailSheet(insight: ctx.insight, grades: ctx.grades)
+            }
+        }
+    }
+
+    // MARK: - Card Tap Routing
+
+    /// Routes a briefing-card tap to the appropriate detail sheet or
+    /// destination tab. When a detail target can't be resolved (stale
+    /// SwiftData ID after a sync race, deleted model), falls back to
+    /// the nearest list view rather than silently swallowing the tap.
+    private func handleCardTap(_ card: BriefingCard) {
+        switch card.type {
+        case .homework:
+            guard let id = card.targetID else {
+                logger.warning("Briefing card tap: homework card missing targetID — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let hw = modelContext.model(for: id) as? Homework else {
+                logger.warning("Briefing card tap: homework \(String(describing: id)) no longer resolves — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            selectedHomework = hw
+
+        case .insight:
+            guard let id = card.targetID else {
+                logger.warning("Briefing card tap: insight card missing targetID — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let insight = modelContext.model(for: id) as? Insight else {
+                logger.warning("Briefing card tap: insight \(String(describing: id)) no longer resolves — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let child = insight.child else {
+                logger.warning("Briefing card tap: insight \(String(describing: id)) has no child back-reference — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            selectedInsightContext = InsightContext(insight: insight, from: child)
+
+        case .message:
+            NotificationCenter.default.post(name: .navigateToMessages, object: nil)
+
+        case .cultureReco, .familyReco:
+            NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+
+        case .cancelled:
+            NotificationCenter.default.post(name: .navigateToSchool, object: nil)
         }
     }
 
@@ -411,6 +472,21 @@ struct HomeView: View {
         } else if !children.isEmpty {
             await engine.engine?.buildFamilyBriefing(children: children)
         }
+    }
+}
+
+/// Transient payload for `.sheet(item:)` presentation of a trend
+/// detail. `Insight` doesn't store its source series, so we bundle
+/// the matching grades here; the UUID is regenerated per tap so
+/// SwiftUI re-presents the sheet after dismissal.
+struct InsightContext: Identifiable {
+    let id = UUID()
+    let insight: Insight
+    let grades: [Grade]
+
+    init(insight: Insight, from child: Child) {
+        self.insight = insight
+        self.grades = child.grades.filter { $0.subject == insight.subject }
     }
 }
 

@@ -4,6 +4,7 @@ import Foundation
 struct MailWhitelistEntry: Codable, Identifiable, Equatable, Sendable {
     enum Source: String, Codable, Sendable {
         case schoolDomain        // auto — derived from child.establishment (Pronote URL, ENT host)
+        case entProvider         // auto — matched via ENTRegistry from the school's establishment
         case teacherFromPronote  // auto — derived from child.messages.map(\.sender)
         case manual              // added by parent in Settings
     }
@@ -54,6 +55,14 @@ enum MailWhitelist {
         for child in children {
             if let domain = schoolDomain(from: child.establishment) {
                 add(MailWhitelistEntry(pattern: domain, source: .schoolDomain))
+            }
+            // ENT registry match: if the establishment's host matches a
+            // known ENT, add every domain that ENT is known to use so
+            // emails routed via the platform's subdomains pass too.
+            if let ent = ENTRegistry.match(domain: child.establishment) {
+                for entDomain in ent.domains {
+                    add(MailWhitelistEntry(pattern: entDomain, source: .entProvider))
+                }
             }
             for message in child.messages {
                 if let email = extractEmail(from: message.sender) {
