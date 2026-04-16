@@ -532,28 +532,7 @@ private struct GlobalStatusBanner: View {
     let children: [Child]
 
     private var alertMessages: [String] {
-        var msgs: [String] = []
-        let in24h = Date.now.addingTimeInterval(86_400)
-        let sevenDaysAgo = Date.now.addingTimeInterval(-7 * 86_400)
-
-        for child in children {
-            let urgent = child.homework.filter { !$0.done && $0.dueDate <= in24h }
-            guard !urgent.isEmpty else { continue }
-            if urgent.count == 1, let hw = urgent.first {
-                msgs.append("\(child.firstName) a 1 devoir de \(hw.subject.localizedCapitalized) pour demain")
-            } else {
-                let subjects = urgent.prefix(3).map(\.subject.localizedCapitalized).joined(separator: ", ")
-                msgs.append("\(child.firstName) a \(urgent.count) devoirs pour demain (\(subjects))")
-            }
-        }
-
-        for child in children {
-            let lows = child.grades.filter { $0.date >= sevenDaysAgo && $0.normalizedValue < 10 }
-            guard !lows.isEmpty else { continue }
-            msgs.append("\(child.firstName) a \(lows.count) note\(lows.count > 1 ? "s" : "") sous 10 cette semaine")
-        }
-
-        return msgs
+        AlertMessageBuilder.messages(for: children)
     }
 
     var body: some View {

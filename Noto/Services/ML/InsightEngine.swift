@@ -41,16 +41,14 @@ final class InsightEngine {
         // Detect strengths
         let strengths = TrendAnalyzer.detectStrengths(gradesBySubject: gradePoints)
         for str in strengths {
-            var label = str.improving
-                ? "Point fort en progression (\(String(format: "%.1f", str.average))/20)"
-                : "Point fort (\(String(format: "%.1f", str.average))/20)"
             // Append class average so the card reads "17.1/20 · moy. classe 13.6" —
             // a bare grade has no frame of reference.
             let classAverages = (gradesBySubject[str.subject] ?? []).compactMap(\.classAverage)
-            if !classAverages.isEmpty {
-                let classAvg = classAverages.reduce(0, +) / Double(classAverages.count)
-                label += " · moy. classe \(String(format: "%.1f", classAvg))"
-            }
+            let label = InsightLabelBuilder.strengthLabel(
+                average: str.average,
+                improving: str.improving,
+                classAverages: classAverages
+            )
             let insight = Insight(
                 type: .strength,
                 subject: str.subject,
