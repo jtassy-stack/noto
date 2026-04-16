@@ -487,7 +487,15 @@ private struct ChildSettingsRow: View {
         .sheet(isPresented: $showSchoolPicker) {
             DirectorySchoolPickerView { summary in
                 child.rneCode = summary.rne
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    // Without this log the parent would see the CTA disappear and
+                    // assume the link landed, only for it to vanish on next launch.
+                    NSLog("[noto][warn] saving rneCode for \(child.firstName) failed: \(error.localizedDescription)")
+                    // Roll back the in-memory change so the UI reflects reality.
+                    child.rneCode = nil
+                }
             }
         }
     }
