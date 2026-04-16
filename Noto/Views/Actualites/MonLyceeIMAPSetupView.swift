@@ -32,6 +32,14 @@ struct MonLyceeIMAPSetupView: View {
         }
     }
 
+    /// Providers that reject the account's main password over IMAP and
+    /// require a provider-issued "app password" (or equivalent). Drives
+    /// the contextual help card shown above the password field.
+    private var appPasswordGuidance: AppPasswordGuidance? {
+        guard let id = resolvedPreset?.providerID else { return nil }
+        return AppPasswordGuidance.forProviderID(id)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -85,6 +93,11 @@ struct MonLyceeIMAPSetupView: View {
                         }
                     }
                     .padding(.horizontal, NotoTheme.Spacing.md)
+
+                    if let guidance = appPasswordGuidance {
+                        AppPasswordHelpCard(guidance: guidance)
+                            .padding(.horizontal, NotoTheme.Spacing.md)
+                    }
 
                     // Error
                     if let error = errorMessage {
@@ -166,8 +179,24 @@ struct MonLyceeIMAPSetupView: View {
             dismiss()
         } catch {
             let msg = error.localizedDescription.lowercased()
-            if msg.contains("authentication") || msg.contains("login") || msg.contains("credentials") {
-                errorMessage = "Identifiants incorrects. Vérifiez votre e-mail et mot de passe."
+            // Gmail/iCloud/Outlook reject the account's main password with
+            // provider-specific text ("application-specific password
+            // required", "web login required", …). Surface the app-password
+            // guidance explicitly so the user doesn't re-enter the same
+            // wrong credential.
+            let needsAppPassword =
+                msg.contains("application-specific password") ||
+                msg.contains("app password") ||
+                msg.contains("web login required") ||
+                msg.contains("invalidsecondfactor")
+            if needsAppPassword, let guidance = AppPasswordGuidance.forProviderID(preset.providerID) {
+                errorMessage = "\(guidance.label) refuse votre mot de passe de compte. Utilisez un mot de passe d'application (voir ci-dessus)."
+            } else if msg.contains("authentication") || msg.contains("login") || msg.contains("credentials") {
+                if let guidance = AppPasswordGuidance.forProviderID(preset.providerID) {
+                    errorMessage = "Identifiants refusés. \(guidance.label) demande un mot de passe d'application (voir ci-dessus), pas votre mot de passe de compte."
+                } else {
+                    errorMessage = "Identifiants incorrects. Vérifiez votre e-mail et mot de passe."
+                }
             } else if msg.contains("network") || msg.contains("connection") || msg.contains("timeout") {
                 if preset.providerID == "custom" {
                     errorMessage = "Impossible de joindre \(preset.host). Vérifiez votre adresse e-mail ou votre connexion."
@@ -178,5 +207,114 @@ struct MonLyceeIMAPSetupView: View {
                 errorMessage = "Erreur : \(error.localizedDescription)"
             }
         }
+    }
+}
+
+// MARK: - App-password guidance
+
+/// Providers that force third-party IMAP clients to use a short-lived
+/// app-specific password instead of the account's main password. For
+/// Gmail/iCloud/Outlook this is non-optional — basic IMAP LOGIN with the
+/// account password has been disabled on consumer accounts since ~2022.
+///
+/// Rendered by `AppPasswordHelpCard` above the password field so users
+/// don't waste a login attempt with their main password.
+struct AppPasswordGuidance: Equatable {
+    let label: String                // "Gmail", "iCloud", …
+    let requiresTwoFactor: Bool      // true for Gmail; iCloud/Outlook may vary
+    let setupURL: URL
+    let steps: [String]
+
+    static func forProviderID(_ id: String) -> AppPasswordGuidance? {
+        switch id {
+        case "gmail":
+            return AppPasswordGuidance(
+                label: "Gmail",
+                requiresTwoFactor: true,
+                setupURL: URL(string: "https://myaccount.google.com/apppasswords")!,
+                steps: [
+                    "Activez la validation en deux étapes sur votre compte Google (obligatoire).",
+                    "Ouvrez la page “Mots de passe des applications” Google.",
+                    "Créez un mot de passe pour “nōto” et copiez les 16 caractères.",
+                    "Collez-le dans le champ Mot de passe ci-dessous."
+                ]
+            )
+        case "icloud":
+            return AppPasswordGuidance(
+                label: "iCloud",
+                requiresTwoFactor: true,
+                setupURL: URL(string: "https://account.apple.com/account/manage")!,
+                steps: [
+                    "Ouvrez appleid.apple.com et connectez-vous.",
+                    "Dans “Sécurité”, créez un mot de passe pour une app (“nōto”).",
+                    "Copiez le mot de passe généré.",
+                    "Collez-le dans le champ Mot de passe ci-dessous."
+                ]
+            )
+        case "outlook":
+            return AppPasswordGuidance(
+                label: "Outlook / Hotmail",
+                requiresTwoFactor: true,
+                setupURL: URL(string: "https://account.microsoft.com/security/app-passwords")!,
+                steps: [
+                    "Activez la validation en deux étapes sur votre compte Microsoft.",
+                    "Ouvrez la page “Mots de passe d'application”.",
+                    "Créez un mot de passe pour “nōto” et copiez-le.",
+                    "Collez-le dans le champ Mot de passe ci-dessous."
+                ]
+            )
+        default:
+            return nil
+        }
+    }
+}
+
+private struct AppPasswordHelpCard: View {
+    let guidance: AppPasswordGuidance
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            HStack(spacing: NotoTheme.Spacing.xs) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(NotoTheme.Colors.cobalt)
+                Text("\(guidance.label) demande un mot de passe d'application")
+                    .font(NotoTheme.Typography.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+            }
+
+            Text("Votre mot de passe de compte \(guidance.label) ne fonctionne pas avec les apps de mail tierces. Générez un mot de passe d'application — c'est gratuit, ça prend 2 minutes.")
+                .font(NotoTheme.Typography.caption)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                ForEach(Array(guidance.steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: NotoTheme.Spacing.xs) {
+                        Text("\(index + 1).")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .frame(width: 16, alignment: .leading)
+                        Text(step)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Link(destination: guidance.setupURL) {
+                HStack(spacing: NotoTheme.Spacing.xs) {
+                    Text("Ouvrir la page \(guidance.label)")
+                        .font(NotoTheme.Typography.caption)
+                        .fontWeight(.semibold)
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(NotoTheme.Colors.cobalt)
+            }
+        }
+        .padding(NotoTheme.Spacing.md)
+        .background(NotoTheme.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
     }
 }
