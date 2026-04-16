@@ -222,6 +222,7 @@ struct MailDomainsView: View {
         switch source {
         case .schoolDomain:       "Domaine de l'école"
         case .entProvider:        "ENT connu"
+        case .directoryAPI:       "Annuaire officiel"
         case .teacherFromPronote: "Enseignant Pronote"
         case .manual:             "Ajouté par vous"
         }

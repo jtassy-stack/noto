@@ -5,6 +5,7 @@ struct MailWhitelistEntry: Codable, Identifiable, Equatable, Sendable {
     enum Source: String, Codable, Sendable {
         case schoolDomain        // auto — derived from child.establishment (Pronote URL, ENT host)
         case entProvider         // auto — matched via ENTRegistry from the school's establishment
+        case directoryAPI        // auto — fetched from celyn /api/directory/schools/:rne (authoritative)
         case teacherFromPronote  // auto — derived from child.messages.map(\.sender)
         case manual              // added by parent in Settings
     }
@@ -42,7 +43,21 @@ enum MailWhitelist {
     static let manualKeychainKey = "mail_whitelist_manual"
 
     /// Full whitelist = auto-detected (from children) + manual entries.
-    static func build(from children: [Child]) -> [MailWhitelistEntry] {
+    ///
+    /// - Parameters:
+    ///   - children: source of `establishment`, `rneCode`, and message senders.
+    ///   - directorySchools: optional pre-fetched map of `rneCode` →
+    ///     `DirectorySchool`. When a child has an `rneCode` that resolves
+    ///     here, the school's authoritative `mailDomains` are added with
+    ///     `.directoryAPI` source, and the `ENTRegistry` inference is
+    ///     skipped (authoritative data wins). Callers typically populate
+    ///     this via a cached `DirectoryAPIClient.fetchSchool(rne:)` — we
+    ///     keep the fetch outside this sync builder so the IMAP sync path
+    ///     doesn't need an async whitelist rebuild.
+    static func build(
+        from children: [Child],
+        directorySchools: [String: DirectorySchool] = [:]
+    ) -> [MailWhitelistEntry] {
         var entries: [MailWhitelistEntry] = []
         var seen = Set<String>()
 
@@ -56,10 +71,17 @@ enum MailWhitelist {
             if let domain = schoolDomain(from: child.establishment) {
                 add(MailWhitelistEntry(pattern: domain, source: .schoolDomain))
             }
-            // ENT registry match: if the establishment's host matches a
-            // known ENT, add every domain that ENT is known to use so
-            // emails routed via the platform's subdomains pass too.
-            if let ent = ENTRegistry.match(domain: child.establishment) {
+            // Directory API path (authoritative) — when the child has a
+            // known RNE and we've fetched it, use the server's flat
+            // `mailDomains` list and skip ENT registry inference.
+            if let rne = child.rneCode, let school = directorySchools[rne] {
+                for domain in school.mailDomains {
+                    add(MailWhitelistEntry(pattern: domain, source: .directoryAPI))
+                }
+            } else if let ent = ENTRegistry.match(domain: child.establishment) {
+                // Fallback — bundled ENT registry match for children
+                // without an RNE (pre-8.6 onboarding) or when the server
+                // lookup hasn't been fetched yet.
                 for entDomain in ent.domains {
                     add(MailWhitelistEntry(pattern: entDomain, source: .entProvider))
                 }
