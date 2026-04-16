@@ -41,8 +41,20 @@ struct SettingsView: View {
     private var children: [Child] { family?.children ?? [] }
 
     private var whitelistCountLabel: String {
+        // Dedicated channels (monlycée.net) don't apply filtering — the
+        // row would show "0 entrées" which implies "nothing is synced"
+        // and contradicts what the parent actually sees in the feed.
+        if imapConfig?.isDedicatedSchoolChannel == true {
+            return "Désactivé"
+        }
         let count = MailWhitelist.build(from: children).count
         return count == 1 ? "1 entrée" : "\(count) entrées"
+    }
+
+    private var mailboxFilterRowLabel: String {
+        imapConfig?.isDedicatedSchoolChannel == true
+            ? "Filtrage courrier"
+            : "Domaines autorisés"
     }
 
     // MARK: Body
@@ -100,6 +112,14 @@ struct SettingsView: View {
             }
             .task {
                 await refreshAuthStatus()
+                refreshIMAP()
+            }
+            // Defence-in-depth: IMAP state also changes via the setup
+            // sheet's internal save path. The sheet-onDismiss refresh
+            // above handles the happy path; this observer catches any
+            // future code path that saves a config without routing
+            // through this view.
+            .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
                 refreshIMAP()
             }
         }
@@ -174,7 +194,7 @@ struct SettingsView: View {
                 InfoRow(label: "Compte", value: imapConfig?.username ?? "—")
                 SettingsDivider()
                 InfoRow(
-                    label: "Domaines autorisés",
+                    label: mailboxFilterRowLabel,
                     value: whitelistCountLabel,
                     chevron: true,
                     action: { showMailDomains = true }

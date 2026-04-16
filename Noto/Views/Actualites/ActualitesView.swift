@@ -186,7 +186,14 @@ struct ActualitesView: View {
                     try await service.sync(for: child)
                 } catch {
                     NSLog("[noto][error] IMAP sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    syncError = "Erreur de synchronisation des messages."
+                    // Surface the thrown error's own message — IMAPSyncError
+                    // cases ship actionable copy (e.g. emptyWhitelist points
+                    // the parent to the right Settings screen). Generic
+                    // fallback only when the message would otherwise be empty.
+                    let detail = error.localizedDescription
+                    syncError = detail.isEmpty
+                        ? "Erreur de synchronisation des messages."
+                        : detail
                 }
             }
         }
@@ -267,6 +274,14 @@ struct ActualitesView: View {
             .onAppear {
                 refreshIMAPState()
                 Task { await syncAll() }
+            }
+            // Disconnecting or switching the mailbox from Settings
+            // happens outside this view's hierarchy and would otherwise
+            // leave the "Connecter MonLycée.net" prompt stale until the
+            // tab is re-appeared. IMAPService posts the notification
+            // after every saveConfig / clearConfig.
+            .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
+                refreshIMAPState()
             }
         }
     }
@@ -501,7 +516,7 @@ private struct FeedItemRow: View {
                     ChildTag(name: child.firstName, color: avatarColor)
 
                     // Source badge
-                    SourceBadge(source: msg.source)
+                    SourceBadge(source: msg.source, imapProviderID: msg.imapProvider)
 
                     // Schoolbook badges
                     if msg.kind == .schoolbook {
@@ -530,19 +545,26 @@ private struct FeedItemRow: View {
 
 private struct SourceBadge: View {
     let source: MessageSource
+    /// The providerID stamped on the Message at insert time — nil for
+    /// legacy rows that predate the field. The mapping below intentionally
+    /// hard-codes monlycée rather than using `IMAPServerConfig`'s
+    /// dedicated-channel Set: each provider has its own brand and a
+    /// future ENT (e-Lyco, Educ'Horus) would want its own label, not
+    /// "MonLycée". Extend this switch when adding one.
+    let imapProviderID: String?
 
     private var label: String {
         switch source {
-        case .ent: return "ENT"
-        case .imap: return "IMAP"
+        case .ent:     return "ENT"
+        case .imap:    return imapProviderID == "monlycee" ? "MonLycée" : "IMAP"
         case .pronote: return "Pronote"
         }
     }
 
     private var color: Color {
         switch source {
-        case .ent: return NotoTheme.Colors.ent
-        case .imap: return NotoTheme.Colors.pronote
+        case .ent:     return NotoTheme.Colors.ent
+        case .imap:    return NotoTheme.Colors.pronote
         case .pronote: return NotoTheme.Colors.pronote
         }
     }

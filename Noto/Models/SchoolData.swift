@@ -127,8 +127,15 @@ final class Message {
     /// Optional for backward compat — legacy messages have nil and
     /// dedupe falls back to (sender, subject, day) composite.
     var imapUID: String?
+    /// Provider the message was fetched from at insert time
+    /// (e.g. "monlycee", "gmail"). Stamped by `IMAPSyncService` so
+    /// the feed can label a message's origin without relying on the
+    /// currently active IMAP config — which may have changed since.
+    /// nil for non-IMAP sources and for messages stored before this
+    /// field was introduced.
+    var imapProvider: String?
 
-    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation, link: String? = nil, imapUID: String? = nil) {
+    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation, link: String? = nil, imapUID: String? = nil, imapProvider: String? = nil) {
         self.sender = sender
         self.subject = subject
         self.body = body
@@ -138,5 +145,6 @@ final class Message {
         self.read = false
         self.link = link
         self.imapUID = imapUID
+        self.imapProvider = imapProvider
     }
 }

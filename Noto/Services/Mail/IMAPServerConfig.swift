@@ -15,8 +15,35 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     let password: String
 
     /// Provider identifier used for Keychain namespacing and UI labelling.
-    /// Values: "gmail", "outlook", "icloud", "monlycee", "custom"
+    /// The canonical list lives in `IMAPProviderResolver`; values are
+    /// lowercase and produced exclusively by that resolver.
     let providerID: String
+
+    /// True when the IMAP account is a school-provisioned mailbox where
+    /// every message is by definition a school-parent communication.
+    /// Personal email never transits here — it is a closed channel
+    /// issued by the ENT.
+    ///
+    /// When true, callers MUST skip whitelist filtering: every fetched
+    /// message is kept and presented as school content, and the UI must
+    /// frame the mailbox as a dedicated channel rather than a generic
+    /// inbox being filtered.
+    var isDedicatedSchoolChannel: Bool {
+        Self.isDedicatedSchoolChannel(providerID: providerID)
+    }
+
+    /// Provider IDs whose mailbox is inherently a school-parent channel.
+    /// Extend here — and only here — when another ENT (e-Lyco,
+    /// Educ'Horus, ENT77, …) exposes IMAP.
+    private static let dedicatedSchoolChannelIDs: Set<String> = [
+        "monlycee",
+    ]
+
+    /// Shared rule so `Preset` (setup-time, no credentials) and full
+    /// config (post-auth) answer the same question.
+    static func isDedicatedSchoolChannel(providerID: String) -> Bool {
+        dedicatedSchoolChannelIDs.contains(providerID)
+    }
 
     /// Lightweight preset describing an IMAP server without credentials.
     /// Used by `IMAPProviderResolver` to return the server half of the
@@ -25,6 +52,10 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
         let host: String
         let port: Int
         let providerID: String
+
+        var isDedicatedSchoolChannel: Bool {
+            IMAPServerConfig.isDedicatedSchoolChannel(providerID: providerID)
+        }
     }
 
     /// Convenience: build a full config from a preset + credentials.

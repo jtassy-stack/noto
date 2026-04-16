@@ -1100,6 +1100,9 @@ private struct MessagesListView: View {
             }
         }
         .task { await syncIMAP() }
+        .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
+            hasIMAPCredentials = IMAPService.isConfigured
+        }
     }
 
     @MainActor

@@ -11,6 +11,7 @@ struct MailDomainsView: View {
     @State private var showAddPrompt = false
     @State private var newPattern: String = ""
     @State private var addError: String?
+    @State private var activeConfig: IMAPServerConfig? = nil
 
     private var children: [Child] { families.first?.children ?? [] }
 
@@ -18,33 +19,46 @@ struct MailDomainsView: View {
         MailWhitelist.build(from: children).filter { $0.source != .manual }
     }
 
+    /// True when the active IMAP config is a school-provisioned channel
+    /// (monlycée.net). Filtering is not applied in that case, so the
+    /// whitelist UI would mislead the parent.
+    private var isDedicatedChannelActive: Bool {
+        activeConfig?.isDedicatedSchoolChannel ?? false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
-                    if !autoEntries.isEmpty {
-                        autoSection
+                    if isDedicatedChannelActive {
+                        dedicatedChannelCard
+                    } else {
+                        if !autoEntries.isEmpty {
+                            autoSection
+                        }
+                        manualSection
+                        explainer
                     }
-                    manualSection
-                    explainer
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
                 .padding(.vertical, NotoTheme.Spacing.md)
             }
             .background(NotoTheme.Colors.background)
-            .navigationTitle("Domaines autorisés")
+            .navigationTitle(isDedicatedChannelActive ? "Filtrage courrier" : "Domaines autorisés")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fermer") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        newPattern = ""
-                        addError = nil
-                        showAddPrompt = true
-                    } label: {
-                        Image(systemName: "plus")
+                if !isDedicatedChannelActive {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            newPattern = ""
+                            addError = nil
+                            showAddPrompt = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -57,10 +71,50 @@ struct MailDomainsView: View {
             } message: {
                 Text(addError ?? "Saisissez un domaine complet (ex. monlycee.net) ou une adresse e-mail exacte.")
             }
-            .task {
+            .onAppear {
+                // .onAppear (not .task) so reopening the sheet after
+                // the parent connected/disconnected/switched mailbox
+                // in Settings reflects the new state immediately.
                 manualEntries = MailWhitelist.loadManual()
+                activeConfig = IMAPService.loadConfig()
             }
         }
+    }
+
+    // MARK: - Dedicated channel (monlycée) card
+
+    private var dedicatedChannelCard: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "building.columns")
+                    .font(.title3)
+                    .foregroundStyle(NotoTheme.Colors.cobalt)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Canal officiel lycée-parents")
+                        .font(NotoTheme.Typography.headline)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("MonLycée.net")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Spacer()
+            }
+
+            Text("Votre boîte MonLycée.net est une messagerie dédiée à la communication entre votre lycée et vous. Aucun courrier personnel n'y transite — chaque message reçu est par nature une information scolaire.")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+
+            Text("Pour cette raison, aucun filtrage n'est appliqué : tous les messages sont affichés dans nōto.")
+                .font(NotoTheme.Typography.caption)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+        }
+        .padding(NotoTheme.Spacing.md)
+        .background(NotoTheme.Colors.cobalt.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: NotoTheme.Radius.card)
+                .stroke(NotoTheme.Colors.cobalt.opacity(0.25), lineWidth: 1)
+        )
     }
 
     // MARK: - Sections

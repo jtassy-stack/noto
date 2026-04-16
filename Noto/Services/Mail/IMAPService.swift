@@ -30,6 +30,13 @@ enum IMAPService {
     /// Current key for the configured mailbox (single account per device).
     static let keychainKey = "imap_config_v2"
 
+    /// Posted after `saveConfig` and `clearConfig` commit. Views that
+    /// render IMAP-dependent state but don't live inside SettingsView
+    /// (Actualités prompt banner, feed source badges, Settings
+    /// MailDomains sheet) subscribe to this to refresh without
+    /// requiring a tab re-appear.
+    static let configDidChangeNotification = Notification.Name("noto.imap.configDidChange")
+
     // MARK: - Config persistence
 
     static func saveConfig(_ config: IMAPServerConfig) throws {
@@ -38,6 +45,7 @@ enum IMAPService {
         // Best-effort legacy cleanup — failure here doesn't compromise
         // the save we just committed.
         try? KeychainService.delete(key: legacyMonLyceeKey)
+        NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
     }
 
     static func loadConfig() -> IMAPServerConfig? {
@@ -71,6 +79,7 @@ enum IMAPService {
     static func clearConfig() throws {
         try KeychainService.delete(key: keychainKey)
         try KeychainService.delete(key: legacyMonLyceeKey)
+        NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
     }
 
     /// Convenience — true when a mailbox is configured.
