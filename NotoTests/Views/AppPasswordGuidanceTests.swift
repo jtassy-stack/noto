@@ -90,6 +90,34 @@ struct AppPasswordGuidanceTests {
         #expect(msg.contains("mot de passe d'application"))
     }
 
+    @Test("Outlook 'INVALIDSECONDFACTOR' → provider-specific message (third trigger)")
+    func outlookInvalidSecondFactor() {
+        // Locks the third `needsAppPasswordHint` substring. Drop it and
+        // this test catches it — otherwise Outlook 2FA errors silently
+        // regress to a generic "identifiants incorrects" message.
+        let msg = AppPasswordGuidance.userErrorMessage(
+            for: error("AUTHENTICATE failed: InvalidSecondFactor"),
+            preset: preset("outlook")
+        )
+        #expect(msg.contains("Outlook"))
+        #expect(msg.contains("mot de passe d'application"))
+    }
+
+    @Test("Custom provider hitting an app-password trigger string → no provider message (fallthrough)")
+    func customProviderWithAppPasswordTrigger() {
+        // Self-hosted / ISP server returns "web login required"-ish text
+        // but has no `AppPasswordGuidance`. Must fall through to the
+        // unclassified wrapper, not emit a bogus provider-less app-password
+        // message. Locks the behaviour against a future refactor that
+        // might accidentally coerce `guidance` to a default.
+        let msg = AppPasswordGuidance.userErrorMessage(
+            for: error("Web login required"),
+            preset: preset("custom", host: "imap.myschool.fr")
+        )
+        #expect(!msg.contains("mot de passe d'application"))
+        #expect(!msg.contains("mot de passe de compte"))
+    }
+
     @Test("Gmail bare AUTHENTICATIONFAILED → 'copié sans espace' typo hint, not regenerate")
     func gmailBareAuthFailed() {
         let msg = AppPasswordGuidance.userErrorMessage(

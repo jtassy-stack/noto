@@ -178,14 +178,6 @@ struct MonLyceeIMAPSetupView: View {
             try IMAPService.saveConfig(config)
             dismiss()
         } catch {
-            // Gmail/iCloud/Outlook reject the account's main password with
-            // provider-specific text ("application-specific password
-            // required", "web login required", …). These substrings are
-            // provider error text and may drift; the generic `else if`
-            // branch on auth keywords is the safety net for iCloud/Outlook
-            // which often return a bare `AUTHENTICATIONFAILED` instead.
-            // Kept strict (no bare "app password" match) to avoid misrouting
-            // "rate-limited" or "app password expired" errors.
             errorMessage = AppPasswordGuidance.userErrorMessage(for: error, preset: preset)
         }
     }
