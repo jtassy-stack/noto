@@ -259,23 +259,49 @@ struct HomeView: View {
 
     // MARK: - Card Tap Routing
 
+    /// Routes a briefing-card tap to the appropriate detail sheet or
+    /// destination tab. When a detail target can't be resolved (stale
+    /// SwiftData ID after a sync race, deleted model), falls back to
+    /// the nearest list view rather than silently swallowing the tap.
     private func handleCardTap(_ card: BriefingCard) {
         switch card.type {
-        case .homework, .test:
-            guard let id = card.targetID,
-                  let hw = modelContext.model(for: id) as? Homework else { return }
+        case .homework:
+            guard let id = card.targetID else {
+                logger.warning("Briefing card tap: homework card missing targetID — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let hw = modelContext.model(for: id) as? Homework else {
+                logger.warning("Briefing card tap: homework \(String(describing: id)) no longer resolves — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
             selectedHomework = hw
+
         case .insight:
-            guard let id = card.targetID,
-                  let insight = modelContext.model(for: id) as? Insight,
-                  let child = children.first(where: { $0.firstName == card.childName })
-            else { return }
-            let grades = child.grades.filter { $0.subject == insight.subject }
-            selectedInsightContext = InsightContext(insight: insight, grades: grades)
+            guard let id = card.targetID else {
+                logger.warning("Briefing card tap: insight card missing targetID — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let insight = modelContext.model(for: id) as? Insight else {
+                logger.warning("Briefing card tap: insight \(String(describing: id)) no longer resolves — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            guard let child = insight.child else {
+                logger.warning("Briefing card tap: insight \(String(describing: id)) has no child back-reference — falling back to School tab")
+                NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+                return
+            }
+            selectedInsightContext = InsightContext(insight: insight, from: child)
+
         case .message:
             NotificationCenter.default.post(name: .navigateToMessages, object: nil)
+
         case .cultureReco, .familyReco:
             NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+
         case .cancelled:
             NotificationCenter.default.post(name: .navigateToSchool, object: nil)
         }
@@ -449,12 +475,19 @@ struct HomeView: View {
     }
 }
 
-/// Pairs an Insight with the grades it analyses, so the trend sheet
-/// can plot the full series when opened from a briefing card tap.
+/// Transient payload for `.sheet(item:)` presentation of a trend
+/// detail. `Insight` doesn't store its source series, so we bundle
+/// the matching grades here; the UUID is regenerated per tap so
+/// SwiftUI re-presents the sheet after dismissal.
 struct InsightContext: Identifiable {
     let id = UUID()
     let insight: Insight
     let grades: [Grade]
+
+    init(insight: Insight, from child: Child) {
+        self.insight = insight
+        self.grades = child.grades.filter { $0.subject == insight.subject }
+    }
 }
 
 /// Wrapper to bridge @MainActor BriefingEngine into SwiftUI's @StateObject.

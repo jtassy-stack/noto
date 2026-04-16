@@ -169,8 +169,7 @@ final class BriefingEngine: ObservableObject {
                 title: "\(c.subject) annulé",
                 subtitle: formatTime(c.start),
                 priority: .urgent,
-                icon: "xmark.circle",
-                targetID: c.persistentModelID
+                icon: "xmark.circle"
             ))
         }
 
@@ -242,17 +241,37 @@ struct BriefingCard: Identifiable, Equatable {
     let subtitle: String
     let priority: BriefingPriority
     let icon: String
-    var detail: String?
-    /// SwiftData identifier of the underlying item (homework, insight,
-    /// schedule entry). Nil for aggregate cards (unread-messages,
-    /// culture recos) that route to a tab rather than a specific detail.
-    var targetID: PersistentIdentifier?
+    let detail: String?
+    /// SwiftData identifier of the underlying item. Populated for
+    /// detail-routing types (`.homework`, `.insight`); nil for
+    /// tab-routing types (`.cancelled`, `.message`, `.cultureReco`,
+    /// `.familyReco`) which jump to a list view instead of a detail.
+    let targetID: PersistentIdentifier?
+
+    init(
+        type: BriefingCardType,
+        childName: String,
+        title: String,
+        subtitle: String,
+        priority: BriefingPriority,
+        icon: String,
+        detail: String? = nil,
+        targetID: PersistentIdentifier? = nil
+    ) {
+        self.type = type
+        self.childName = childName
+        self.title = title
+        self.subtitle = subtitle
+        self.priority = priority
+        self.icon = icon
+        self.detail = detail
+        self.targetID = targetID
+    }
 }
 
 enum BriefingCardType {
     case cancelled
     case homework
-    case test
     case message
     case insight
     case cultureReco

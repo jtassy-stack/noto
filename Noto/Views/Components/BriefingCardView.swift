@@ -10,10 +10,10 @@ import SwiftUI
 struct BriefingCardView: View {
     let card: BriefingCard
     let showChildName: Bool
-    var onTap: (() -> Void)? = nil
+    let onTap: () -> Void
 
     var body: some View {
-        Button(action: { onTap?() }) {
+        Button(action: onTap) {
             HStack(spacing: NotoTheme.Spacing.cardGap) {
                 // Content — N1/N2/N3 hierarchy
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
@@ -59,7 +59,6 @@ struct BriefingCardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(onTap == nil)
     }
 
     private var signalUrgency: SignalUrgency {
@@ -91,28 +90,28 @@ private var sampleCards: some View {
             title: "Devoir maths non fait",
             subtitle: "Pour demain · Exercices p.47-48",
             priority: .urgent, icon: "pencil.and.list.clipboard"
-        ), showChildName: true)
+        ), showChildName: true, onTap: {})
 
         BriefingCardView(card: BriefingCard(
             type: .message, childName: "Léa",
             title: "Message non lu de Mme Dupont",
             subtitle: "Réunion parents-profs jeudi 18h",
             priority: .urgent, icon: "envelope"
-        ), showChildName: true)
+        ), showChildName: true, onTap: {})
 
         BriefingCardView(card: BriefingCard(
             type: .insight, childName: "Gaston",
             title: "Note 11/20 en physique",
             subtitle: "Moy. classe 13.2 · Chapitre optique",
             priority: .normal, icon: "chart.bar"
-        ), showChildName: true)
+        ), showChildName: true, onTap: {})
 
         BriefingCardView(card: BriefingCard(
             type: .insight, childName: "Léa",
             title: "Point fort en français",
             subtitle: "16.5/20 · moy. classe 12.8 · ↑ +1.2 pts/sem",
             priority: .positive, icon: "star"
-        ), showChildName: true)
+        ), showChildName: true, onTap: {})
     }
     .padding()
     .background(NotoTheme.Colors.background)
