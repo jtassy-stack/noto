@@ -123,8 +123,12 @@ final class Message {
     var kind: MessageKind
     var read: Bool
     var link: String?
+    /// Stable IMAP UID used to dedupe across refetches.
+    /// Optional for backward compat — legacy messages have nil and
+    /// dedupe falls back to (sender, subject, day) composite.
+    var imapUID: String?
 
-    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation, link: String? = nil) {
+    init(sender: String, subject: String, body: String, date: Date, source: MessageSource, kind: MessageKind = .conversation, link: String? = nil, imapUID: String? = nil) {
         self.sender = sender
         self.subject = subject
         self.body = body
@@ -133,5 +137,6 @@ final class Message {
         self.kind = kind
         self.read = false
         self.link = link
+        self.imapUID = imapUID
     }
 }

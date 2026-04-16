@@ -27,6 +27,7 @@ struct SettingsView: View {
     @State private var notifAuthStatus: UNAuthorizationStatus = .notDetermined
     @State private var showAddChild = false
     @State private var showIMAPSetup = false
+    @State private var showMailDomains = false
     @State private var imapCredentials: IMAPCredentials?
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
@@ -37,6 +38,11 @@ struct SettingsView: View {
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
+
+    private var whitelistCountLabel: String {
+        let count = MailWhitelist.build(from: children).count
+        return count == 1 ? "1 entrée" : "\(count) entrées"
+    }
 
     // MARK: Body
 
@@ -79,6 +85,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showIMAPSetup, onDismiss: { refreshIMAP() }) {
                 MonLyceeIMAPSetupView()
+            }
+            .sheet(isPresented: $showMailDomains) {
+                MailDomainsView()
             }
             .task {
                 await refreshAuthStatus()
@@ -155,7 +164,12 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 InfoRow(label: "Compte", value: imapCredentials?.email ?? "—")
                 SettingsDivider()
-                InfoRow(label: "Domaines autorisés", value: "3 domaines", chevron: true, action: nil)
+                InfoRow(
+                    label: "Domaines autorisés",
+                    value: whitelistCountLabel,
+                    chevron: true,
+                    action: { showMailDomains = true }
+                )
                 SettingsDivider()
                 InfoRow(label: "Dernière synchronisation", value: "Il y a 12 min")
                 SettingsDivider()
