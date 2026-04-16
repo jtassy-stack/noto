@@ -189,8 +189,6 @@ struct HomeView: View {
                 }
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) {
                 SettingsView()
