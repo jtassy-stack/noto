@@ -40,10 +40,8 @@
     <string>AppIcon</string>
     <key>UIAppFonts</key>
     <array>
-        <string>SpaceMono-Regular.ttf</string>
-        <string>SpaceMono-Bold.ttf</string>
-        <string>InstrumentSerif-Regular.ttf</string>
-        <string>InstrumentSerif-Italic.ttf</string>
+        <string>DMSerifDisplay-Regular.ttf</string>
+        <string>Inter.ttf</string>
         <string>PixelifySans-Bold.ttf</string>
     </array>
 </dict>

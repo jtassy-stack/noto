@@ -1,58 +1,72 @@
 import SwiftUI
 
+/// Signal card following the nōto visual grammar:
+///   N1 — Child name (DM Serif 16px, brand) → scanned in 0.2s
+///   N2 — Signal title (Inter Medium 14px) → read in 0.5s
+///   N3 — Context detail (Inter Regular 12px, 65% opacity) → optional
+///
+/// Card background is tinted by urgency (not a dot) — the parent
+/// scans color first, then name, then signal.
 struct BriefingCardView: View {
     let card: BriefingCard
-    let showChildName: Bool // false when viewing single child
+    let showChildName: Bool
 
     var body: some View {
-        HStack(spacing: NotoTheme.Spacing.md) {
-            // Icon
-            Image(systemName: card.icon)
-                .font(.system(size: 20))
-                .foregroundStyle(iconColor)
-                .frame(width: 36, height: 36)
-                .background(iconColor.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
-
-            // Content
+        HStack(spacing: NotoTheme.Spacing.cardGap) {
+            // Content — N1/N2/N3 hierarchy
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                // N1 — WHO (serif, brand color, scanned first)
                 if showChildName {
-                    ChildTag(name: card.childName)
+                    Text(card.childName)
+                        .font(NotoTheme.Typography.childName)
+                        .foregroundStyle(NotoTheme.Colors.brand)
                 }
 
+                // N2 — WHAT (functional medium, primary)
                 Text(card.title)
-                    .font(NotoTheme.Typography.headline)
+                    .font(NotoTheme.Typography.signalTitle)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
 
-                Text(card.subtitle)
-                    .font(NotoTheme.Typography.body)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .lineLimit(2)
+                // N3 — CONTEXT (functional regular, faded)
+                if !card.subtitle.isEmpty {
+                    Text(card.subtitle)
+                        .font(NotoTheme.Typography.metadata)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .opacity(0.65)
+                        .lineLimit(2)
+                }
 
                 if let detail = card.detail {
                     Text(detail)
-                        .font(NotoTheme.Typography.caption)
+                        .font(NotoTheme.Typography.metadata)
                         .foregroundStyle(detailColor)
                 }
             }
 
             Spacer(minLength: 0)
+
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .opacity(0.5)
         }
-        .padding(NotoTheme.Spacing.md)
-        .notoCard()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .signalCard(signalUrgency)
     }
 
-    private var iconColor: Color {
+    private var signalUrgency: SignalUrgency {
         switch card.priority {
-        case .urgent: NotoTheme.Colors.danger
-        case .positive: NotoTheme.Colors.success
-        case .normal: NotoTheme.Colors.brand
-        case .low: NotoTheme.Colors.textSecondary
+        case .urgent:   .urgent
+        case .positive: .positive
+        case .normal:   .info
+        case .low:      .info
         }
     }
 
     private var detailColor: Color {
-        card.priority == .urgent ? NotoTheme.Colors.danger : NotoTheme.Colors.textSecondary
+        card.priority == .urgent ? NotoTheme.Colors.danger : NotoTheme.Colors.info
     }
 }
 
@@ -65,27 +79,34 @@ struct BriefingCardView: View {
 }
 
 private var sampleCards: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: NotoTheme.Spacing.cardGap) {
         BriefingCardView(card: BriefingCard(
-            type: .test, childName: "Léa",
-            title: "Contrôle de maths demain",
-            subtitle: "Équations du second degré — chapitre 4",
+            type: .homework, childName: "Gaston",
+            title: "Devoir maths non fait",
+            subtitle: "Pour demain · Exercices p.47-48",
             priority: .urgent, icon: "pencil.and.list.clipboard"
         ), showChildName: true)
 
         BriefingCardView(card: BriefingCard(
-            type: .homework, childName: "Tom",
-            title: "Pas de devoirs ce soir",
-            subtitle: "Aucun devoir pour ce soir",
-            priority: .positive, icon: "checkmark.circle"
+            type: .message, childName: "Léa",
+            title: "Message non lu de Mme Dupont",
+            subtitle: "Réunion parents-profs jeudi 18h",
+            priority: .urgent, icon: "envelope"
         ), showChildName: true)
 
         BriefingCardView(card: BriefingCard(
-            type: .message, childName: "Léa",
-            title: "Nouveau message",
-            subtitle: "M. Bernard — Résultats du contrôle",
-            priority: .normal, icon: "envelope"
-        ), showChildName: false)
+            type: .insight, childName: "Gaston",
+            title: "Note 11/20 en physique",
+            subtitle: "Moy. classe 13.2 · Chapitre optique",
+            priority: .normal, icon: "chart.bar"
+        ), showChildName: true)
+
+        BriefingCardView(card: BriefingCard(
+            type: .insight, childName: "Léa",
+            title: "Point fort en français",
+            subtitle: "16.5/20 · moy. classe 12.8 · ↑ +1.2 pts/sem",
+            priority: .positive, icon: "star"
+        ), showChildName: true)
     }
     .padding()
     .background(NotoTheme.Colors.background)

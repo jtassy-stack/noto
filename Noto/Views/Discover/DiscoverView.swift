@@ -32,6 +32,30 @@ struct DiscoverView: View {
         showFavoritesOnly ? recos.filter { bookmarkedIds.contains($0.id) } : recos
     }
 
+    // MARK: - Section splits (LIÉ AUX COURS / SOUTIEN / AGENDA)
+
+    /// Recos tied to a curriculum chapter (courses/homework).
+    /// Podcasts and oeuvres are primarily content-based, not time-bound.
+    private var recosLieAuxCours: [CultureSearchResult] {
+        displayedRecos.filter { $0.type == "podcast" || $0.type == "oeuvre" }
+    }
+
+    /// Local/time-bound events (geolocalised).
+    private var recosAgenda: [CultureSearchResult] {
+        displayedRecos.filter { $0.type == "event" }
+    }
+
+    /// Difficulty insights across target children — drive the SOUTIEN section.
+    private var wellbeingInsights: [(childName: String, insight: Insight)] {
+        var pairs: [(String, Insight)] = []
+        for child in children {
+            for insight in child.insights where insight.type == .difficulty || insight.type == .alert {
+                pairs.append((child.firstName, insight))
+            }
+        }
+        return pairs
+    }
+
     private var isFamilyMode: Bool { selectedChild == nil && children.count > 1 }
 
     /// Maps Pronote subject codes (uppercase, with suffixes) to clean cultural search terms.
@@ -161,63 +185,98 @@ struct DiscoverView: View {
                 }
 
                 Group {
-                if isLoading {
-                    ProgressView("Chargement des recommandations…")
-                } else if let error = loadError, recos.isEmpty {
-                    ContentUnavailableView(
-                        "Impossible de charger",
-                        systemImage: "wifi.exclamationmark",
-                        description: Text(error)
-                    )
-                } else if recos.isEmpty && hasLoaded {
-                    ContentUnavailableView(
-                        "Pas de recommandations",
-                        systemImage: "safari",
-                        description: Text("Les recommandations culturelles apparaîtront quand des données scolaires sont disponibles.")
-                    )
-                } else if !recos.isEmpty {
-                    VStack(spacing: 0) {
-                        // Favorites filter + family mode header
-                        HStack {
-                            if isFamilyMode {
-                                Label("Toute la famille", systemImage: "person.3")
-                                    .font(NotoTheme.Typography.caption)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                            }
-                            Spacer()
-                            Button {
-                                showFavoritesOnly.toggle()
-                            } label: {
-                                Label(showFavoritesOnly ? "Tous" : "Favoris",
-                                      systemImage: showFavoritesOnly ? "heart.fill" : "heart")
-                                    .font(NotoTheme.Typography.caption)
-                            }
-                            .tint(NotoTheme.Colors.brand)
-                        }
-                        .padding(.horizontal, NotoTheme.Spacing.md)
-                        .padding(.vertical, NotoTheme.Spacing.sm)
+                    if isLoading {
+                        ProgressView("Chargement des recommandations…")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let error = loadError, recos.isEmpty, wellbeingInsights.isEmpty {
+                        ContentUnavailableView(
+                            "Impossible de charger",
+                            systemImage: "wifi.exclamationmark",
+                            description: Text(error)
+                        )
+                    } else if recos.isEmpty && wellbeingInsights.isEmpty && hasLoaded {
+                        ContentUnavailableView(
+                            "Pas de recommandations",
+                            systemImage: "safari",
+                            description: Text("Les ressources apparaîtront quand des données scolaires sont disponibles.")
+                        )
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                                // Header subtitle
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Ressources liées aux cours de vos enfants")
+                                        .font(NotoTheme.Typography.metadata)
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.bottom, NotoTheme.Spacing.xs)
 
-                        List(displayedRecos) { reco in
-                            RecoRow(
-                                reco: reco,
-                                isBookmarked: bookmarkedIds.contains(reco.id),
-                                onBookmark: { toggleBookmark(reco.id) }
-                            )
-                            .onTapGesture { selectedReco = reco }
+                                // Favorites toggle — right-aligned, compact
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        showFavoritesOnly.toggle()
+                                    } label: {
+                                        Label(showFavoritesOnly ? "Tous" : "Favoris",
+                                              systemImage: showFavoritesOnly ? "heart.fill" : "heart")
+                                            .font(NotoTheme.Typography.caption)
+                                    }
+                                    .tint(NotoTheme.Colors.brand)
+                                }
+
+                                // SECTION 1 — LIÉ AUX COURS (podcasts + oeuvres)
+                                if !recosLieAuxCours.isEmpty {
+                                    Text("LIÉ AUX COURS")
+                                        .sectionLabelStyle()
+
+                                    ForEach(recosLieAuxCours) { reco in
+                                        RecoRow(
+                                            reco: reco,
+                                            isBookmarked: bookmarkedIds.contains(reco.id),
+                                            onBookmark: { toggleBookmark(reco.id) }
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectedReco = reco }
+                                    }
+                                }
+
+                                // SECTION 2 — SOUTIEN (wellbeing signals)
+                                if !wellbeingInsights.isEmpty {
+                                    Text("SOUTIEN")
+                                        .sectionLabelStyle()
+
+                                    ForEach(Array(wellbeingInsights.enumerated()), id: \.offset) { _, pair in
+                                        WellbeingSignalCard(
+                                            childName: pair.childName,
+                                            insight: pair.insight
+                                        )
+                                    }
+                                }
+
+                                // SECTION 3 — AGENDA (events near home)
+                                if !recosAgenda.isEmpty {
+                                    Text("AGENDA · PRÈS DE CHEZ VOUS")
+                                        .sectionLabelStyle()
+
+                                    ForEach(recosAgenda) { reco in
+                                        RecoRow(
+                                            reco: reco,
+                                            isBookmarked: bookmarkedIds.contains(reco.id),
+                                            onBookmark: { toggleBookmark(reco.id) }
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectedReco = reco }
+                                    }
+                                }
+                            }
+                            .padding(NotoTheme.Spacing.md)
                         }
-                        .listStyle(.plain)
                     }
-                } else {
-                    ContentUnavailableView(
-                        "Découvrir",
-                        systemImage: "safari",
-                        description: Text("Des recommandations culturelles adaptées aux cours et centres d'intérêt.")
-                    )
                 }
-            }
-            .background(NotoTheme.Colors.background)
+                .background(NotoTheme.Colors.background)
             } // VStack (child selector + content)
-            .navigationTitle(isFamilyMode ? "Découvrir · Famille" : selectedChild.map { "Découvrir · \($0.firstName)" } ?? "Découvrir")
+            .navigationTitle("Accompagner")
             .navigationBarTitleDisplayMode(.large)
             .task(id: selectedChild?.id) {
                 locationService.requestOnce()

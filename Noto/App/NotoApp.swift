@@ -51,11 +51,11 @@ struct NotoApp: App {
         navAppearance.shadowColor = .clear
         navAppearance.titleTextAttributes = [
             .foregroundColor: navText,
-            .font: UIFont(name: "SpaceMono-Bold", size: 17) ?? .systemFont(ofSize: 17, weight: .bold)
+            .font: UIFont.systemFont(ofSize: 17, weight: .semibold)
         ]
         navAppearance.largeTitleTextAttributes = [
             .foregroundColor: navText,
-            .font: UIFont(name: "SpaceMono-Bold", size: 28) ?? .systemFont(ofSize: 28, weight: .bold)
+            .font: UIFont.systemFont(ofSize: 28, weight: .semibold)
         ]
         UINavigationBar.appearance().standardAppearance  = navAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navAppearance

@@ -6,6 +6,12 @@ struct RootView: View {
     @State private var showAddChild = false
     @Environment(\.modelContext) private var modelContext
 
+    /// True once the onboarding flow (welcome → AddChild → email → summary)
+    /// has been completed end-to-end. Defaulted to `true` so existing users
+    /// upgrading past this version aren't sent back through onboarding.
+    /// OnboardingView sets this to `false` while it is visible.
+    @AppStorage("onboarding_complete") private var onboardingComplete: Bool = true
+
     private var family: Family? { families.first }
 
     /// Re-establish ENT session on cold launch using stored Keychain credentials.
@@ -65,7 +71,7 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if families.isEmpty {
+            if families.isEmpty || !onboardingComplete {
                 OnboardingView()
             } else if family?.children.isEmpty == true {
                 // Family exists but no children yet — prompt to add
