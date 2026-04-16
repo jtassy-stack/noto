@@ -184,7 +184,8 @@ final class BriefingEngine: ObservableObject {
                 subtitle: String(hw.descriptionText.prefix(80)),
                 priority: isToday ? .urgent : .normal,
                 icon: "pencil.and.list.clipboard",
-                detail: isToday ? "Pour aujourd'hui" : "Pour demain"
+                detail: isToday ? "Pour aujourd'hui" : "Pour demain",
+                targetID: hw.persistentModelID
             ))
         }
 
@@ -217,7 +218,8 @@ final class BriefingEngine: ObservableObject {
                 title: insight.subject,
                 subtitle: insight.value,
                 priority: priority,
-                icon: icon
+                icon: icon,
+                targetID: insight.persistentModelID
             ))
         }
 
@@ -239,13 +241,37 @@ struct BriefingCard: Identifiable, Equatable {
     let subtitle: String
     let priority: BriefingPriority
     let icon: String
-    var detail: String?
+    let detail: String?
+    /// SwiftData identifier of the underlying item. Populated for
+    /// detail-routing types (`.homework`, `.insight`); nil for
+    /// tab-routing types (`.cancelled`, `.message`, `.cultureReco`,
+    /// `.familyReco`) which jump to a list view instead of a detail.
+    let targetID: PersistentIdentifier?
+
+    init(
+        type: BriefingCardType,
+        childName: String,
+        title: String,
+        subtitle: String,
+        priority: BriefingPriority,
+        icon: String,
+        detail: String? = nil,
+        targetID: PersistentIdentifier? = nil
+    ) {
+        self.type = type
+        self.childName = childName
+        self.title = title
+        self.subtitle = subtitle
+        self.priority = priority
+        self.icon = icon
+        self.detail = detail
+        self.targetID = targetID
+    }
 }
 
 enum BriefingCardType {
     case cancelled
     case homework
-    case test
     case message
     case insight
     case cultureReco

@@ -688,7 +688,7 @@ private struct ENTStatTile: View {
     }
 }
 
-private struct TrendDetailSheet: View {
+struct TrendDetailSheet: View {
     let insight: Insight
     let grades: [Grade]
     @Environment(\.dismiss) private var dismiss
