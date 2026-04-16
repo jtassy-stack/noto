@@ -133,6 +133,38 @@ struct MailWhitelistWithDirectoryTests {
         #expect(entries.contains { $0.source == .entProvider })
     }
 
+    @Test("Directory match does NOT short-circuit teacher-email extraction")
+    func directoryDoesNotBlockTeacherEmails() throws {
+        // Load-bearing invariant: a child with an RNE + directory match
+        // must STILL have its message senders added to the whitelist.
+        // If someone refactors the branch into an `if/else { return }`,
+        // this test fails before IMAP sync silently drops teacher replies.
+        let ctx = try makeContext()
+        let child = makeChild(
+            rne: "0930122Y",
+            establishment: "https://xxxxx.index-education.net/pronote",
+            in: ctx
+        )
+        let message = Message(
+            sender: "\"Mme Dupont\" <dupont@col.fr>",
+            subject: "Réunion parents",
+            body: "",
+            date: .now,
+            source: .imap
+        )
+        ctx.insert(message)
+        child.messages = [message]
+
+        let school = makeSchool(rne: "0930122Y", mailDomains: ["monlycee.net"])
+        let entries = MailWhitelist.build(
+            from: [child],
+            directorySchools: ["0930122Y": school]
+        )
+
+        #expect(entries.contains { $0.source == .directoryAPI && $0.pattern == "monlycee.net" })
+        #expect(entries.contains { $0.source == .teacherFromPronote && $0.pattern == "dupont@col.fr" })
+    }
+
     @Test("Dedup — directory and schoolDomain both producing 'monlycee.net' appears once")
     func directoryDedupesWithSchoolDomain() throws {
         let ctx = try makeContext()
