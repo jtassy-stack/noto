@@ -151,14 +151,23 @@ struct EmailSetupStep: View {
         isValidating = true
         errorMessage = nil
 
-        let creds = IMAPCredentials(
-            email: email.trimmingCharacters(in: .whitespaces),
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+
+        guard let preset = IMAPProviderResolver.resolve(email: trimmedEmail) else {
+            errorMessage = "Adresse e-mail invalide. Format attendu : nom@domaine.fr"
+            isValidating = false
+            return
+        }
+
+        let config = IMAPServerConfig(
+            preset: preset,
+            username: trimmedEmail,
             password: password
         )
 
         do {
-            try await IMAPService.validate(credentials: creds)
-            try IMAPService.saveCredentials(creds)
+            try await IMAPService.validate(config: config)
+            try IMAPService.saveConfig(config)
             isValidating = false
             onComplete()
         } catch {

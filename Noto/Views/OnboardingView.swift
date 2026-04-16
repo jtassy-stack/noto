@@ -61,7 +61,7 @@ struct OnboardingView: View {
             // force-quit after AddChild dismissed), jump straight to
             // EmailSetupStep instead of redoing the welcome screen.
             if let family = families.first, !family.children.isEmpty, step == .welcome {
-                emailConfigured = IMAPService.loadCredentials() != nil
+                emailConfigured = IMAPService.isConfigured
                 step = emailConfigured ? .summary : .email
             }
         }

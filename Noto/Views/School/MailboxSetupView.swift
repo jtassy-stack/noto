@@ -83,10 +83,14 @@ struct MailboxSetupView: View {
         errorMessage = nil
         defer { isConnecting = false }
 
-        let creds = IMAPCredentials(email: email, password: password)
+        guard let preset = IMAPProviderResolver.resolve(email: email) else {
+            errorMessage = "Adresse e-mail invalide."
+            return
+        }
+        let config = IMAPServerConfig(preset: preset, username: email, password: password)
         do {
-            try await IMAPService.validate(credentials: creds)
-            try IMAPService.saveCredentials(creds)
+            try await IMAPService.validate(config: config)
+            try IMAPService.saveConfig(config)
             onComplete()
         } catch {
             errorMessage = "Connexion échouée. Vérifiez vos identifiants."

@@ -27,7 +27,8 @@ struct SettingsView: View {
     @State private var notifAuthStatus: UNAuthorizationStatus = .notDetermined
     @State private var showAddChild = false
     @State private var showIMAPSetup = false
-    @State private var imapCredentials: IMAPCredentials?
+    @State private var showMailDomains = false
+    @State private var imapConfig: IMAPServerConfig?
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
@@ -37,6 +38,11 @@ struct SettingsView: View {
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
+
+    private var whitelistCountLabel: String {
+        let count = MailWhitelist.build(from: children).count
+        return count == 1 ? "1 entrée" : "\(count) entrées"
+    }
 
     // MARK: Body
 
@@ -52,7 +58,7 @@ struct SettingsView: View {
 
                     childrenSection
                     integrationsSection
-                    if imapCredentials != nil {
+                    if imapConfig != nil {
                         mailboxSection
                     }
                     notificationsSection
@@ -79,6 +85,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showIMAPSetup, onDismiss: { refreshIMAP() }) {
                 MonLyceeIMAPSetupView()
+            }
+            .sheet(isPresented: $showMailDomains) {
+                MailDomainsView()
             }
             .task {
                 await refreshAuthStatus()
@@ -117,7 +126,7 @@ struct SettingsView: View {
                 IntegrationRow(
                     title: "Boîte mail",
                     subtitle: "Filtrer les emails scolaires",
-                    badge: imapCredentials == nil ? .notConfigured : .connected,
+                    badge: imapConfig == nil ? .notConfigured : .connected,
                     action: { showIMAPSetup = true }
                 )
                 SettingsDivider()
@@ -153,9 +162,14 @@ struct SettingsView: View {
                 .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
-                InfoRow(label: "Compte", value: imapCredentials?.email ?? "—")
+                InfoRow(label: "Compte", value: imapConfig?.username ?? "—")
                 SettingsDivider()
-                InfoRow(label: "Domaines autorisés", value: "3 domaines", chevron: true, action: nil)
+                InfoRow(
+                    label: "Domaines autorisés",
+                    value: whitelistCountLabel,
+                    chevron: true,
+                    action: { showMailDomains = true }
+                )
                 SettingsDivider()
                 InfoRow(label: "Dernière synchronisation", value: "Il y a 12 min")
                 SettingsDivider()
@@ -321,20 +335,33 @@ struct SettingsView: View {
     }
 
     private func refreshIMAP() {
-        imapCredentials = IMAPService.loadCredentials()
+        imapConfig = IMAPService.loadConfig()
     }
 
     // MARK: Actions
 
     private func disconnect(child: Child) {
-        KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
+        // Best-effort Keychain cleanup — log on failure so ops can see
+        // lingering tokens rather than silently leaving them on device.
+        do {
+            try KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
+        } catch {
+            NSLog("[noto][warn] disconnect(child:) Keychain delete failed: \(error.localizedDescription)")
+        }
         modelContext.delete(child)
         try? modelContext.save()
     }
 
     private func disconnectIMAP() {
-        IMAPService.clearCredentials()
-        imapCredentials = nil
+        do {
+            try IMAPService.clearConfig()
+            imapConfig = nil
+        } catch {
+            NSLog("[noto][warn] disconnectIMAP failed: \(error.localizedDescription)")
+            // Re-read state so the UI reflects reality rather than an
+            // optimistic clear that didn't actually land.
+            imapConfig = IMAPService.loadConfig()
+        }
     }
 
     private func clearAllData() {
@@ -343,11 +370,11 @@ struct SettingsView: View {
         }
         if let children = family?.children {
             for child in children {
-                KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
+                try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
             }
         }
-        IMAPService.clearCredentials()
-        imapCredentials = nil
+        try? IMAPService.clearConfig()
+        imapConfig = nil
         try? modelContext.save()
     }
 }

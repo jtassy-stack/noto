@@ -1060,7 +1060,7 @@ private struct MessagesListView: View {
     let children: [Child]
     @Environment(\.modelContext) private var modelContext
     @State private var selectedMessage: Message?
-    @State private var hasIMAPCredentials = IMAPService.loadCredentials() != nil
+    @State private var hasIMAPCredentials = IMAPService.isConfigured
     @State private var syncError: String?
 
     private var allMessages: [(child: Child, msg: Message)] {

@@ -1,12 +1,6 @@
 import Foundation
 import SwiftMail
 
-/// Credentials for MonLycée IMAP — stored in Keychain.
-struct IMAPCredentials: Codable, Sendable {
-    let email: String
-    let password: String
-}
-
 /// Lightweight model for a fetched IMAP message.
 struct IMAPMessageInfo: Sendable {
     let uid: UInt32?
@@ -17,47 +11,99 @@ struct IMAPMessageInfo: Sendable {
     let isRead: Bool
 }
 
-/// Connects to imaps.monlycee.net and fetches inbox messages.
-/// Credentials are stored in Keychain — never on a server.
+/// Multi-provider IMAP client.
+///
+/// Credentials are stored in Keychain as a JSON-encoded `IMAPServerConfig`.
+/// On first read after upgrading from the pre-Phase-7 MonLycée-hardcoded
+/// release, `loadConfig()` transparently hydrates the legacy
+/// `imap_credentials_monlycee` blob into an `IMAPServerConfig` so existing
+/// users don't need to re-auth.
 enum IMAPService {
-    static let keychainKey = "imap_credentials_monlycee"
-    private static let host = "imaps.monlycee.net"
-    private static let port = 993
 
-    // MARK: - Keychain
+    // MARK: - Keychain keys
 
-    static func saveCredentials(_ creds: IMAPCredentials) throws {
-        let data = try JSONEncoder().encode(creds)
+    /// Legacy key — MonLycée only, pre-Phase-7 install base.
+    /// Read-only after Phase 7: writes go to `keychainKey` and the
+    /// legacy blob is cleaned up on first successful `saveConfig`.
+    static let legacyMonLyceeKey = "imap_credentials_monlycee"
+
+    /// Current key for the configured mailbox (single account per device).
+    static let keychainKey = "imap_config_v2"
+
+    // MARK: - Config persistence
+
+    static func saveConfig(_ config: IMAPServerConfig) throws {
+        let data = try JSONEncoder().encode(config)
         try KeychainService.save(key: keychainKey, data: data)
+        // Best-effort legacy cleanup — failure here doesn't compromise
+        // the save we just committed.
+        try? KeychainService.delete(key: legacyMonLyceeKey)
     }
 
-    static func loadCredentials() -> IMAPCredentials? {
-        guard let data = try? KeychainService.load(key: keychainKey),
-              let creds = try? JSONDecoder().decode(IMAPCredentials.self, from: data) else { return nil }
-        return creds
+    static func loadConfig() -> IMAPServerConfig? {
+        let primary = try? KeychainService.load(key: keychainKey)
+        let legacy = try? KeychainService.load(key: legacyMonLyceeKey)
+        return decodeConfig(primaryData: primary, legacyData: legacy)
     }
 
-    static func clearCredentials() {
-        KeychainService.delete(key: keychainKey)
+    /// Pure decode path — factored out of `loadConfig` so the
+    /// hydration logic can be unit-tested without a Keychain seam.
+    /// Tries the primary v2 blob first, then the legacy MonLycée
+    /// blob. Returns nil if neither decodes successfully.
+    static func decodeConfig(primaryData: Data?, legacyData: Data?) -> IMAPServerConfig? {
+        if let data = primaryData,
+           let config = try? JSONDecoder().decode(IMAPServerConfig.self, from: data) {
+            return config
+        }
+        if let data = legacyData,
+           let legacy = try? JSONDecoder().decode(LegacyMonLyceeCredentials.self, from: data) {
+            return IMAPServerConfig(
+                host: "imaps.monlycee.net",
+                port: 993,
+                username: legacy.email,
+                password: legacy.password,
+                providerID: "monlycee"
+            )
+        }
+        return nil
+    }
+
+    static func clearConfig() throws {
+        try KeychainService.delete(key: keychainKey)
+        try KeychainService.delete(key: legacyMonLyceeKey)
+    }
+
+    /// Convenience — true when a mailbox is configured.
+    /// All UI call sites (SettingsView, SchoolView, ActualitesView,
+    /// OnboardingView) use this instead of direct Keychain reads so
+    /// the legacy-hydration path in `loadConfig` stays authoritative.
+    static var isConfigured: Bool {
+        loadConfig() != nil
     }
 
     // MARK: - Fetch
 
-    /// Validate credentials by connecting and logging in — throws on failure.
-    static func validate(credentials: IMAPCredentials) async throws {
-        let server = IMAPServer(host: host, port: port)
+    static func validate(config: IMAPServerConfig) async throws {
+        let server = IMAPServer(host: config.host, port: config.port)
         try await server.connect()
-        try await server.login(username: credentials.email, password: credentials.password)
+        try await server.login(username: config.username, password: config.password)
         try await server.logout()
     }
 
-    /// Fetch the latest `limit` messages from INBOX.
-    static func fetchInbox(credentials: IMAPCredentials, limit: Int = 50) async throws -> [IMAPMessageInfo] {
-        let server = IMAPServer(host: host, port: port)
+    static func fetchInbox(config: IMAPServerConfig, limit: Int = 50) async throws -> [IMAPMessageInfo] {
+        let server = IMAPServer(host: config.host, port: config.port)
         try await server.connect()
-        defer { Task { try? await server.disconnect() } }
+        defer {
+            // Log disconnect failures rather than swallowing them — repeated
+            // leaked connections have caused providers (Outlook especially)
+            // to rate-limit LOGIN attempts.
+            Task {
+                do { try await server.disconnect() }
+                catch { NSLog("[noto][warn] IMAP disconnect failed: \(String(describing: error))") }
+            }
+        }
 
-        try await server.login(username: credentials.email, password: credentials.password)
+        try await server.login(username: config.username, password: config.password)
         let selection = try await server.selectMailbox("INBOX")
 
         guard let seqSet = selection.latest(limit) else { return [] }
@@ -76,13 +122,12 @@ enum IMAPService {
                 isRead: msg.flags.contains(.seen)
             ))
         }
-        // Newest first
         return messages.sorted { $0.date > $1.date }
     }
 
-    /// Extract display name from RFC 5322 address: `"Name" <email>` → `"Name"`, else return as-is.
+    // MARK: - Helpers
+
     private static func extractDisplayName(_ address: String) -> String {
-        // Match: "Display Name" <email@domain> or Display Name <email@domain>
         if let ltRange = address.range(of: "<") {
             let name = address[address.startIndex..<ltRange.lowerBound]
                 .trimmingCharacters(in: .whitespaces)
@@ -92,15 +137,12 @@ enum IMAPService {
         return address
     }
 
-    /// Strip zero-width/invisible characters and whitespace; returns nil if effectively empty.
     private static func cleanBody(_ text: String) -> String {
-        // Remove zero-width characters (ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF, etc.)
-        let cleaned = text
+        text
             .replacingOccurrences(of: "\u{200C}", with: "")
             .replacingOccurrences(of: "\u{200D}", with: "")
             .replacingOccurrences(of: "\u{FEFF}", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned
     }
 
     private static func stripHTML(_ html: String) -> String {
@@ -110,4 +152,15 @@ enum IMAPService {
             .replacingOccurrences(of: "&#039;", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+// MARK: - Legacy migration struct (internal only)
+
+/// Shape of the pre-Phase-7 Keychain payload under `imap_credentials_monlycee`.
+/// Used exclusively by `decodeConfig` to read old entries and promote
+/// them to `IMAPServerConfig`. Internal rather than private so unit
+/// tests can round-trip JSON and assert the hydration path.
+struct LegacyMonLyceeCredentials: Codable {
+    let email: String
+    let password: String
 }
