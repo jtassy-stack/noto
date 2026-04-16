@@ -5,7 +5,7 @@ import OSLog
 private let logger = Logger(subsystem: "com.pmf.noto", category: "HomeView")
 
 struct HomeView: View {
-    let selectedChild: Child?
+    var onAddChild: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Query private var families: [Family]
@@ -14,6 +14,7 @@ struct HomeView: View {
 
     @AppStorage("lastSyncDate") private var lastSyncDateInterval: Double = 0
 
+    @State private var selectedChild: Child?
     @State private var isSyncing = false
     @State private var showNoConnectionAlert = false
     @State private var showSettings = false
@@ -77,12 +78,21 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: NotoTheme.Spacing.md) {
-                    // MARK: Story Rings
-                    if !children.isEmpty {
-                        StoryRingsRow(children: children)
-                    }
+            VStack(spacing: 0) {
+                if children.count > 1 {
+                    ChildSelectorBar(
+                        children: children,
+                        selectedChild: $selectedChild,
+                        onAddChild: onAddChild
+                    )
+                }
+
+                ScrollView {
+                    LazyVStack(spacing: NotoTheme.Spacing.md) {
+                        // MARK: Story Rings
+                        if !children.isEmpty {
+                            StoryRingsRow(children: children)
+                        }
 
                     // MARK: Pronote reconnect prompt
                     if !pronoteChildrenNeedingReconnect.isEmpty {
@@ -216,6 +226,7 @@ struct HomeView: View {
                 .padding(NotoTheme.Spacing.md)
             }
             .background(NotoTheme.Colors.background)
+            } // VStack (child selector + scroll)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -239,6 +250,11 @@ struct HomeView: View {
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
                 await refreshBriefing()
+            }
+            .onChange(of: children.map(\.id)) { _, childIds in
+                if let sel = selectedChild, !childIds.contains(sel.id) {
+                    selectedChild = nil
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
                 guard !isSyncing else { return }
@@ -1165,6 +1181,6 @@ private struct PronoteReconnectCard: View {
 }
 
 #Preview("Léa — collège") {
-    HomeView(selectedChild: nil)
+    HomeView()
         .withPreviewData()
 }

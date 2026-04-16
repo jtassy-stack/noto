@@ -5,7 +5,7 @@ import OSLog
 private let logger = Logger(subsystem: "com.pmf.noto", category: "Discover")
 
 struct DiscoverView: View {
-    let selectedChild: Child?
+    @State private var selectedChild: Child?
 
     @Query private var families: [Family]
     @State private var recos: [CultureSearchResult] = []
@@ -141,14 +141,26 @@ struct DiscoverView: View {
         return nil
     }
 
+    private var allChildren: [Child] {
+        families.first?.children ?? []
+    }
+
     private var children: [Child] {
         if let child = selectedChild { return [child] }
-        return families.first?.children ?? []
+        return allChildren
     }
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                if allChildren.count > 1 {
+                    ChildSelectorBar(
+                        children: allChildren,
+                        selectedChild: $selectedChild
+                    )
+                }
+
+                Group {
                 if isLoading {
                     ProgressView("Chargement des recommandations…")
                 } else if let error = loadError, recos.isEmpty {
@@ -204,11 +216,17 @@ struct DiscoverView: View {
                 }
             }
             .background(NotoTheme.Colors.background)
+            } // VStack (child selector + content)
             .navigationTitle(isFamilyMode ? "Découvrir · Famille" : selectedChild.map { "Découvrir · \($0.firstName)" } ?? "Découvrir")
             .navigationBarTitleDisplayMode(.large)
             .task(id: selectedChild?.id) {
                 locationService.requestOnce()
                 await loadRecos()
+            }
+            .onChange(of: allChildren.map(\.id)) { _, childIds in
+                if let sel = selectedChild, !childIds.contains(sel.id) {
+                    selectedChild = nil
+                }
             }
             .onChange(of: children.count) { _, count in
                 guard count > 0, recos.isEmpty, !isLoading else { return }
@@ -554,6 +572,6 @@ private struct SourceBadge: View {
 }
 
 #Preview("Découvrir") {
-    DiscoverView(selectedChild: nil)
+    DiscoverView()
         .withPreviewData()
 }
