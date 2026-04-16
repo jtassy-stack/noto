@@ -169,7 +169,8 @@ final class BriefingEngine: ObservableObject {
                 title: "\(c.subject) annulé",
                 subtitle: formatTime(c.start),
                 priority: .urgent,
-                icon: "xmark.circle"
+                icon: "xmark.circle",
+                targetID: c.persistentModelID
             ))
         }
 
@@ -184,7 +185,8 @@ final class BriefingEngine: ObservableObject {
                 subtitle: String(hw.descriptionText.prefix(80)),
                 priority: isToday ? .urgent : .normal,
                 icon: "pencil.and.list.clipboard",
-                detail: isToday ? "Pour aujourd'hui" : "Pour demain"
+                detail: isToday ? "Pour aujourd'hui" : "Pour demain",
+                targetID: hw.persistentModelID
             ))
         }
 
@@ -217,7 +219,8 @@ final class BriefingEngine: ObservableObject {
                 title: insight.subject,
                 subtitle: insight.value,
                 priority: priority,
-                icon: icon
+                icon: icon,
+                targetID: insight.persistentModelID
             ))
         }
 
@@ -240,6 +243,10 @@ struct BriefingCard: Identifiable, Equatable {
     let priority: BriefingPriority
     let icon: String
     var detail: String?
+    /// SwiftData identifier of the underlying item (homework, insight,
+    /// schedule entry). Nil for aggregate cards (unread-messages,
+    /// culture recos) that route to a tab rather than a specific detail.
+    var targetID: PersistentIdentifier?
 }
 
 enum BriefingCardType {

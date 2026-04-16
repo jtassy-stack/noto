@@ -990,7 +990,7 @@ private struct HomeworkRow: View {
 
 // MARK: - Homework Detail
 
-private struct HomeworkDetailView: View {
+struct HomeworkDetailView: View {
     let hw: Homework
     @Environment(\.dismiss) private var dismiss
 

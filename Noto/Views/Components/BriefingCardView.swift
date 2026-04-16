@@ -10,50 +10,56 @@ import SwiftUI
 struct BriefingCardView: View {
     let card: BriefingCard
     let showChildName: Bool
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: NotoTheme.Spacing.cardGap) {
-            // Content — N1/N2/N3 hierarchy
-            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-                // N1 — WHO (serif, brand color, scanned first)
-                if showChildName {
-                    Text(card.childName)
-                        .font(NotoTheme.Typography.childName)
-                        .foregroundStyle(NotoTheme.Colors.brand)
+        Button(action: { onTap?() }) {
+            HStack(spacing: NotoTheme.Spacing.cardGap) {
+                // Content — N1/N2/N3 hierarchy
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                    // N1 — WHO (serif, brand color, scanned first)
+                    if showChildName {
+                        Text(card.childName)
+                            .font(NotoTheme.Typography.childName)
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                    }
+
+                    // N2 — WHAT (functional medium, primary)
+                    Text(card.title)
+                        .font(NotoTheme.Typography.signalTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+
+                    // N3 — CONTEXT (functional regular, faded)
+                    if !card.subtitle.isEmpty {
+                        Text(card.subtitle)
+                            .font(NotoTheme.Typography.metadata)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .opacity(0.65)
+                            .lineLimit(2)
+                    }
+
+                    if let detail = card.detail {
+                        Text(detail)
+                            .font(NotoTheme.Typography.metadata)
+                            .foregroundStyle(detailColor)
+                    }
                 }
 
-                // N2 — WHAT (functional medium, primary)
-                Text(card.title)
-                    .font(NotoTheme.Typography.signalTitle)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Spacer(minLength: 0)
 
-                // N3 — CONTEXT (functional regular, faded)
-                if !card.subtitle.isEmpty {
-                    Text(card.subtitle)
-                        .font(NotoTheme.Typography.metadata)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .opacity(0.65)
-                        .lineLimit(2)
-                }
-
-                if let detail = card.detail {
-                    Text(detail)
-                        .font(NotoTheme.Typography.metadata)
-                        .foregroundStyle(detailColor)
-                }
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .opacity(0.5)
             }
-
-            Spacer(minLength: 0)
-
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-                .opacity(0.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .signalCard(signalUrgency)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .signalCard(signalUrgency)
+        .buttonStyle(.plain)
+        .disabled(onTap == nil)
     }
 
     private var signalUrgency: SignalUrgency {

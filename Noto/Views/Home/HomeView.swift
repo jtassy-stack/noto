@@ -23,6 +23,10 @@ struct HomeView: View {
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
 
+    // Card-tap destinations
+    @State private var selectedHomework: Homework?
+    @State private var selectedInsightContext: InsightContext?
+
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
     private var isFamilyMode: Bool { selectedChild == nil }
@@ -138,7 +142,8 @@ struct HomeView: View {
                             ForEach(engine.cards.sorted { $0.priority > $1.priority }) { card in
                                 BriefingCardView(
                                     card: card,
-                                    showChildName: children.count > 1
+                                    showChildName: children.count > 1,
+                                    onTap: { handleCardTap(card) }
                                 )
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
@@ -243,6 +248,36 @@ struct HomeView: View {
             } message: {
                 Text("Aucune session Pronote active. Reconnectez-vous pour synchroniser les données.")
             }
+            .sheet(item: $selectedHomework) { hw in
+                HomeworkDetailView(hw: hw)
+            }
+            .sheet(item: $selectedInsightContext) { ctx in
+                TrendDetailSheet(insight: ctx.insight, grades: ctx.grades)
+            }
+        }
+    }
+
+    // MARK: - Card Tap Routing
+
+    private func handleCardTap(_ card: BriefingCard) {
+        switch card.type {
+        case .homework, .test:
+            guard let id = card.targetID,
+                  let hw = modelContext.model(for: id) as? Homework else { return }
+            selectedHomework = hw
+        case .insight:
+            guard let id = card.targetID,
+                  let insight = modelContext.model(for: id) as? Insight,
+                  let child = children.first(where: { $0.firstName == card.childName })
+            else { return }
+            let grades = child.grades.filter { $0.subject == insight.subject }
+            selectedInsightContext = InsightContext(insight: insight, grades: grades)
+        case .message:
+            NotificationCenter.default.post(name: .navigateToMessages, object: nil)
+        case .cultureReco, .familyReco:
+            NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+        case .cancelled:
+            NotificationCenter.default.post(name: .navigateToSchool, object: nil)
         }
     }
 
@@ -412,6 +447,14 @@ struct HomeView: View {
             await engine.engine?.buildFamilyBriefing(children: children)
         }
     }
+}
+
+/// Pairs an Insight with the grades it analyses, so the trend sheet
+/// can plot the full series when opened from a briefing card tap.
+struct InsightContext: Identifiable {
+    let id = UUID()
+    let insight: Insight
+    let grades: [Grade]
 }
 
 /// Wrapper to bridge @MainActor BriefingEngine into SwiftUI's @StateObject.
