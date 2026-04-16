@@ -127,6 +127,16 @@ struct ActualitesView: View {
 
     // MARK: - syncAll
 
+    /// Cooldown between auto-syncs. Prevents `.onAppear` from firing a
+    /// 5-15s sync every time the parent switches back to Messages.
+    /// Pull-to-refresh bypasses this — it's an explicit user intent.
+    private static let autoSyncCooldownSeconds: TimeInterval = 60
+
+    private func shouldAutoSync() -> Bool {
+        guard let last = lastSyncDate else { return true }
+        return Date.now.timeIntervalSince(last) >= Self.autoSyncCooldownSeconds
+    }
+
     @MainActor
     private func syncAll() async {
         guard !isRefreshing else { return }
@@ -135,66 +145,104 @@ struct ActualitesView: View {
             isRefreshing = false
             lastSyncDate = .now
         }
-        for child in children {
-            switch child.schoolType {
-            case .ent:
-                let provider = child.entProvider ?? .pcn
-                let client = ENTClient(provider: provider)
-                let service = ENTSyncService(modelContext: modelContext)
+
+        let entChildren = children.filter { $0.schoolType == .ent }
+        let pronoteChildren = children.filter { $0.schoolType == .pronote }
+
+        await syncENTGrouped(entChildren)
+        await syncIMAPOnce(for: pronoteChildren)
+    }
+
+    /// Group ENT children by provider and authenticate once per provider
+    /// rather than once per child — the expensive headless-browser login
+    /// dwarfs the per-child fetch, and siblings on the same ENT share
+    /// session cookies anyway.
+    @MainActor
+    private func syncENTGrouped(_ entChildren: [Child]) async {
+        guard !entChildren.isEmpty else { return }
+        var byProvider: [ENTProvider: [Child]] = [:]
+        for child in entChildren {
+            byProvider[child.entProvider ?? .pcn, default: []].append(child)
+        }
+
+        let service = ENTSyncService(modelContext: modelContext)
+        for (provider, kids) in byProvider {
+            let credKey = "ent_credentials_\(provider.rawValue)"
+            guard let credData = try? KeychainService.load(key: credKey),
+                  let credStr = String(data: credData, encoding: .utf8) else {
+                syncError = "\(provider.name) : identifiants manquants. Reconnectez-vous dans Réglages."
+                continue
+            }
+            let parts = credStr.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else {
+                syncError = "\(provider.name) : identifiants corrompus."
+                continue
+            }
+            do {
+                let loginURL = provider.baseURL.appendingPathComponent("auth/login")
+                let cookies = try await HeadlessENTAuth.login(
+                    loginURL: loginURL,
+                    email: String(parts[0]),
+                    password: String(parts[1])
+                )
+                ENTClient.importCookies(cookies)
+                NSLog("[noto] ENT re-auth OK for %@ (%d cookies, %d children)", provider.rawValue, cookies.count, kids.count)
+            } catch ENTError.sessionExpired, ENTError.badCredentials {
+                NSLog("[noto][error] ENT bad credentials for %@", provider.rawValue)
+                syncError = "Identifiants \(provider.name) incorrects. Reconnectez-vous dans Réglages."
+                continue
+            } catch {
+                NSLog("[noto][error] ENT auth error for %@: %@", provider.rawValue, error.localizedDescription)
+                syncError = "Sync \(provider.name) : \(error.localizedDescription)"
+                continue
+            }
+
+            let client = ENTClient(provider: provider)
+            for child in kids {
                 guard let entChildId = child.entChildId else {
                     syncError = "\(child.firstName) : profil ENT incomplet (pas d'ID enfant)."
                     continue
                 }
                 do {
-                    // Re-authenticate each sync — ENT session cookies don't survive app restarts
-                    let credKey = "ent_credentials_\(provider.rawValue)"
-                    guard let credData = try? KeychainService.load(key: credKey),
-                          let credStr = String(data: credData, encoding: .utf8) else {
-                        syncError = "\(child.firstName) : identifiants ENT manquants. Reconnectez-vous dans Réglages."
-                        continue
-                    }
-                    let parts = credStr.split(separator: ":", maxSplits: 1)
-                    guard parts.count == 2 else {
-                        syncError = "\(child.firstName) : identifiants ENT corrompus."
-                        continue
-                    }
-                    let loginURL = provider.baseURL.appendingPathComponent("auth/login")
-                    let cookies = try await HeadlessENTAuth.login(
-                        loginURL: loginURL,
-                        email: String(parts[0]),
-                        password: String(parts[1])
-                    )
-                    ENTClient.importCookies(cookies)
-                    NSLog("[noto] ENT re-auth OK for %@ (%d cookies)", child.firstName, cookies.count)
                     try await service.sync(child: child, client: client, entChildId: entChildId)
-                    let photoCount = child.photos.count
-                    NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, photoCount)
-                    if photoCount == 0 {
-                        syncError = "\(child.firstName) : aucune photo partagée trouvée sur l'ENT."
-                    }
-                } catch ENTError.sessionExpired, ENTError.badCredentials {
-                    NSLog("[noto][error] ENT bad credentials for %@", child.firstName)
-                    syncError = "Identifiants PCN incorrects pour \(child.firstName). Reconnectez-vous dans Réglages."
+                    NSLog("[noto] ENT sync OK for %@ — %d photos total", child.firstName, child.photos.count)
                 } catch {
                     NSLog("[noto][error] ENT sync error for %@: %@", child.firstName, error.localizedDescription)
-                    syncError = "Sync ENT \(child.firstName) : \(error.localizedDescription)"
+                    syncError = "Sync \(child.firstName) : \(error.localizedDescription)"
                 }
-            case .pronote:
-                // IMAP sync applies to all children sharing the family mailbox
-                let service = IMAPSyncService(modelContext: modelContext)
-                do {
-                    try await service.sync(for: child)
-                } catch {
-                    NSLog("[noto][error] IMAP sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    // Surface the thrown error's own message — IMAPSyncError
-                    // cases ship actionable copy (e.g. emptyWhitelist points
-                    // the parent to the right Settings screen). Generic
-                    // fallback only when the message would otherwise be empty.
-                    let detail = error.localizedDescription
-                    syncError = detail.isEmpty
-                        ? "Erreur de synchronisation des messages."
-                        : detail
-                }
+            }
+        }
+    }
+
+    /// Fetch the IMAP inbox ONCE per syncAll and replay it against every
+    /// Pronote child that shares the family mailbox. Previous behaviour
+    /// opened a fresh connection + LOGIN + FETCH 50 for each child,
+    /// adding 2-3s of round-trip per sibling.
+    @MainActor
+    private func syncIMAPOnce(for pronoteChildren: [Child]) async {
+        guard !pronoteChildren.isEmpty else { return }
+        guard let config = IMAPService.loadConfig() else { return }
+
+        let fetched: [IMAPMessageInfo]
+        do {
+            fetched = try await IMAPService.fetchInbox(config: config)
+        } catch {
+            NSLog("[noto][error] IMAP fetch failed: %@", error.localizedDescription)
+            let detail = error.localizedDescription
+            syncError = detail.isEmpty ? "Erreur de synchronisation des messages." : detail
+            return
+        }
+
+        let service = IMAPSyncService(modelContext: modelContext)
+        for child in pronoteChildren {
+            do {
+                try service.process(child: child, config: config, fetched: fetched)
+            } catch {
+                NSLog("[noto][error] IMAP process failed for %@: %@", child.firstName, error.localizedDescription)
+                // `emptyWhitelist` ships actionable copy pointing to Settings;
+                // others fall through to a generic message.
+                let detail = error.localizedDescription
+                syncError = detail.isEmpty ? "Erreur de synchronisation des messages." : detail
             }
         }
     }
@@ -273,7 +321,14 @@ struct ActualitesView: View {
             }
             .onAppear {
                 refreshIMAPState()
-                Task { await syncAll() }
+                // Tab re-appear fires every time the user returns to
+                // Messages — syncing unconditionally made each visit wait
+                // 5-15s on a fresh IMAP fetch + per-child PCN re-auth.
+                // Pull-to-refresh (.refreshable) stays unconditional;
+                // onAppear only syncs if nothing has refreshed recently.
+                if shouldAutoSync() {
+                    Task { await syncAll() }
+                }
             }
             // Disconnecting or switching the mailbox from Settings
             // happens outside this view's hierarchy and would otherwise
