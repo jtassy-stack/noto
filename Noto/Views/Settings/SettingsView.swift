@@ -113,7 +113,7 @@ struct SettingsView: View {
                                 .font(NotoTheme.Typography.headline)
                             Spacer()
                             Text(String(format: "%.0f/20", gradeThreshold))
-                                .font(NotoTheme.Typography.mono(13))
+                                .font(NotoTheme.Typography.functional(13))
                                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                         }
                         Slider(value: $gradeThreshold, in: 4...15, step: 1)

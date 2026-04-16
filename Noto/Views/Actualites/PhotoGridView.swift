@@ -83,10 +83,10 @@ struct PhotoGridView: View {
     private func childHeader(_ child: Child, count: Int) -> some View {
         HStack(spacing: NotoTheme.Spacing.sm) {
             Text(child.firstName)
-                .font(NotoTheme.Typography.mono(13, weight: .bold))
+                .font(NotoTheme.Typography.functional(13, weight: .bold))
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
             Text("\(count)")
-                .font(NotoTheme.Typography.mono(11))
+                .font(NotoTheme.Typography.functional(11))
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
             Spacer()
         }
@@ -111,7 +111,7 @@ struct PhotoGridView: View {
         .overlay(alignment: .bottomTrailing) {
             if let date = lastSyncDate, !isSyncing {
                 Text(date.relativeShort)
-                    .font(NotoTheme.Typography.mono(8))
+                    .font(NotoTheme.Typography.functional(8))
                     .foregroundStyle(NotoTheme.Colors.textTertiary)
                     .offset(x: 4, y: 14)
             }
@@ -256,7 +256,7 @@ struct PhotoBrowserView: View {
                 }
                 Spacer()
                 Text("\(currentIndex + 1) / \(photos.count)")
-                    .font(NotoTheme.Typography.mono(13))
+                    .font(NotoTheme.Typography.functional(13))
                     .foregroundStyle(.white.opacity(0.8))
             }
             .padding(.horizontal, NotoTheme.Spacing.md)
@@ -338,19 +338,19 @@ private struct PhotoPageView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let title = photo.title {
                         Text(title)
-                            .font(NotoTheme.Typography.mono(12, weight: .bold))
+                            .font(NotoTheme.Typography.functional(12, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                     }
                     if let author = photo.authorName {
                         Text(author)
-                            .font(NotoTheme.Typography.mono(11))
+                            .font(NotoTheme.Typography.functional(11))
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
                 Spacer()
                 Text(photo.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
-                    .font(NotoTheme.Typography.mono(11))
+                    .font(NotoTheme.Typography.functional(11))
                     .foregroundStyle(.white.opacity(0.6))
 
                 if let img = image {

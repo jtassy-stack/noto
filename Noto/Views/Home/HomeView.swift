@@ -698,7 +698,7 @@ private struct ChildStoryRing: View {
                             .frame(width: 54, height: 54)
                             .overlay(
                                 Text(String(child.firstName.prefix(1)).uppercased())
-                                    .font(NotoTheme.Typography.mono(22, weight: .bold))
+                                    .font(NotoTheme.Typography.functional(22, weight: .bold))
                                     .foregroundStyle(NotoTheme.Colors.paper)
                             )
                     }
@@ -709,7 +709,7 @@ private struct ChildStoryRing: View {
                         HStack {
                             Spacer()
                             Text(schoolBadgeLabel)
-                                .font(NotoTheme.Typography.mono(7, weight: .bold))
+                                .font(NotoTheme.Typography.functional(7, weight: .bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 3)
                                 .padding(.vertical, 1)
@@ -735,12 +735,12 @@ private struct ChildStoryRing: View {
                 }
 
                 Text(child.firstName)
-                    .font(NotoTheme.Typography.mono(10))
+                    .font(NotoTheme.Typography.functional(10))
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                     .lineLimit(1)
 
                 Text(child.grade)
-                    .font(NotoTheme.Typography.mono(9))
+                    .font(NotoTheme.Typography.functional(9))
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .lineLimit(1)
             }
@@ -982,7 +982,7 @@ private struct ActionChip: View {
                     .font(.system(size: 12))
                     .foregroundStyle(accentColor)
                 Text("\(count) \(label)")
-                    .font(NotoTheme.Typography.mono(12))
+                    .font(NotoTheme.Typography.functional(12))
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                 if onTap != nil {
                     Image(systemName: "arrow.right")
@@ -1122,7 +1122,7 @@ private struct AbsenceShortcutCard: View {
             } label: {
                 HStack(spacing: NotoTheme.Spacing.xs) {
                     Text("Signaler une absence")
-                        .font(NotoTheme.Typography.mono(13, weight: .bold))
+                        .font(NotoTheme.Typography.functional(13, weight: .bold))
                         .foregroundStyle(NotoTheme.Colors.cobalt)
                     Image(systemName: "arrow.right")
                         .font(.system(size: 12, weight: .bold))
@@ -1163,7 +1163,7 @@ private struct PronoteReconnectCard: View {
             }
             Spacer()
             Button("Reconnecter", action: onReconnect)
-                .font(NotoTheme.Typography.mono(12, weight: .bold))
+                .font(NotoTheme.Typography.functional(12, weight: .bold))
                 .foregroundStyle(NotoTheme.Colors.shadow)
                 .padding(.horizontal, NotoTheme.Spacing.sm)
                 .padding(.vertical, 6)

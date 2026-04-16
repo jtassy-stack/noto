@@ -51,6 +51,10 @@ enum NotoTheme {
         static let pronote = Color(hex: 0x8B46E6)
         static let ent     = cobalt
 
+        // MARK: Legacy aliases (used by logo, story rings — will phase out)
+        static let paper  = textPrimary
+        static let indigo = brand
+
         // MARK: - Helper
         private static func adaptive(dark: UInt, light: UInt) -> Color {
             Color(UIColor { traits in

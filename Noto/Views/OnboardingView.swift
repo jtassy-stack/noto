@@ -14,7 +14,7 @@ struct OnboardingView: View {
                 NotoLogo(size: 48)
 
                 Text("l'essentiel de la scolarité,\nen un coup d'œil.")
-                    .font(NotoTheme.Typography.serif(18))
+                    .font(NotoTheme.Typography.human(18))
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
 

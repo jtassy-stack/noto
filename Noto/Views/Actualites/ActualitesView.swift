@@ -462,7 +462,7 @@ private struct FeedItemRow: View {
                     .fill(avatarColor.opacity(0.2))
                     .frame(width: 36, height: 36)
                 Text(String(child.firstName.prefix(1)).uppercased())
-                    .font(NotoTheme.Typography.mono(14, weight: .bold))
+                    .font(NotoTheme.Typography.functional(14, weight: .bold))
                     .foregroundStyle(avatarColor)
             }
 
@@ -471,7 +471,7 @@ private struct FeedItemRow: View {
                 // Top row: sender + timestamp
                 HStack(alignment: .firstTextBaseline) {
                     Text(msg.sender)
-                        .font(NotoTheme.Typography.mono(13, weight: msg.read ? .regular : .bold))
+                        .font(NotoTheme.Typography.functional(13, weight: msg.read ? .regular : .bold))
                         .foregroundStyle(NotoTheme.Colors.textPrimary)
                         .lineLimit(1)
                     Spacer()

@@ -219,7 +219,7 @@ struct InsightsView: View {
                 if let avg = generalAverage {
                     HStack(alignment: .lastTextBaseline, spacing: 4) {
                         Text(String(format: "%.1f", avg))
-                            .font(NotoTheme.Typography.mono(48, weight: .bold))
+                            .font(NotoTheme.Typography.functional(48, weight: .bold))
                             .foregroundStyle(averageColor(avg))
                         Text("/20")
                             .font(NotoTheme.Typography.body)
@@ -244,7 +244,7 @@ struct InsightsView: View {
                         .rotationEffect(.degrees(-90))
                         .animation(.spring(response: 0.8), value: avg)
                     Text("\(Int(avg * 5))%")
-                        .font(NotoTheme.Typography.mono(12, weight: .bold))
+                        .font(NotoTheme.Typography.functional(12, weight: .bold))
                         .foregroundStyle(averageColor(avg))
                 }
                 .frame(width: 72, height: 72)
@@ -834,7 +834,7 @@ private struct TrendDetailSheet: View {
     private func statTile(label: String, value: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(NotoTheme.Typography.mono(22, weight: .bold))
+                .font(NotoTheme.Typography.functional(22, weight: .bold))
                 .foregroundStyle(color)
             Text("/20")
                 .font(.system(size: 11))
