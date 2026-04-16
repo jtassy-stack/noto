@@ -10,6 +10,14 @@ import SwiftData
 ///     rows without UID
 ///   - Whitelist filtering: only mails matching the configured MailFilter
 ///     whitelist are persisted (user's personal mail never lands in the DB)
+///
+/// Dedicated-channel bypass (monlycée.net):
+///   ENT-provisioned mailboxes are closed by nature — every message is
+///   by construction a school-parent communication. For these, filtering
+///   is both pointless and harmful (it would drop legitimate senders
+///   outside the whitelist, e.g. rectorat, partenaires, orientation).
+///   When `config.isDedicatedSchoolChannel` is true, the whitelist is
+///   not built and every fetched message is persisted.
 @MainActor
 struct IMAPSyncService {
     let modelContext: ModelContext
@@ -21,22 +29,33 @@ struct IMAPSyncService {
 
         let fetched = try await IMAPService.fetchInbox(config: config)
 
+        // Dedicated school channels bypass filtering entirely. The guard
+        // runs BEFORE whitelist construction so a monlycée-only user with
+        // no Pronote child and no manual entries doesn't hit
+        // `emptyWhitelist`.
+        let bypassFilter = config.isDedicatedSchoolChannel
+
         // Build whitelist once per sync for performance.
-        // If it is empty, throw rather than let personal mail into
-        // SwiftData — the onboarding copy promises "only school mail
-        // is synced", honouring that promise is non-negotiable under
-        // the CLAUDE.md privacy contract.
-        let whitelist = MailWhitelist.build(from: [child])
-        guard !whitelist.isEmpty else {
-            NSLog("[noto][warn] IMAP sync aborted — empty whitelist for %@", child.firstName)
-            throw IMAPSyncError.emptyWhitelist
+        // If it is empty (and we're not on a dedicated channel), throw
+        // rather than let personal mail into SwiftData — the onboarding
+        // copy promises "only school mail is synced", honouring that
+        // promise is non-negotiable under the CLAUDE.md privacy contract.
+        let whitelist: [MailWhitelistEntry]
+        if bypassFilter {
+            whitelist = []
+        } else {
+            whitelist = MailWhitelist.build(from: [child])
+            guard !whitelist.isEmpty else {
+                NSLog("[noto][warn] IMAP sync aborted — empty whitelist for %@", child.firstName)
+                throw IMAPSyncError.emptyWhitelist
+            }
         }
 
         var keptCount = 0
         var droppedCount = 0
 
         for info in fetched {
-            if !MailFilter.shouldKeep(
+            if !bypassFilter && !MailFilter.shouldKeep(
                 senderAddress: info.from,
                 subject: info.subject,
                 whitelist: whitelist
@@ -86,8 +105,8 @@ struct IMAPSyncService {
         // Unconditionally log metrics (not DEBUG-gated) — a parent
         // seeing an empty Messages tab after a successful sync needs
         // a trail for support/diagnostics. No PII logged.
-        NSLog("[noto] IMAP sync: fetched=%d kept=%d dropped=%d for %@",
-              fetched.count, keptCount, droppedCount, child.firstName)
+        NSLog("[noto] IMAP sync: provider=%@ fetched=%d kept=%d dropped=%d for %@",
+              config.providerID, fetched.count, keptCount, droppedCount, child.firstName)
     }
 
     // MARK: - Dedupe helpers

@@ -32,21 +32,44 @@ struct MonLyceeIMAPSetupView: View {
         }
     }
 
+    /// True once the user has typed a monlycée address. Drives the
+    /// "dedicated channel" framing — copy + title change to convey
+    /// that this is a school-parent channel rather than a generic
+    /// inbox about to be filtered.
+    private var isDedicatedSchoolChannel: Bool {
+        resolvedPreset?.isDedicatedSchoolChannel ?? false
+    }
+
+    private var headerTitle: String {
+        isDedicatedSchoolChannel
+            ? "Connecter MonLycée.net"
+            : "Connecter une boîte mail"
+    }
+
+    private var headerSubtitle: String {
+        if isDedicatedSchoolChannel {
+            return "MonLycée.net est le canal officiel de communication entre votre lycée et vous. Tous les messages reçus dans cette boîte sont affichés dans nōto — aucun courrier personnel n'y transite."
+        }
+        return "Entrez votre adresse e-mail et mot de passe. nōto détecte automatiquement votre fournisseur (Gmail, Outlook, iCloud, MonLycée ou autre) et ne synchronise que les mails scolaires."
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: NotoTheme.Spacing.lg) {
                     // Header
                     VStack(spacing: NotoTheme.Spacing.sm) {
-                        Image(systemName: "envelope.badge.shield.half.filled")
+                        Image(systemName: isDedicatedSchoolChannel
+                              ? "building.columns"
+                              : "envelope.badge.shield.half.filled")
                             .font(.system(size: 48))
                             .foregroundStyle(NotoTheme.Colors.cobalt)
 
-                        Text("Connecter une boîte mail")
+                        Text(headerTitle)
                             .font(NotoTheme.Typography.title)
                             .foregroundStyle(NotoTheme.Colors.textPrimary)
 
-                        Text("Entrez votre adresse e-mail et mot de passe. nōto détecte automatiquement votre fournisseur (Gmail, Outlook, iCloud, MonLycée ou autre) et ne synchronise que les mails scolaires.")
+                        Text(headerSubtitle)
                             .font(NotoTheme.Typography.body)
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
                             .multilineTextAlignment(.center)

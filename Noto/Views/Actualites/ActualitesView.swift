@@ -52,6 +52,7 @@ struct ActualitesView: View {
     @State private var path: [FeedDestination] = []
     @State private var showMonLyceeSetup = false
     @State private var imapConfigured = false
+    @State private var imapProviderID: String? = nil
     @State private var syncError: String?
 
     // Stable child-index → color mapping
@@ -275,6 +276,7 @@ struct ActualitesView: View {
 
     private func refreshIMAPState() {
         imapConfigured = IMAPService.isConfigured
+        imapProviderID = IMAPService.loadConfig()?.providerID
     }
 
     private var monLyceePrompt: some View {
@@ -336,7 +338,8 @@ struct ActualitesView: View {
                         FeedItemRow(
                             msg: item.msg,
                             child: item.child,
-                            avatarColor: avatarColor(for: item.child)
+                            avatarColor: avatarColor(for: item.child),
+                            imapProviderID: imapProviderID
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -435,6 +438,10 @@ private struct FeedItemRow: View {
     let msg: Message
     let child: Child
     let avatarColor: Color
+    /// providerID of the active IMAP config, so .imap messages from a
+    /// dedicated school channel (monlycée.net) can be labelled "MonLycée"
+    /// instead of the generic "IMAP" tag. nil outside IMAP context.
+    let imapProviderID: String?
 
     /// Strip HTML tags for body preview.
     private var bodyPreview: String {
@@ -501,7 +508,7 @@ private struct FeedItemRow: View {
                     ChildTag(name: child.firstName, color: avatarColor)
 
                     // Source badge
-                    SourceBadge(source: msg.source)
+                    SourceBadge(source: msg.source, imapProviderID: imapProviderID)
 
                     // Schoolbook badges
                     if msg.kind == .schoolbook {
@@ -530,19 +537,23 @@ private struct FeedItemRow: View {
 
 private struct SourceBadge: View {
     let source: MessageSource
+    /// When source is .imap and this is "monlycee", the badge reads
+    /// "MonLycée" so the feed conveys a dedicated school channel
+    /// rather than a generic mailbox.
+    let imapProviderID: String?
 
     private var label: String {
         switch source {
-        case .ent: return "ENT"
-        case .imap: return "IMAP"
+        case .ent:     return "ENT"
+        case .imap:    return imapProviderID == "monlycee" ? "MonLycée" : "IMAP"
         case .pronote: return "Pronote"
         }
     }
 
     private var color: Color {
         switch source {
-        case .ent: return NotoTheme.Colors.ent
-        case .imap: return NotoTheme.Colors.pronote
+        case .ent:     return NotoTheme.Colors.ent
+        case .imap:    return NotoTheme.Colors.pronote
         case .pronote: return NotoTheme.Colors.pronote
         }
     }

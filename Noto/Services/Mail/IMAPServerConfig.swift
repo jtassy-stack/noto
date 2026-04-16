@@ -18,6 +18,25 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     /// Values: "gmail", "outlook", "icloud", "monlycee", "custom"
     let providerID: String
 
+    /// True when the IMAP account is a school-provisioned mailbox where
+    /// every message is by definition a school-parent communication
+    /// (MonLycée.net, etc.). Personal email never transits here — it
+    /// is a closed channel issued by the ENT.
+    ///
+    /// When true, callers MUST skip whitelist filtering: every fetched
+    /// message is kept and presented as school content, and the UI must
+    /// frame the mailbox as a dedicated channel rather than a generic
+    /// inbox being filtered.
+    var isDedicatedSchoolChannel: Bool {
+        Self.isDedicatedSchoolChannel(providerID: providerID)
+    }
+
+    /// Shared rule so `Preset` (setup-time, no credentials) and full
+    /// config (post-auth) answer the same question.
+    static func isDedicatedSchoolChannel(providerID: String) -> Bool {
+        providerID == "monlycee"
+    }
+
     /// Lightweight preset describing an IMAP server without credentials.
     /// Used by `IMAPProviderResolver` to return the server half of the
     /// config; the caller then attaches `username`/`password`.
@@ -25,6 +44,10 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
         let host: String
         let port: Int
         let providerID: String
+
+        var isDedicatedSchoolChannel: Bool {
+            IMAPServerConfig.isDedicatedSchoolChannel(providerID: providerID)
+        }
     }
 
     /// Convenience: build a full config from a preset + credentials.
