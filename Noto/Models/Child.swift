@@ -28,6 +28,12 @@ final class Child {
     var entChildId: String?        // ENT user ID for schoolbook API
     var entProvider: ENTProvider?   // pcn or monlycee
     var entClassName: String?      // Full class name from ENT (e.g. "CM1 - CM2 A - M. Lucas") for message filtering
+    /// Répertoire National des Établissements code. Populated during
+    /// onboarding from the directory API school picker (Phase 8.6).
+    /// When present, `MailWhitelist.build` uses the celyn directory
+    /// to fetch authoritative `mailDomains` (ENT + académie + commune
+    /// services) instead of inferring from `establishment`.
+    var rneCode: String?
     var family: Family?
     var createdAt: Date
 
@@ -51,7 +57,8 @@ final class Child {
         grade: String,
         schoolType: SchoolType,
         establishment: String,
-        pawnoteID: String? = nil
+        pawnoteID: String? = nil,
+        rneCode: String? = nil
     ) {
         self.firstName = firstName
         self.level = level
@@ -59,6 +66,7 @@ final class Child {
         self.schoolType = schoolType
         self.establishment = establishment
         self.pawnoteID = pawnoteID
+        self.rneCode = rneCode
         self.createdAt = .now
         self.grades = []
         self.schedule = []
