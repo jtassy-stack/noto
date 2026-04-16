@@ -88,143 +88,100 @@ struct HomeView: View {
                 }
 
                 ScrollView {
-                    LazyVStack(spacing: NotoTheme.Spacing.md) {
-                        // MARK: Story Rings
-                        if !children.isEmpty {
-                            StoryRingsRow(children: children)
-                        }
-
-                    // MARK: Pronote reconnect prompt
-                    if !pronoteChildrenNeedingReconnect.isEmpty {
-                        PronoteReconnectCard(
-                            children: pronoteChildrenNeedingReconnect,
-                            onReconnect: { showPronoteReconnect = true }
-                        )
-                    }
-
-                    // MARK: Global status banner
-                    GlobalStatusBanner(children: selectedChild.map { [$0] } ?? children)
-
-                    if let name = family?.parentName {
-                        GreetingHeader(parentName: name)
-                    }
-
-                    // Briefing summary sits above the fold: it is the primary
-                    // "everything OK?" signal for skim-and-go parents.
-                    if !engine.briefingText.isEmpty {
-                        BriefingSummaryView(text: engine.briefingText)
-                    }
-
-                    // MARK: Hero Card
-                    if !children.isEmpty {
-                        HeroCard(
-                            unreadMessageCount: unreadMessageCount,
-                            urgentHomeworkCount: urgentHomeworkCount,
-                            recentGradesCount: recentGradesCount,
-                            children: children,
-                            onTap: {
-                                let name: Notification.Name = unreadMessageCount > 0
-                                    ? .navigateToMessages : .navigateToSchool
-                                NotificationCenter.default.post(name: name, object: nil)
-                            }
-                        )
-                    }
-
-                    // MARK: Morning Action Strip
-                    if !children.isEmpty {
-                        MorningActionStrip(
-                            messageCount: unreadMessageCount,
-                            homeworkCount: urgentHomeworkCount,
-                            carnetCount: unsignedCarnetsCount,
-                            onMessagesTap: { NotificationCenter.default.post(name: .navigateToMessages, object: nil) },
-                            onHomeworkTap: { NotificationCenter.default.post(name: .navigateToSchool, object: nil) },
-                            onCarnetsTap:  { NotificationCenter.default.post(name: .navigateToMessages, object: nil) }
-                        )
-                    }
-
-                    // MARK: B2 — Discover bridge card
-                    if !children.isEmpty && !children.flatMap(\.grades).isEmpty {
-                        DiscoverBridgeCard(
-                            teaser: engine.cards.first { $0.type == .cultureReco }
-                        )
-                    }
-
-                    // MARK: C2 — Photos shortcut card
-                    let allPhotos = children.flatMap(\.photos)
-                    if !allPhotos.isEmpty {
-                        PhotosShortcutCard(children: children)
-                    }
-
-                    // MARK: Absence Shortcut
-                    if isSchoolDay && hasENTChildren {
-                        AbsenceShortcutCard(showAbsence: $showAbsence)
-                    }
-
-                    // Auto-reconnect banner
-                    if pronoteService.isReconnecting {
-                        ReconnectingBanner()
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    SyncStatusRow(
-                        isSyncing: isSyncing,
-                        lastSyncLabel: lastSyncLabel,
-                        syncError: syncError
-                    )
-
-                    // Celebrations collapse into a disclosure so actionable cards
-                    // aren't drowned by "points forts" when things are going well.
-                    if engine.isLoading {
-                        ProgressView()
-                            .padding(.vertical, NotoTheme.Spacing.xl)
-                    } else if engine.cards.isEmpty {
-                        EmptyBriefingView()
-                    } else {
-                        let primaryCards = engine.cards.filter { $0.priority != .positive }
-                        let celebrationCards = engine.cards.filter { $0.priority == .positive }
-
-                        ForEach(primaryCards) { card in
-                            BriefingCardView(
-                                card: card,
-                                showChildName: isFamilyMode
-                            )
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-
-                        if !celebrationCards.isEmpty {
-                            DisclosureGroup(
-                                isExpanded: $celebrationsExpanded,
-                                content: {
-                                    VStack(spacing: NotoTheme.Spacing.md) {
-                                        ForEach(celebrationCards) { card in
-                                            BriefingCardView(
-                                                card: card,
-                                                showChildName: isFamilyMode
-                                            )
-                                        }
-                                    }
-                                    .padding(.top, NotoTheme.Spacing.sm)
-                                },
-                                label: {
-                                    HStack(spacing: NotoTheme.Spacing.xs) {
-                                        Image(systemName: "star.fill")
-                                            .foregroundStyle(NotoTheme.Colors.success)
-                                            .font(.system(size: 13))
-                                        Text("Bonne nouvelle (\(celebrationCards.count))")
-                                            .font(NotoTheme.Typography.headline)
-                                            .foregroundStyle(NotoTheme.Colors.textPrimary)
-                                    }
+                    LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                        // MARK: Header — Greeting
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text("Bonjour \(family?.parentName ?? "")")
+                                        .font(NotoTheme.Typography.greeting)
+                                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                    Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "fr_FR"))).capitalized)
+                                        .font(NotoTheme.Typography.metadata)
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 }
+                                Spacer()
+                                Button { showSettings = true } label: {
+                                    Image(systemName: "gearshape")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                        .padding(.bottom, NotoTheme.Spacing.sm)
+
+                        // MARK: Pronote reconnect prompt (keep for functionality)
+                        if !pronoteChildrenNeedingReconnect.isEmpty {
+                            PronoteReconnectCard(
+                                children: pronoteChildrenNeedingReconnect,
+                                onReconnect: { showPronoteReconnect = true }
                             )
-                            .tint(NotoTheme.Colors.textSecondary)
+                        }
+
+                        // MARK: Sync status (compact)
+                        if isSyncing || syncError != nil {
+                            SyncStatusRow(
+                                isSyncing: isSyncing,
+                                lastSyncLabel: lastSyncLabel,
+                                syncError: syncError
+                            )
+                        }
+
+                        // MARK: Signal Feed — À traiter
+                        if engine.isLoading {
+                            ProgressView()
+                                .padding(.vertical, NotoTheme.Spacing.xl)
+                        } else if !engine.cards.isEmpty {
+                            Text("À TRAITER")
+                                .sectionLabelStyle()
+
+                            ForEach(engine.cards.sorted { $0.priority > $1.priority }) { card in
+                                BriefingCardView(
+                                    card: card,
+                                    showChildName: children.count > 1
+                                )
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
+                        } else {
+                            // All clear — no signals
+                            HStack(spacing: NotoTheme.Spacing.sm) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(NotoTheme.Colors.success)
+                                    .font(.system(size: 14))
+                                Text("Tout va bien")
+                                    .font(NotoTheme.Typography.signalTitle)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(NotoTheme.Spacing.md)
                             .notoCard()
                         }
+
+                        // MARK: Timeline — Prochaines 48h
+                        let targetChildren = selectedChild.map { [$0] } ?? children
+                        if !targetChildren.isEmpty {
+                            Text("PROCHAINES 48H")
+                                .sectionLabelStyle()
+
+                            TimelineView(children: targetChildren)
+                        }
+
+                        // MARK: Discover teaser
+                        if let teaser = engine.cards.first(where: { $0.type == .cultureReco }) {
+                            Text("DÉCOUVRIR")
+                                .sectionLabelStyle()
+
+                            DiscoverBridgeCard(teaser: teaser)
+                        }
+
+                        // MARK: Absence Shortcut (keep for ENT)
+                        if isSchoolDay && hasENTChildren {
+                            AbsenceShortcutCard(showAbsence: $showAbsence)
+                        }
                     }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: engine.cards)
+                    .padding(NotoTheme.Spacing.md)
                 }
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: engine.cards)
-                .padding(NotoTheme.Spacing.md)
-            }
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)
             .navigationTitle("")
