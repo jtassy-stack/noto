@@ -784,6 +784,15 @@ private struct HomeworkRow: View {
                 .font(NotoTheme.Typography.body)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .lineLimit(3)
+
+            Button {
+                NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+            } label: {
+                Label("Trouver une ressource", systemImage: "safari")
+                    .font(NotoTheme.Typography.caption)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(NotoTheme.Colors.brand)
         }
     }
 
@@ -834,6 +843,22 @@ private struct HomeworkDetailView: View {
                             .foregroundStyle(NotoTheme.Colors.success)
                             .padding(.top, NotoTheme.Spacing.md)
                     }
+
+                    Divider()
+
+                    // Bridge to Discover — the moment where parental intent
+                    // to find a resource is highest (Sophie C. persona).
+                    Button {
+                        dismiss()
+                        NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+                    } label: {
+                        Label("Trouver une ressource", systemImage: "safari")
+                            .font(NotoTheme.Typography.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, NotoTheme.Spacing.sm)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(NotoTheme.Colors.brand)
                 }
                 .padding(NotoTheme.Spacing.md)
             }
