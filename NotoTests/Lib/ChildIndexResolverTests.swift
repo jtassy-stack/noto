@@ -101,6 +101,56 @@ struct ChildIndexResolverTests {
         #expect(ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnote) == 0)
     }
 
+    // MARK: - Ambiguous fallback (regression guard for F3)
+
+    @Test("Ambiguous firstName fallback refuses to pick")
+    func ambiguousFallback() throws {
+        // Two pawnote resources share the same first name (blended
+        // family with two kids called Louis). With only a firstName
+        // to go on, the resolver MUST return nil rather than pick the
+        // first hit — picking one would silently overwrite the other
+        // on the very next sync, re-introducing the exact bug this
+        // helper is fighting. Caller then surfaces a sync error and
+        // the parent re-runs QR login to backfill pawnoteID.
+        let ctx = try makeContext()
+        let child = makeChild(firstName: "Louis", pawnoteID: nil, in: ctx)
+        let pawnote = [
+            pc("pid-1", "DUPONT Louis"),
+            pc("pid-2", "DURAND Louis"),
+        ]
+        #expect(ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnote) == nil)
+    }
+
+    @Test("Ambiguous fallback: even after stale-ID fall-through, collision returns nil")
+    func ambiguousAfterStaleID() throws {
+        // Defense in depth: stored pawnoteID is stale AND the fallback
+        // name hits multiple rows. Must not silently pick.
+        let ctx = try makeContext()
+        let child = makeChild(firstName: "Louis", pawnoteID: "pid-stale", in: ctx)
+        let pawnote = [
+            pc("pid-a", "DUPONT Louis"),
+            pc("pid-b", "DURAND Louis"),
+        ]
+        #expect(ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnote) == nil)
+    }
+
+    // MARK: - Diacritic behavior (pinning current contract)
+
+    @Test("Accents are NOT folded — onboarding must store exactly what pawnote returns")
+    func diacriticsNotFolded() throws {
+        // This test pins the current contract: firstName comparison
+        // is a plain lowercased() compare, no Unicode folding. If
+        // onboarding ever stores a folded form while pawnote still
+        // returns accented ("Zoé" vs "Zoe"), the resolver misses —
+        // and the caller surfaces a sync error. That's the intended
+        // behavior until product decides folding is worth the risk
+        // of mismatching genuinely distinct kids.
+        let ctx = try makeContext()
+        let child = makeChild(firstName: "Zoe", pawnoteID: nil, in: ctx)
+        let pawnote = [pc("pid-1", "DUPONT Zoé")]
+        #expect(ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnote) == nil)
+    }
+
     // MARK: - Miss
 
     @Test("No match at all returns nil")

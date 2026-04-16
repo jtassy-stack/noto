@@ -42,10 +42,23 @@ enum ChildIndexResolver {
 
         // Fallback: firstName match. Apply the same transform used at
         // onboarding so "DUPONT Gaston" resolves to "Gaston".
+        //
+        // This branch MUST refuse ambiguous matches — picking the first
+        // hit would re-introduce the exact bug this helper is fighting.
+        // Two siblings sharing a firstName (blended families, identical
+        // edited labels, single-word pawnote names that collapse to the
+        // same token) would otherwise both resolve to the same pawnote
+        // index, and the second sync would silently overwrite the first.
+        // Returning nil here forces the caller to surface a sync error
+        // and prompt the parent to re-run QR login — which triggers
+        // ChildDedupe backfill and puts both kids back on the primary
+        // pawnoteID path.
         let target = child.firstName.lowercased()
-        return pawnoteChildren.firstIndex { pc in
-            firstName(from: pc.name).lowercased() == target
+        let matches = pawnoteChildren.indices.filter {
+            firstName(from: pawnoteChildren[$0].name).lowercased() == target
         }
+        guard matches.count == 1 else { return nil }
+        return matches.first
     }
 
     /// Pawnote returns `"LASTNAME Firstname"` — onboarding drops the
