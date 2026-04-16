@@ -54,7 +54,7 @@ struct IMAPSyncService {
         } else {
             whitelist = MailWhitelist.build(from: [child])
             guard !whitelist.isEmpty else {
-                NSLog("[noto][warn] IMAP sync aborted — empty whitelist for %@", child.firstName)
+                NSLog("[noto][warn] IMAP sync aborted — empty whitelist (provider=%@)", config.providerID)
                 throw IMAPSyncError.emptyWhitelist
             }
         }
@@ -75,7 +75,7 @@ struct IMAPSyncService {
             // Primary dedupe: exact UID match
             if let uid = info.uid.map(String.init),
                let existing = child.messages.first(where: { $0.imapUID == uid }) {
-                updateIfNeeded(existing: existing, with: info)
+                updateIfNeeded(existing: existing, with: info, config: config)
                 continue
             }
 
@@ -90,7 +90,7 @@ struct IMAPSyncService {
                 if let uid = info.uid.map(String.init), existing.imapUID == nil {
                     existing.imapUID = uid
                 }
-                updateIfNeeded(existing: existing, with: info)
+                updateIfNeeded(existing: existing, with: info, config: config)
                 continue
             }
 
@@ -111,14 +111,12 @@ struct IMAPSyncService {
             keptCount += 1
         }
 
-        // Log provider + counts on one line (no name), and a separate
-        // line with the child first-name (no provider). Combining the
-        // two in a single record would let a log reader associate
-        // "child X ↔ lycée Y", which RGPD treats as indirectly
-        // identifying personal data.
+        // Provider + counts only. The child's first name is deliberately
+        // absent here — combining "lycée Y ↔ child name" in the unified
+        // log (even across two lines, since timestamps are microsecond-
+        // precise) is indirectly identifying under RGPD.
         NSLog("[noto] IMAP sync: provider=%@ fetched=%d kept=%d dropped=%d",
               config.providerID, fetched.count, keptCount, droppedCount)
-        NSLog("[noto] IMAP sync completed for %@", child.firstName)
     }
 
     // MARK: - Dedupe helpers
@@ -139,7 +137,7 @@ struct IMAPSyncService {
         }
     }
 
-    func updateIfNeeded(existing: Message, with info: IMAPMessageInfo) {
+    func updateIfNeeded(existing: Message, with info: IMAPMessageInfo, config: IMAPServerConfig) {
         // Clean up sender format if previously stored as full RFC 5322.
         if existing.sender.contains("<") {
             existing.sender = info.from
@@ -153,6 +151,14 @@ struct IMAPSyncService {
             .isEmpty
         if effectivelyEmpty && !info.body.isEmpty {
             existing.body = info.body
+        }
+        // Backfill imapProvider for legacy rows inserted before the
+        // field existed. Without this, any message predating this PR
+        // stays `imapProvider == nil` and `SourceBadge` renders "IMAP"
+        // even for a reconnected MonLycée inbox — exactly the stale
+        // live-state bug this PR was supposed to eliminate.
+        if existing.imapProvider == nil {
+            existing.imapProvider = config.providerID
         }
     }
 }
