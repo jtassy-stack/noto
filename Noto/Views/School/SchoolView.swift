@@ -186,62 +186,38 @@ private struct SchoolChildInterstitial: View {
     }
 }
 
-// MARK: - Per-child school view
+// MARK: - Per-child school view (adaptive: Pronote profile vs ENT feed)
 
 private struct ChildSchoolView: View {
     let child: Child
     @Binding var activeTab: SchoolTab?
     @Binding var showAbsence: Bool
-
-    private var availableTabs: [SchoolTab] {
-        switch child.schoolType {
-        case .pronote:
-            return [.notes, .edt, .devoirs]
-        case .ent:
-            return [.carnet, .devoirs]
-        }
-    }
-
-    private var resolvedTab: SchoolTab {
-        if let tab = activeTab, availableTabs.contains(tab) { return tab }
-        return availableTabs[0]
-    }
+    @State private var showSchedule = false
+    @State private var showHomework = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Visual capsule tab picker
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: NotoTheme.Spacing.sm) {
-                    ForEach(availableTabs, id: \.self) { tab in
-                        Button {
-                            activeTab = tab
-                        } label: {
-                            Label(tab.title, systemImage: tab.icon)
-                                .font(NotoTheme.Typography.caption)
-                                .padding(.horizontal, NotoTheme.Spacing.md)
-                                .padding(.vertical, NotoTheme.Spacing.sm)
-                                .background(resolvedTab == tab ? NotoTheme.Colors.brand : NotoTheme.Colors.card)
-                                .foregroundStyle(resolvedTab == tab ? NotoTheme.Colors.shadow : NotoTheme.Colors.textPrimary)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
+        ScrollView {
+            LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                // MARK: Child header
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(child.firstName)
+                        .font(NotoTheme.Typography.screenTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("\(child.grade) · \(child.displayEstablishment)")
+                        .font(NotoTheme.Typography.metadata)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
                 }
-                .padding(.horizontal, NotoTheme.Spacing.md)
-                .padding(.vertical, NotoTheme.Spacing.sm)
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, NotoTheme.Spacing.sm)
 
-            // Tab content
-            switch resolvedTab {
-            case .notes:
-                GradesListView(children: [child])
-            case .edt:
-                ScheduleListView(children: [child])
-            case .carnet:
-                SchoolbookListView(children: [child])
-            case .devoirs:
-                HomeworkListView(children: [child])
+                // MARK: Adaptive content
+                if child.schoolType == .pronote {
+                    pronoteProfile
+                } else {
+                    entFeed
+                }
             }
+            .padding(NotoTheme.Spacing.md)
         }
         .background(NotoTheme.Colors.background)
         .toolbar {
@@ -257,6 +233,193 @@ private struct ChildSchoolView: View {
             }
         }
     }
+
+    // MARK: Pronote: stats + subject cards
+
+    @ViewBuilder
+    private var pronoteProfile: some View {
+        // Stats overview
+        Text("VUE D'ENSEMBLE")
+            .sectionLabelStyle()
+
+        HStack(spacing: NotoTheme.Spacing.sm) {
+            statCard(value: overallAverage, label: "Moy. générale", color: NotoTheme.Colors.brand)
+            statCard(value: String(pendingHomeworkCount), label: "Devoirs", color: pendingHomeworkCount > 0 ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary)
+            statCard(value: String(unreadMessageCount), label: unreadMessageCount == 1 ? "Message" : "Messages", color: unreadMessageCount > 0 ? NotoTheme.Colors.danger : NotoTheme.Colors.textSecondary)
+        }
+
+        // Subject cards
+        Text("PAR MATIÈRE")
+            .sectionLabelStyle()
+
+        ForEach(subjectList, id: \.self) { subject in
+            SubjectCardView(
+                subject: subject,
+                grades: child.grades.filter { $0.subject == subject },
+                insight: child.insights.first { $0.subject == subject },
+                pendingHomework: child.homework.filter { $0.subject == subject && !$0.done },
+                cultureHint: nil // TODO: link from CultureReco
+            )
+        }
+
+        // Quick access to detail views
+        Text("DÉTAIL")
+            .sectionLabelStyle()
+
+        Button { showSchedule = true } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                Text("Emploi du temps")
+                    .font(NotoTheme.Typography.signalTitle)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .opacity(0.5)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showSchedule) {
+            NavigationStack {
+                ScheduleListView(children: [child])
+                    .navigationTitle("Emploi du temps")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Fermer") { showSchedule = false }
+                        }
+                    }
+            }
+        }
+
+        Button { showHomework = true } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "pencil.and.list.clipboard")
+                    .font(.system(size: 14))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                Text("Tous les devoirs")
+                    .font(NotoTheme.Typography.signalTitle)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .opacity(0.5)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showHomework) {
+            NavigationStack {
+                HomeworkListView(children: [child])
+                    .navigationTitle("Devoirs")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Fermer") { showHomework = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: ENT: communication feed
+
+    @ViewBuilder
+    private var entFeed: some View {
+        Text("MESSAGES")
+            .sectionLabelStyle()
+
+        if child.messages.isEmpty {
+            Text("Aucun message")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(NotoTheme.Spacing.md)
+                .notoCard()
+        } else {
+            ForEach(child.messages.sorted(by: { $0.date > $1.date }).prefix(10), id: \.id) { msg in
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                    HStack {
+                        Text(msg.sender)
+                            .font(NotoTheme.Typography.signalTitle)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Spacer()
+                        if !msg.read {
+                            Circle()
+                                .fill(NotoTheme.Colors.danger)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                    Text(msg.subject)
+                        .font(NotoTheme.Typography.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .lineLimit(1)
+                    Text(msg.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR"))))
+                        .font(NotoTheme.Typography.metadata)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .opacity(0.65)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .notoCard()
+            }
+        }
+
+        if !child.photos.isEmpty {
+            Text("CARNET")
+                .sectionLabelStyle()
+
+            SchoolbookListView(children: [child])
+        }
+    }
+
+    // MARK: Helpers
+
+    private var subjectList: [String] {
+        let subjects = Set(child.grades.map(\.subject))
+        return subjects.sorted()
+    }
+
+    private var overallAverage: String {
+        let grades = child.grades
+        guard !grades.isEmpty else { return "—" }
+        let weighted = grades.map { $0.normalizedValue * $0.coefficient }
+        let totalCoeff = grades.map(\.coefficient).reduce(0, +)
+        guard totalCoeff > 0 else { return "—" }
+        return String(format: "%.1f", weighted.reduce(0, +) / totalCoeff)
+    }
+
+    private var pendingHomeworkCount: Int {
+        child.homework.filter { !$0.done && $0.dueDate >= Date.now }.count
+    }
+
+    private var unreadMessageCount: Int {
+        child.messages.filter { !$0.read }.count
+    }
+
+    private func statCard(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(NotoTheme.Typography.dataLarge)
+                .foregroundStyle(color)
+            Text(label)
+                .font(NotoTheme.Typography.dataSmall)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .notoCard()
+    }
+
 }
 // MARK: - SchoolTab enum (per-child-type)
 
