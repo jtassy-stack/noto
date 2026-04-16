@@ -189,17 +189,7 @@ struct HomeView: View {
                 }
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
