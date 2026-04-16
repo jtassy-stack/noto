@@ -94,6 +94,16 @@ struct IMAPSyncServiceTests {
         )
     }
 
+    /// Clears manual whitelist entries persisted in the simulator's
+    /// Keychain between runs. The schema tests below assume a clean
+    /// state — leftovers from a previous run (the sim Keychain survives
+    /// test-bundle reinstalls) would let `MailWhitelist.build` return
+    /// a non-empty whitelist and silently flip `gmailEmptyWhitelistThrows`
+    /// from throw to success.
+    private func resetManualWhitelist() {
+        try? MailWhitelist.saveManual([])
+    }
+
     // MARK: - findLegacyMatch scoping (critical regression guards)
 
     @Test("Pronote .pronote message is NEVER matched — protects user data")
@@ -273,6 +283,7 @@ struct IMAPSyncServiceTests {
 
     @Test("monlycée bypass persists a message whose sender is outside any whitelist")
     func monlyceeBypassPersistsUnknownSender() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         let config = makeConfig(providerID: "monlycee")
@@ -289,6 +300,7 @@ struct IMAPSyncServiceTests {
 
     @Test("monlycée config does NOT throw emptyWhitelist even with no whitelist sources")
     func monlyceeBypassSkipsEmptyWhitelistGuard() throws {
+        resetManualWhitelist()
         // Regression guard for the specific bug the bypass exists to
         // prevent: a monlycée-only family with no Pronote child would
         // otherwise throw before the first message is processed.
@@ -303,6 +315,7 @@ struct IMAPSyncServiceTests {
 
     @Test("gmail config drops a sender outside the whitelist")
     func gmailFiltersNonWhitelistedSender() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         addTeacherToWhitelist(child: child, ctx: ctx)
@@ -317,6 +330,7 @@ struct IMAPSyncServiceTests {
 
     @Test("gmail config keeps a sender that matches the whitelist")
     func gmailKeepsWhitelistedSender() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         addTeacherToWhitelist(child: child, ctx: ctx)
@@ -333,6 +347,7 @@ struct IMAPSyncServiceTests {
 
     @Test("gmail config throws emptyWhitelist when no school source seeds a whitelist")
     func gmailEmptyWhitelistThrows() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx) // no messages, no establishment domain
         let config = makeConfig(providerID: "gmail")
@@ -346,6 +361,7 @@ struct IMAPSyncServiceTests {
 
     @Test("stamps imapProvider on every new insert regardless of config")
     func stampsImapProvider() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         let config = makeConfig(providerID: "monlycee")
@@ -364,6 +380,7 @@ struct IMAPSyncServiceTests {
 
     @Test("legacy row with nil imapProvider is backfilled on re-sync")
     func updateIfNeededBackfillsLegacyProvider() throws {
+        resetManualWhitelist()
         // Corpus pre-dating the imapProvider field have nil. Without
         // the backfill in updateIfNeeded, SourceBadge keeps rendering
         // "IMAP" for a reconnected MonLycée inbox — the exact bug this
@@ -388,6 +405,7 @@ struct IMAPSyncServiceTests {
 
     @Test("process() is idempotent on the same UID (no duplicates on re-sync)")
     func processIsIdempotentByUID() throws {
+        resetManualWhitelist()
         let ctx = try makeContext()
         let child = makeChild(in: ctx)
         let config = makeConfig(providerID: "monlycee")
@@ -402,6 +420,7 @@ struct IMAPSyncServiceTests {
 
     @Test("legacy UID-less row is matched + backfilled under monlycée bypass")
     func bypassRespectsLegacyMatchAndBackfill() throws {
+        resetManualWhitelist()
         // The bypass path still runs dedupe — a UID-less row from a
         // pre-Phase-7 install must be found and have its UID stamped
         // so the next sync resolves via the primary path.

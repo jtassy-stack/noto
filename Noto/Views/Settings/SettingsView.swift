@@ -114,6 +114,14 @@ struct SettingsView: View {
                 await refreshAuthStatus()
                 refreshIMAP()
             }
+            // Defence-in-depth: IMAP state also changes via the setup
+            // sheet's internal save path. The sheet-onDismiss refresh
+            // above handles the happy path; this observer catches any
+            // future code path that saves a config without routing
+            // through this view.
+            .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
+                refreshIMAP()
+            }
         }
     }
 

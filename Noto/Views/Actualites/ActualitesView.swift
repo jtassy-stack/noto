@@ -275,6 +275,14 @@ struct ActualitesView: View {
                 refreshIMAPState()
                 Task { await syncAll() }
             }
+            // Disconnecting or switching the mailbox from Settings
+            // happens outside this view's hierarchy and would otherwise
+            // leave the "Connecter MonLycée.net" prompt stale until the
+            // tab is re-appeared. IMAPService posts the notification
+            // after every saveConfig / clearConfig.
+            .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
+                refreshIMAPState()
+            }
         }
     }
 
@@ -537,9 +545,12 @@ private struct FeedItemRow: View {
 
 private struct SourceBadge: View {
     let source: MessageSource
-    /// When source is .imap and this is "monlycee", the badge reads
-    /// "MonLycée" so the feed conveys a dedicated school channel
-    /// rather than a generic mailbox.
+    /// The providerID stamped on the Message at insert time — nil for
+    /// legacy rows that predate the field. The mapping below intentionally
+    /// hard-codes monlycée rather than using `IMAPServerConfig`'s
+    /// dedicated-channel Set: each provider has its own brand and a
+    /// future ENT (e-Lyco, Educ'Horus) would want its own label, not
+    /// "MonLycée". Extend this switch when adding one.
     let imapProviderID: String?
 
     private var label: String {
