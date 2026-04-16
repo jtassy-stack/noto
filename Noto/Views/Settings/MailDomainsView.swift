@@ -71,7 +71,10 @@ struct MailDomainsView: View {
             } message: {
                 Text(addError ?? "Saisissez un domaine complet (ex. monlycee.net) ou une adresse e-mail exacte.")
             }
-            .task {
+            .onAppear {
+                // .onAppear (not .task) so reopening the sheet after
+                // the parent connected/disconnected/switched mailbox
+                // in Settings reflects the new state immediately.
                 manualEntries = MailWhitelist.loadManual()
                 activeConfig = IMAPService.loadConfig()
             }

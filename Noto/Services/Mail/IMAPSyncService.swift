@@ -3,32 +3,41 @@ import SwiftData
 
 /// Syncs IMAP inbox messages into SwiftData Message objects for a given child.
 ///
-/// Phase 7 changes:
-///   - Source corrected to `.imap` on new inserts (was `.ent` — tech debt)
-///   - Dedupe primarily on `imapUID` (stable across refetches)
-///   - Fallback dedupe composite `(sender, subject, day)` for legacy
-///     rows without UID
-///   - Whitelist filtering: only mails matching the configured MailFilter
-///     whitelist are persisted (user's personal mail never lands in the DB)
-///
-/// Dedicated-channel bypass (monlycée.net):
-///   ENT-provisioned mailboxes are closed by nature — every message is
-///   by construction a school-parent communication. For these, filtering
-///   is both pointless and harmful (it would drop legitimate senders
-///   outside the whitelist, e.g. rectorat, partenaires, orientation).
-///   When `config.isDedicatedSchoolChannel` is true, the whitelist is
-///   not built and every fetched message is persisted.
+/// Invariants:
+///   - New inserts carry `source == .imap` and stamp `imapProvider`
+///     with the active config's providerID.
+///   - Dedupe primarily on `imapUID`, with a composite fallback on
+///     `(sender, subject, day)` scoped to `.imap` / `.conversation` only
+///     so Pronote and ENT messages can never be absorbed or re-sourced.
+///   - Generic IMAP configs (Gmail, Outlook, …) filter inbound mail
+///     through `MailFilter` against the whitelist — personal mail must
+///     never land in the DB.
+///   - Configs that report `isDedicatedSchoolChannel` (ENT-provisioned
+///     mailboxes) skip the whitelist entirely: their inbox is by
+///     construction a school-parent channel, and filtering would
+///     silently drop legitimate senders outside the known school
+///     domain.
 @MainActor
 struct IMAPSyncService {
     let modelContext: ModelContext
 
+    /// Full sync: load config, fetch remote inbox, process into SwiftData.
+    /// Network + Keychain side effects live here; the pure logic is in
+    /// `process(child:config:fetched:)` so tests can exercise the
+    /// whitelist / bypass / dedupe branches without a live server.
     func sync(for child: Child) async throws {
         guard let config = IMAPService.loadConfig() else {
             throw IMAPSyncError.noCredentials
         }
 
         let fetched = try await IMAPService.fetchInbox(config: config)
+        try process(child: child, config: config, fetched: fetched)
+    }
 
+    /// Pure processing step — takes an already-fetched batch and applies
+    /// whitelist filtering (or bypass), dedupe, and insert. Exposed so
+    /// the bypass invariant has behavioural test coverage.
+    func process(child: Child, config: IMAPServerConfig, fetched: [IMAPMessageInfo]) throws {
         // Dedicated school channels bypass filtering entirely. The guard
         // runs BEFORE whitelist construction so a monlycée-only user with
         // no Pronote child and no manual entries doesn't hit
@@ -38,8 +47,7 @@ struct IMAPSyncService {
         // Build whitelist once per sync for performance.
         // If it is empty (and we're not on a dedicated channel), throw
         // rather than let personal mail into SwiftData — the onboarding
-        // copy promises "only school mail is synced", honouring that
-        // promise is non-negotiable under the CLAUDE.md privacy contract.
+        // copy promises "only school mail is synced".
         let whitelist: [MailWhitelistEntry]
         if bypassFilter {
             whitelist = []
@@ -94,7 +102,8 @@ struct IMAPSyncService {
                 source: .imap,
                 kind: .conversation,
                 link: nil,
-                imapUID: info.uid.map(String.init)
+                imapUID: info.uid.map(String.init),
+                imapProvider: config.providerID
             )
             msg.read = info.isRead
             msg.child = child
@@ -102,11 +111,14 @@ struct IMAPSyncService {
             keptCount += 1
         }
 
-        // Unconditionally log metrics (not DEBUG-gated) — a parent
-        // seeing an empty Messages tab after a successful sync needs
-        // a trail for support/diagnostics. No PII logged.
-        NSLog("[noto] IMAP sync: provider=%@ fetched=%d kept=%d dropped=%d for %@",
-              config.providerID, fetched.count, keptCount, droppedCount, child.firstName)
+        // Log provider + counts on one line (no name), and a separate
+        // line with the child first-name (no provider). Combining the
+        // two in a single record would let a log reader associate
+        // "child X ↔ lycée Y", which RGPD treats as indirectly
+        // identifying personal data.
+        NSLog("[noto] IMAP sync: provider=%@ fetched=%d kept=%d dropped=%d",
+              config.providerID, fetched.count, keptCount, droppedCount)
+        NSLog("[noto] IMAP sync completed for %@", child.firstName)
     }
 
     // MARK: - Dedupe helpers

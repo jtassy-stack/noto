@@ -52,7 +52,6 @@ struct ActualitesView: View {
     @State private var path: [FeedDestination] = []
     @State private var showMonLyceeSetup = false
     @State private var imapConfigured = false
-    @State private var imapProviderID: String? = nil
     @State private var syncError: String?
 
     // Stable child-index → color mapping
@@ -187,7 +186,14 @@ struct ActualitesView: View {
                     try await service.sync(for: child)
                 } catch {
                     NSLog("[noto][error] IMAP sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    syncError = "Erreur de synchronisation des messages."
+                    // Surface the thrown error's own message — IMAPSyncError
+                    // cases ship actionable copy (e.g. emptyWhitelist points
+                    // the parent to the right Settings screen). Generic
+                    // fallback only when the message would otherwise be empty.
+                    let detail = error.localizedDescription
+                    syncError = detail.isEmpty
+                        ? "Erreur de synchronisation des messages."
+                        : detail
                 }
             }
         }
@@ -276,7 +282,6 @@ struct ActualitesView: View {
 
     private func refreshIMAPState() {
         imapConfigured = IMAPService.isConfigured
-        imapProviderID = IMAPService.loadConfig()?.providerID
     }
 
     private var monLyceePrompt: some View {
@@ -338,8 +343,7 @@ struct ActualitesView: View {
                         FeedItemRow(
                             msg: item.msg,
                             child: item.child,
-                            avatarColor: avatarColor(for: item.child),
-                            imapProviderID: imapProviderID
+                            avatarColor: avatarColor(for: item.child)
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -438,10 +442,6 @@ private struct FeedItemRow: View {
     let msg: Message
     let child: Child
     let avatarColor: Color
-    /// providerID of the active IMAP config, so .imap messages from a
-    /// dedicated school channel (monlycée.net) can be labelled "MonLycée"
-    /// instead of the generic "IMAP" tag. nil outside IMAP context.
-    let imapProviderID: String?
 
     /// Strip HTML tags for body preview.
     private var bodyPreview: String {
@@ -508,7 +508,7 @@ private struct FeedItemRow: View {
                     ChildTag(name: child.firstName, color: avatarColor)
 
                     // Source badge
-                    SourceBadge(source: msg.source, imapProviderID: imapProviderID)
+                    SourceBadge(source: msg.source, imapProviderID: msg.imapProvider)
 
                     // Schoolbook badges
                     if msg.kind == .schoolbook {
