@@ -265,6 +265,8 @@ struct CultureSearchResult: Sendable, Identifiable {
     var linkedSubject: String? = nil
     var linkedChildName: String? = nil
     var linkedLevel: String? = nil
+    var linkedChapterText: String? = nil
+    var linkedChapterDate: Date? = nil
 }
 
 struct BatchQuery {

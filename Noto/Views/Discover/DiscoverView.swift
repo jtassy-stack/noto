@@ -83,6 +83,64 @@ struct DiscoverView: View {
         return raw.prefix(1).uppercased() + raw.dropFirst().lowercased()
     }
 
+    // MARK: - Chapter matching (best-effort subject→chapter link)
+
+    private struct ChapterMatch {
+        let text: String
+        let date: Date
+        let isHomework: Bool
+    }
+
+    /// Index of recent chapter/homework texts keyed by normalized subject.
+    /// Built once per child, used to annotate each search result.
+    private static func buildChapterIndex(for child: Child) -> [String: ChapterMatch] {
+        let now = Date.now
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: now)!
+        let weekAhead = Calendar.current.date(byAdding: .day, value: 7, to: now)!
+        var index: [String: ChapterMatch] = [:]
+
+        // Homework first (higher intent signal for Sophie C.)
+        for hw in child.homework where hw.dueDate >= now && hw.dueDate <= weekAhead {
+            let key = hw.subject.lowercased()
+            if index[key] == nil {
+                index[key] = ChapterMatch(text: hw.descriptionText, date: hw.dueDate, isHomework: true)
+            }
+        }
+
+        // Schedule chapters as fallback
+        for entry in child.schedule where entry.start >= weekAgo && entry.start <= weekAhead {
+            if let chapter = entry.chapter {
+                let key = entry.subject.lowercased()
+                if index[key] == nil {
+                    index[key] = ChapterMatch(text: chapter, date: entry.start, isHomework: false)
+                }
+            }
+        }
+
+        return index
+    }
+
+    /// Finds the best chapter match for a search result by extracting
+    /// the subject from its curriculumTags and looking it up in the index.
+    private static func bestChapterMatch(
+        for result: CultureSearchResult,
+        index: [String: ChapterMatch]
+    ) -> ChapterMatch? {
+        // Try each curriculum tag — format is "3eme-histoire"
+        for tag in result.curriculumTags {
+            let parts = tag.split(separator: "-", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let subject = String(parts[1]).lowercased()
+            // Direct match
+            if let match = index[subject] { return match }
+            // Fuzzy: check if any index key contains the tag subject
+            if let match = index.first(where: { $0.key.contains(subject) })?.value {
+                return match
+            }
+        }
+        return nil
+    }
+
     private var children: [Child] {
         if let child = selectedChild { return [child] }
         return families.first?.children ?? []
@@ -216,11 +274,16 @@ struct DiscoverView: View {
                     geo: geo,
                     limit: children.count > 1 ? 12 : 20
                 )
-                // Annotate each result with the child it was fetched for
+                // Annotate each result with the child + best-matching chapter
+                let chapterIndex = Self.buildChapterIndex(for: child)
                 results = results.map {
                     var r = $0
                     r.linkedChildName = child.firstName
                     r.linkedLevel = child.grade
+                    if let match = Self.bestChapterMatch(for: r, index: chapterIndex) {
+                        r.linkedChapterText = match.text
+                        r.linkedChapterDate = match.date
+                    }
                     return r
                 }
                 perChildResults.append(results.filter { $0.score.map { $0 >= 0.3 } ?? true })
@@ -295,33 +358,49 @@ private struct RecoRow: View {
             Text(reco.title)
                 .font(NotoTheme.Typography.headline)
 
-            // Row 3: curriculum tags + "Pour <child>" fused inline
-            // Show at most 1 curriculum tag — more creates visual clutter
-            let gradeTags: [String] = {
-                guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
-                let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
-                let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
-                return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
-            }()
-            if !gradeTags.isEmpty || reco.linkedChildName != nil {
+            // Row 3: chapter link (preferred) or curriculum tag + "Pour <child>"
+            if let chapter = reco.linkedChapterText {
                 HStack(spacing: 4) {
-                    ForEach(gradeTags, id: \.self) { tag in
-                        Text(Self.formatCurriculumTag(tag))
-                            .font(NotoTheme.Typography.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(NotoTheme.Colors.brand.opacity(0.1))
-                            .foregroundStyle(NotoTheme.Colors.brand)
-                            .clipShape(Capsule())
-                    }
+                    Text(chapterLabel(text: chapter, date: reco.linkedChapterDate))
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.brand)
+                        .lineLimit(1)
                     if let child = reco.linkedChildName {
-                        Text("Pour \(child)")
+                        Text("·")
                             .font(NotoTheme.Typography.caption)
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(NotoTheme.Colors.textSecondary.opacity(0.1))
-                            .clipShape(Capsule())
+                        Text(child)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                }
+            } else {
+                let gradeTags: [String] = {
+                    guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
+                    let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
+                    let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
+                    return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
+                }()
+                if !gradeTags.isEmpty || reco.linkedChildName != nil {
+                    HStack(spacing: 4) {
+                        ForEach(gradeTags, id: \.self) { tag in
+                            Text(Self.formatCurriculumTag(tag))
+                                .font(NotoTheme.Typography.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(NotoTheme.Colors.brand.opacity(0.1))
+                                .foregroundStyle(NotoTheme.Colors.brand)
+                                .clipShape(Capsule())
+                        }
+                        if let child = reco.linkedChildName {
+                            Text("Pour \(child)")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(NotoTheme.Colors.textSecondary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
                     }
                 }
             }
@@ -398,6 +477,16 @@ private struct RecoRow: View {
         case "event": "Événement"
         default: reco.type.capitalized
         }
+    }
+
+    /// "Lié à : Grèce antique — devoir du 17 avril"
+    private func chapterLabel(text: String, date: Date?) -> String {
+        let truncated = text.count > 40 ? String(text.prefix(37)) + "…" : text
+        guard let date else { return "Lié à : \(truncated)" }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "fr_FR")
+        df.setLocalizedDateFormatFromTemplate("d MMMM")
+        return "Lié à : \(truncated) — devoir du \(df.string(from: date))"
     }
 
     /// Formats "3eme-histoire" → "Histoire · 3e"
