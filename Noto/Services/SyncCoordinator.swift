@@ -11,21 +11,32 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "SyncCoordinato
 /// Responsibilities:
 /// - **De-duplicate concurrent callers**: if a sync is already running,
 ///   new callers await the in-flight task and share its result.
-/// - **60-second cooldown**: once a sync completes successfully, new
-///   requests within 60 s are silently dropped.  The cooldown is stored
-///   here (not in `@State`) so it survives view re-creation.
+/// - **60-second cooldown**: once a sync completes *successfully*, new
+///   automatic requests within 60 s are silently dropped. Failed syncs
+///   never start the cooldown — retries must always be possible.
+/// - **Persistence**: last-sync timestamp is written to UserDefaults so
+///   it survives app restarts.
 @MainActor
 final class SyncCoordinator: ObservableObject {
 
     static let shared = SyncCoordinator()
 
-    private init() {}
+    private let defaults = UserDefaults.standard
+    private let lastSyncKey = "syncCoordinatorLastSyncDate"
+
+    private init() {
+        let interval = defaults.double(forKey: lastSyncKey)
+        if interval > 0 {
+            lastSyncDate = Date(timeIntervalSince1970: interval)
+        }
+    }
 
     // MARK: - State
 
     @Published private(set) var isSyncing: Bool = false
 
-    /// Last successful sync timestamp — used by views for the "last sync" label.
+    /// Last *successful* sync timestamp — used by views for the "last sync" label.
+    /// Nil until the first successful sync after install.
     @Published private(set) var lastSyncDate: Date?
 
     /// Errors from the most recent sync run, if any.
@@ -33,7 +44,6 @@ final class SyncCoordinator: ObservableObject {
 
     // MARK: - Private
 
-    /// 60-second minimum interval between syncs.
     private let cooldownInterval: TimeInterval = 60
 
     /// Currently running sync task (if any).  New callers that arrive
@@ -42,13 +52,15 @@ final class SyncCoordinator: ObservableObject {
 
     // MARK: - Public API
 
-    /// Request a full sync.  If a sync is already in-flight, awaits it
-    /// rather than double-triggering.  Respects the 60 s cooldown.
+    /// Request a full sync.
     ///
-    /// - Parameter action: The actual work to perform; supplied by
-    ///   `HomeView.performFullRefresh()` so the coordinator doesn't need
-    ///   to own the modelContext or the child list.
-    func requestSync(action: @escaping () async -> Void) async {
+    /// - Parameter force: When `true`, bypasses the cooldown timer — use
+    ///   for explicit user actions (pull-to-refresh). Automatic triggers
+    ///   (background fetch, .onAppear) should leave this at `false`.
+    /// - Parameter action: The actual sync work; supplied by
+    ///   `HomeView.performFullRefresh()` so the coordinator doesn't own
+    ///   the modelContext or child list.
+    func requestSync(force: Bool = false, action: @escaping () async -> Void) async {
         // If already running, wait for the current task and return.
         if let existing = inFlightTask {
             logger.debug("Sync already in-flight — awaiting existing task")
@@ -56,15 +68,16 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
-        // Enforce cooldown.
-        if let last = lastSyncDate,
+        // Enforce cooldown only for automatic triggers on successful syncs.
+        // Forced requests (pull-to-refresh) and post-error retries always proceed.
+        if !force && syncError == nil,
+           let last = lastSyncDate,
            Date.now.timeIntervalSince(last) < cooldownInterval {
             let remaining = Int(cooldownInterval - Date.now.timeIntervalSince(last))
             logger.debug("Sync cooldown active — \(remaining) s remaining, skipping")
             return
         }
 
-        // Kick off the sync and track the task.
         let task = Task<Void, Never> {
             isSyncing = true
             syncError = nil
@@ -79,10 +92,15 @@ final class SyncCoordinator: ObservableObject {
         await task.value
     }
 
-    /// Called by `HomeView` once its own sync logic completes, to record
-    /// the timestamp and surface errors.
+    /// Called by `HomeView` once its sync logic completes.
+    /// Only advances the cooldown timestamp on clean runs — a failed sync
+    /// must never block the user from retrying immediately.
     func finishedSync(errors: String?) {
-        lastSyncDate = Date.now
         syncError = errors
+        if errors == nil {
+            let now = Date.now
+            lastSyncDate = now
+            defaults.set(now.timeIntervalSince1970, forKey: lastSyncKey)
+        }
     }
 }

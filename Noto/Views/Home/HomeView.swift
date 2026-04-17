@@ -197,7 +197,7 @@ struct HomeView: View {
             .refreshable {
                 // Pull-to-refresh bypasses the cooldown (user-initiated) but
                 // still deduplicates against any in-flight task by awaiting it.
-                await syncCoordinator.requestSync { await self.performFullRefresh() }
+                await syncCoordinator.requestSync(force: true) { await self.performFullRefresh() }
             }
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
@@ -348,9 +348,13 @@ struct HomeView: View {
                         continue
                     }
                     await syncService.sync(child: child, bridge: bridge, childIndex: idx)
+                    if !syncService.failedCategories.isEmpty {
+                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
+                    }
                 }
             } else {
                 showNoConnectionAlert = true
+                errors.append("Connexion à Pronote impossible. Reconnectez-vous via QR code si le problème persiste.")
             }
         }
 
@@ -370,6 +374,9 @@ struct HomeView: View {
                         continue
                     }
                     await syncService.sync(child: child, bridge: bridge, childIndex: idx)
+                    if !syncService.failedCategories.isEmpty {
+                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
+                    }
                 }
             } else {
                 // Fallback: sync from stored logbook data
