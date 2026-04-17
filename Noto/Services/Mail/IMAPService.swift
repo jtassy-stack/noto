@@ -28,9 +28,14 @@ enum IMAPService {
 
     // MARK: - Keychain keys
 
-    static let legacyMonLyceeKey = "imap_credentials_monlycee"
-    static let keychainKey       = "imap_config_v2"
-    static let accountsKey       = "imap_accounts_v3"
+    // Private — callers must go through loadConfigs/saveConfigs, not raw Keychain.
+    // `decodeConfig` is exposed for unit tests only.
+    private static let legacyMonLyceeKey = "imap_credentials_monlycee"
+    private static let keychainKey       = "imap_config_v2"
+    private static let accountsKey       = "imap_accounts_v3"
+
+    // Kept public for `IMAPServiceDecodeTests` which round-trips the legacy key.
+    static let _testLegacyMonLyceeKey = legacyMonLyceeKey
 
     static let configDidChangeNotification = Notification.Name("noto.imap.configDidChange")
 
@@ -38,14 +43,27 @@ enum IMAPService {
 
     static func loadConfigs() -> [IMAPServerConfig] {
         // Try v3 array first
-        if let data = try? KeychainService.load(key: accountsKey),
-           let configs = try? JSONDecoder().decode([IMAPServerConfig].self, from: data),
-           !configs.isEmpty {
-            return configs
+        do {
+            if let data = try KeychainService.load(key: accountsKey),
+               let configs = try? JSONDecoder().decode([IMAPServerConfig].self, from: data),
+               !configs.isEmpty {
+                return configs
+            }
+        } catch {
+            NSLog("[noto][error] IMAP loadConfigs Keychain read failed: \(error.localizedDescription)")
+            return []
         }
         // Migrate from v2 single config
         if let single = migrateSingleConfig() {
-            try? saveConfigs([single])
+            do {
+                try saveConfigs([single])
+                // Purge legacy blobs now that migration succeeded
+                try? KeychainService.delete(key: keychainKey)
+                try? KeychainService.delete(key: legacyMonLyceeKey)
+            } catch {
+                NSLog("[noto][error] IMAP v2→v3 migration save failed: \(error.localizedDescription)")
+                // Still return the config for this session; migration retries next launch.
+            }
             return [single]
         }
         return []
@@ -71,31 +89,39 @@ enum IMAPService {
     }
 
     static func clearAllConfigs() throws {
-        try? KeychainService.delete(key: accountsKey)
-        try? KeychainService.delete(key: keychainKey)
-        try? KeychainService.delete(key: legacyMonLyceeKey)
+        var firstError: Error?
+        for key in [accountsKey, keychainKey, legacyMonLyceeKey] {
+            do { try KeychainService.delete(key: key) }
+            catch { firstError = firstError ?? error }
+        }
         NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
+        if let err = firstError { throw err }
     }
 
     static var isConfigured: Bool { !loadConfigs().isEmpty }
 
-    // MARK: - Single-account shims (backward compat for call sites not yet migrated)
+    // MARK: - Single-account shims (backward compat — do not add new call sites)
 
+    @available(*, deprecated, renamed: "loadConfigs")
     static func loadConfig() -> IMAPServerConfig? { loadConfigs().first }
 
-    static func saveConfig(_ config: IMAPServerConfig) throws {
-        try addConfig(config)
-    }
+    @available(*, deprecated, renamed: "addConfig")
+    static func saveConfig(_ config: IMAPServerConfig) throws { try addConfig(config) }
 
-    static func clearConfig() throws {
-        try clearAllConfigs()
-    }
+    @available(*, deprecated, renamed: "clearAllConfigs")
+    static func clearConfig() throws { try clearAllConfigs() }
 
     // MARK: - Migration helpers
 
     private static func migrateSingleConfig() -> IMAPServerConfig? {
-        let v2 = try? KeychainService.load(key: keychainKey)
-        let legacy = try? KeychainService.load(key: legacyMonLyceeKey)
+        let v2: Data?
+        do { v2 = try KeychainService.load(key: keychainKey) }
+        catch { NSLog("[noto][error] IMAP v2 Keychain read failed during migration: \(error.localizedDescription)"); v2 = nil }
+
+        let legacy: Data?
+        do { legacy = try KeychainService.load(key: legacyMonLyceeKey) }
+        catch { NSLog("[noto][error] IMAP legacy Keychain read failed during migration: \(error.localizedDescription)"); legacy = nil }
+
         return decodeConfig(primaryData: v2, legacyData: legacy)
     }
 

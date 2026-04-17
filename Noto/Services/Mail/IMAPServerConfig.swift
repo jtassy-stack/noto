@@ -89,7 +89,9 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id         = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+        // `decodeIfPresent` returns nil only when the key is absent (legacy blob) —
+        // unlike `try?` it would still throw on a malformed UUID value.
+        id         = (try c.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
         host       = try c.decode(String.self, forKey: .host)
         port       = try c.decode(Int.self, forKey: .port)
         username   = try c.decode(String.self, forKey: .username)

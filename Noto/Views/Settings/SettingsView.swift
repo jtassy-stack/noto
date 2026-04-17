@@ -30,6 +30,7 @@ struct SettingsView: View {
     @State private var showIMAPSetup = false
     @State private var showMailDomains = false
     @State private var imapConfigs: [IMAPServerConfig] = []
+    @State private var disconnectError: String?
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
@@ -41,16 +42,14 @@ struct SettingsView: View {
     private var children: [Child] { family?.children ?? [] }
 
     private var whitelistCountLabel: String {
-        // If ALL accounts are dedicated school channels, no filtering applies.
-        if imapConfigs.allSatisfy(\.isDedicatedSchoolChannel) {
-            return "Désactivé"
-        }
+        guard !imapConfigs.isEmpty else { return "—" }
+        if imapConfigs.allSatisfy(\.isDedicatedSchoolChannel) { return "Désactivé" }
         let count = MailWhitelist.build(from: children).count
         return count == 1 ? "1 entrée" : "\(count) entrées"
     }
 
     private var mailboxFilterRowLabel: String {
-        imapConfigs.allSatisfy(\.isDedicatedSchoolChannel)
+        !imapConfigs.isEmpty && imapConfigs.allSatisfy(\.isDedicatedSchoolChannel)
             ? "Filtrage courrier"
             : "Domaines autorisés"
     }
@@ -144,6 +143,11 @@ struct SettingsView: View {
             // through this view.
             .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
                 refreshIMAP()
+            }
+            .alert("Impossible de déconnecter", isPresented: Binding(get: { disconnectError != nil }, set: { if !$0 { disconnectError = nil } })) {
+                Button("OK") { disconnectError = nil }
+            } message: {
+                Text(disconnectError ?? "")
             }
         }
     }
@@ -418,6 +422,7 @@ struct SettingsView: View {
         } catch {
             NSLog("[noto][warn] disconnectIMAP failed: \(error.localizedDescription)")
             imapConfigs = IMAPService.loadConfigs()
+            disconnectError = "Impossible de déconnecter ce compte. Vérifiez que votre iPhone est déverrouillé et réessayez."
         }
     }
 

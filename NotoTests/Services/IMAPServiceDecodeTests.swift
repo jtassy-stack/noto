@@ -131,6 +131,39 @@ struct IMAPServiceDecodeTests {
         #expect(result == nil)
     }
 
+    // MARK: - Multi-account UUID migration
+
+    @Test("v2 blob without 'id' key decodes successfully with a fresh UUID")
+    func v2BlobWithoutIdDecodesSuccessfully() throws {
+        // Hand-craft a JSON payload matching the pre-multi-account schema (no 'id' key).
+        // If this test fails after a Codable change, every upgrade from v2 loses mailbox access.
+        let json = """
+        {"host":"imap.gmail.com","port":993,"username":"parent@gmail.com",\
+        "password":"secret","providerID":"gmail"}
+        """
+        let data = Data(json.utf8)
+        let config = try JSONDecoder().decode(IMAPServerConfig.self, from: data)
+        #expect(config.host == "imap.gmail.com")
+        #expect(config.username == "parent@gmail.com")
+        #expect(config.providerID == "gmail")
+        // id was synthesised — verify the field exists and is usable (UUID is non-optional)
+        _ = config.id
+    }
+
+    @Test("Two decodes of the same v2 blob produce different UUIDs — caller must persist immediately")
+    func v2BlobTwoDecodesDifferentUUIDs() throws {
+        let json = """
+        {"host":"imap.gmail.com","port":993,"username":"u@example.com",\
+        "password":"pw","providerID":"gmail"}
+        """
+        let data = Data(json.utf8)
+        let a = try JSONDecoder().decode(IMAPServerConfig.self, from: data)
+        let b = try JSONDecoder().decode(IMAPServerConfig.self, from: data)
+        // Each decode without a stored id creates a fresh UUID — this is expected
+        // and the reason loadConfigs() must persist the migrated config immediately.
+        #expect(a.id != b.id)
+    }
+
     // MARK: - Password redaction
 
     @Test("Description redacts password — no accidental logging")

@@ -1150,7 +1150,8 @@ private struct MessagesListView: View {
 
         let directorySchools = await DirectorySchoolCache.schools(for: children)
         let service = IMAPSyncService(modelContext: modelContext)
-        var encounteredError: String?
+        var accountErrors: [(account: String, detail: String)] = []
+        var anySuccess = false
 
         for config in configs {
             let fetched: [IMAPMessageInfo]
@@ -1159,23 +1160,25 @@ private struct MessagesListView: View {
                     try await IMAPService.fetchInbox(config: config)
                 }.value
             } catch {
-                encounteredError = error.localizedDescription
+                accountErrors.append((config.username, error.localizedDescription))
                 continue
             }
 
             for child in children {
                 do {
                     try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+                    anySuccess = true
                 } catch {
-                    encounteredError = error.localizedDescription
+                    accountErrors.append((config.username, error.localizedDescription))
                 }
             }
         }
 
-        if let err = encounteredError {
-            syncError = err
-        } else {
+        if anySuccess {
             lastSyncDateInterval = Date.now.timeIntervalSince1970
+        }
+        if !accountErrors.isEmpty {
+            syncError = accountErrors.map { "\($0.account): \($0.detail)" }.joined(separator: "\n")
         }
     }
 }

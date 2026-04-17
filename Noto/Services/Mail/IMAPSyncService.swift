@@ -128,19 +128,20 @@ struct IMAPSyncService {
                 continue
             }
 
-            // Primary dedupe: exact UID match
+            // Primary dedupe: exact UID match scoped by provider.
+            // IMAP UIDs are only unique per-mailbox, so "42" from Gmail
+            // must not match "42" from MonLycée for the same child.
             if let uid = info.uid.map(String.init),
-               let existing = child.messages.first(where: { $0.imapUID == uid }) {
+               let existing = child.messages.first(where: {
+                   $0.imapUID == uid && $0.imapProvider == config.providerID
+               }) {
                 updateIfNeeded(existing: existing, with: info, config: config)
                 continue
             }
 
             // Fallback dedupe: legacy rows without UID — composite match
-            // on (sender display name, subject, same calendar day).
-            // Scoped to imap-sourced rows (and legacy `.ent` ones that
-            // were actually IMAP) to avoid colliding with Pronote
-            // conversation messages that share a subject line.
-            if let existing = findLegacyMatch(child: child, info: info) {
+            // on (sender, subject, same calendar day), scoped by provider.
+            if let existing = findLegacyMatch(child: child, info: info, providerID: config.providerID) {
                 // Backfill the UID so the next sync resolves via the
                 // primary path.
                 if let uid = info.uid.map(String.init), existing.imapUID == nil {
@@ -183,11 +184,16 @@ struct IMAPSyncService {
     /// when the school forwards ENT messages to parent email) are
     /// never absorbed or source-upgraded into IMAP.
     @MainActor
-    func findLegacyMatch(child: Child, info: IMAPMessageInfo) -> Message? {
+    func findLegacyMatch(child: Child, info: IMAPMessageInfo, providerID: String? = nil) -> Message? {
         let cal = Calendar.current
         return child.messages.first { msg in
             guard msg.source == .imap else { return false }
             guard msg.kind == .conversation else { return false }
+            // Scope to the same provider when known — prevents cross-account
+            // collision when two mailboxes forward the same message.
+            if let providerID, let msgProvider = msg.imapProvider {
+                guard msgProvider == providerID else { return false }
+            }
             guard msg.subject == info.subject else { return false }
             guard msg.sender == info.from else { return false }
             return cal.isDate(msg.date, inSameDayAs: info.date)
