@@ -27,7 +27,7 @@ struct WellbeingResourcesView: View {
                     }
                     disclaimer
                     firstTier
-                    teenTier
+                    if showsTeenResources { teenTier }
                     crisisTier
                     footnote
                 }
@@ -72,6 +72,11 @@ struct WellbeingResourcesView: View {
                 .stroke(NotoTheme.Colors.amber.opacity(0.25), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+    }
+
+    private var showsTeenResources: Bool {
+        guard let signal else { return true }
+        return signal.childLevel == .college || signal.childLevel == .lycee
     }
 
     private var disclaimer: some View {
@@ -163,7 +168,11 @@ struct WellbeingResourcesView: View {
         accent: RowAccent = .normal
     ) -> some View {
         let destination: URL? = {
-            if let tel { return URL(string: "tel:\(tel)") }
+            if let tel {
+                let url = URL(string: "tel:\(tel)")
+                assert(url != nil, "WellbeingResourcesView: tel: URL construction failed for '\(tel)'")
+                return url
+            }
             return link
         }()
         let row = HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {

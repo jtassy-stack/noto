@@ -5,8 +5,7 @@ import Foundation
 /// tool — the goal is to surface patterns a parent might miss when
 /// glancing at individual screens, framed as observations, not verdicts.
 ///
-/// Design constraints (see also `project_phase_8_directory.md` and the
-/// Charles cross-repo notes):
+/// Design constraints:
 ///   - No network, no scoring model, no questionnaire. Pure local rules.
 ///   - Single-factor triggers are suppressed — too many false positives.
 ///     A signal requires at least `factorThreshold` independent factors
@@ -16,9 +15,9 @@ import Foundation
 enum WellbeingEngine {
 
     /// Minimum number of independent factors that must fire before
-    /// we surface anything. Two was calibrated against the sample
-    /// Sophie C. persona: grade dips + homework lapses are common
-    /// individually but rarely co-occur without reason.
+    /// we surface anything. Two was calibrated against the Sophie C.
+    /// persona: grade dips and homework lapses are common individually
+    /// but rarely co-occur without reason.
     static let factorThreshold = 2
 
     /// Window over which we sample the signals. Aligned with the
@@ -31,15 +30,17 @@ enum WellbeingEngine {
     /// Evaluates one child. Returns nil when nothing crosses the
     /// threshold — callers must not render any card in that case.
     static func detect(for child: Child, now: Date = .now) -> WellbeingSignal? {
-        var factors: [WellbeingFactor] = []
-        let windowStart = Calendar.current.date(byAdding: .day, value: -observationWindowDays, to: now) ?? now
+        guard let windowStart = Calendar.current.date(byAdding: .day, value: -observationWindowDays, to: now) else {
+            assertionFailure("WellbeingEngine: Calendar failed to compute windowStart from \(now)")
+            return nil
+        }
 
+        var factors: [WellbeingFactor] = []
         if let f = detectGradeDecline(child: child, windowStart: windowStart) { factors.append(f) }
-        if let f = detectUnreadBacklog(child: child, now: now) { factors.append(f) }
+        if let f = detectUnreadBacklog(child: child, windowStart: windowStart, now: now) { factors.append(f) }
         if let f = detectHomeworkBacklog(child: child, windowStart: windowStart, now: now) { factors.append(f) }
 
-        guard factors.count >= factorThreshold else { return nil }
-        return WellbeingSignal(childName: child.firstName, factors: factors, observedAt: now)
+        return WellbeingSignal.make(childName: child.firstName, childLevel: child.level, factors: factors)
     }
 
     /// Evaluates every child. Returns the non-nil signals in the order
@@ -50,16 +51,16 @@ enum WellbeingEngine {
 
     // MARK: - Factor detectors (internal so tests can exercise each directly)
 
-    /// Fires when the child's overall average over the window sits
-    /// below 10/20 AND the child has `.difficulty`-type insights from
-    /// the existing InsightEngine in at least two subjects. Two conditions
-    /// keep single-bad-grade noise from triggering.
+    /// Fires when the child's coefficient-weighted average over the window
+    /// sits below 10/20 AND the InsightEngine flagged difficulty in at least
+    /// two subjects. Both conditions prevent single-bad-grade noise.
     static func detectGradeDecline(child: Child, windowStart: Date) -> WellbeingFactor? {
         let recent = child.grades.filter { $0.date >= windowStart }
         guard recent.count >= 3 else { return nil }
 
-        let sum = recent.map(\.normalizedValue).reduce(0, +)
-        let avg = sum / Double(recent.count)
+        let totalCoeff = recent.reduce(0.0) { $0 + $1.coefficient }
+        guard totalCoeff > 0 else { return nil }
+        let avg = recent.reduce(0.0) { $0 + $1.normalizedValue * $1.coefficient } / totalCoeff
         guard avg < 10 else { return nil }
 
         let difficultySubjects = Set(
@@ -69,28 +70,20 @@ enum WellbeingEngine {
         )
         guard difficultySubjects.count >= 2 else { return nil }
 
-        let subjectsLabel = difficultySubjects.sorted().prefix(2).joined(separator: " et ")
-        return WellbeingFactor(
-            kind: .sustainedGradeDecline,
-            detail: "Baisse en \(subjectsLabel) (moy. \(format(avg)))"
-        )
+        return WellbeingFactor(kind: .sustainedGradeDecline(subjects: Array(difficultySubjects), average: avg))
     }
 
-    /// Fires when at least three unread messages accumulate — regardless
-    /// of sender. A single urgent unread is already surfaced by the
-    /// existing message card; this is specifically about backlog,
-    /// which often reads as disengagement.
-    static func detectUnreadBacklog(child: Child, now: Date, minimum: Int = 3) -> WellbeingFactor? {
-        let unread = child.messages.filter { !$0.read }
+    /// Fires when at least `minimum` unread messages accumulated within the
+    /// observation window — stale unreads outside the window are excluded so
+    /// old ignored messages don't silently tip the threshold.
+    static func detectUnreadBacklog(child: Child, windowStart: Date, now: Date, minimum: Int = 3) -> WellbeingFactor? {
+        let unread = child.messages.filter { !$0.read && $0.date >= windowStart && $0.date < now }
         guard unread.count >= minimum else { return nil }
-        return WellbeingFactor(
-            kind: .unreadBacklog,
-            detail: "\(unread.count) messages non lus"
-        )
+        return WellbeingFactor(kind: .unreadBacklog(count: unread.count))
     }
 
     /// Fires when, across the window, more than half of the past-due
-    /// homework items never got marked done. Only past-due items count
+    /// homework items were never marked done. Only past-due items count
     /// — future homework isn't a wellbeing signal, it's just a to-do.
     static func detectHomeworkBacklog(
         child: Child,
@@ -105,49 +98,59 @@ enum WellbeingEngine {
         let ratio = Double(undone.count) / Double(pastDue.count)
         guard ratio > threshold else { return nil }
 
-        return WellbeingFactor(
-            kind: .homeworkBacklog,
-            detail: "\(undone.count) devoirs sur \(pastDue.count) non faits"
-        )
-    }
-
-    // MARK: - Helpers
-
-    private static func format(_ value: Double) -> String {
-        String(format: "%.1f", value)
+        return WellbeingFactor(kind: .homeworkBacklog(undone: undone.count, total: pastDue.count))
     }
 }
 
 // MARK: - Models
 
 struct WellbeingFactor: Equatable, Sendable {
-    enum Kind: String, Sendable, Equatable {
-        case sustainedGradeDecline
-        case unreadBacklog
-        case homeworkBacklog
+    enum Kind: Equatable, Sendable {
+        case sustainedGradeDecline(subjects: [String], average: Double)
+        case unreadBacklog(count: Int)
+        case homeworkBacklog(undone: Int, total: Int)
+
+        var detail: String {
+            switch self {
+            case let .sustainedGradeDecline(subjects, avg):
+                let label = subjects.sorted().prefix(2).joined(separator: " et ")
+                return "Baisse en \(label) (moy. \(String(format: "%.1f", avg)))"
+            case let .unreadBacklog(count):
+                return "\(count) messages non lus"
+            case let .homeworkBacklog(undone, total):
+                return "\(undone) devoirs sur \(total) non faits"
+            }
+        }
     }
 
     let kind: Kind
-    let detail: String
+    var detail: String { kind.detail }
 }
 
 /// Surface-level payload the briefing UI renders. Computed on-the-fly —
-/// not persisted. Regenerated every briefing rebuild so wellbeing state
-/// always reflects the current signals.
+/// not persisted. `make()` guarantees at least 2 factors; construction
+/// outside the engine is not possible.
 struct WellbeingSignal: Equatable, Sendable {
+    enum Severity: Equatable, Sendable { case notable, urgent }
+
     let childName: String
-    let factors: [WellbeingFactor]
-    let observedAt: Date
+    let childLevel: SchoolLevel
+    let factors: [WellbeingFactor]  // count >= 2, guaranteed by make()
 
-    var severity: BriefingPriority {
-        factors.count >= 3 ? .urgent : .normal
+    var severity: Severity { factors.count >= 3 ? .urgent : .notable }
+    var title: String { "Signes à observer — \(childName)" }
+    var subtitle: String { factors.map(\.detail).joined(separator: " · ") }
+
+    /// Returns nil when fewer than 2 factors are present — callers receive
+    /// the enforcement rather than accidentally building a one-factor signal.
+    static func make(childName: String, childLevel: SchoolLevel, factors: [WellbeingFactor]) -> WellbeingSignal? {
+        guard factors.count >= 2 else { return nil }
+        return WellbeingSignal(childName: childName, childLevel: childLevel, factors: factors)
     }
 
-    var title: String {
-        "Signes à observer — \(childName)"
-    }
-
-    var subtitle: String {
-        factors.map(\.detail).joined(separator: " · ")
+    private init(childName: String, childLevel: SchoolLevel, factors: [WellbeingFactor]) {
+        self.childName = childName
+        self.childLevel = childLevel
+        self.factors = factors
     }
 }

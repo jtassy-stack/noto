@@ -212,7 +212,7 @@ final class BriefingEngine: ObservableObject {
                 childName: signal.childName,
                 title: signal.title,
                 subtitle: signal.subtitle,
-                priority: signal.severity,
+                priority: signal.severity == .urgent ? .urgent : .normal,
                 icon: "heart.text.square",
                 wellbeing: signal
             ))

@@ -301,10 +301,9 @@ struct HomeView: View {
             NotificationCenter.default.post(name: .navigateToSchool, object: nil)
 
         case .wellbeing:
-            // `wellbeing` is always populated for this type — see
-            // `BriefingEngine.buildSchoolCards`. Fall back to the sheet
-            // with nil signal rather than silently swallowing the tap
-            // if an unexpected card slips through.
+            if card.wellbeing == nil {
+                logger.warning("Briefing card tap: .wellbeing card has nil wellbeing payload — sheet will show without signal context")
+            }
             wellbeingSignal = card.wellbeing
             showWellbeingSheet = true
         }
