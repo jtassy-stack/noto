@@ -57,6 +57,33 @@ struct SettingsView: View {
             : "Domaines autorisés"
     }
 
+    /// Most recent date of an IMAP-sourced message across all children.
+    /// Used as a proxy for last sync time since no separate sync timestamp
+    /// is stored. Returns nil if no IMAP messages have ever been synced.
+    private var imapLastSyncDate: Date? {
+        children
+            .flatMap { $0.messages }
+            .filter { $0.source == .imap }
+            .map { $0.date }
+            .max()
+    }
+
+    /// Relative label for the last IMAP sync ("Il y a 12 min", "Hier", …).
+    private var imapLastSyncLabel: String {
+        guard let date = imapLastSyncDate else { return "Jamais" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: .now)
+    }
+
+    /// Comma-separated first names of children whose mail is synced via IMAP.
+    /// Since the account is global, this is always all configured children.
+    private var imapCoveredChildrenLabel: String {
+        guard !children.isEmpty else { return "—" }
+        return children.map { $0.firstName }.joined(separator: ", ")
+    }
+
     // MARK: Body
 
     var body: some View {
@@ -154,7 +181,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 IntegrationRow(
                     title: "Boîte mail",
-                    subtitle: "Filtrer les emails scolaires",
+                    subtitle: imapConfig.map { $0.username } ?? "Filtrer les emails scolaires",
                     badge: imapConfig == nil ? .notConfigured : .connected,
                     action: { showIMAPSetup = true }
                 )
@@ -191,7 +218,11 @@ struct SettingsView: View {
                 .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
+                InfoRow(label: "Fournisseur", value: imapConfig?.providerDisplayName ?? "—")
+                SettingsDivider()
                 InfoRow(label: "Compte", value: imapConfig?.username ?? "—")
+                SettingsDivider()
+                InfoRow(label: "Enfants couverts", value: imapCoveredChildrenLabel)
                 SettingsDivider()
                 InfoRow(
                     label: mailboxFilterRowLabel,
@@ -200,7 +231,7 @@ struct SettingsView: View {
                     action: { showMailDomains = true }
                 )
                 SettingsDivider()
-                InfoRow(label: "Dernière synchronisation", value: "Il y a 12 min")
+                InfoRow(label: "Dernière synchronisation", value: imapLastSyncLabel)
                 SettingsDivider()
                 Button(role: .destructive) {
                     disconnectIMAP()

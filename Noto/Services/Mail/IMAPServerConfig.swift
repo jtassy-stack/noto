@@ -75,6 +75,17 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
         self.providerID = providerID
     }
 
+    /// Human-readable provider label shown in Settings.
+    var providerDisplayName: String {
+        switch providerID {
+        case "gmail":    return "Gmail"
+        case "outlook":  return "Outlook / Hotmail"
+        case "icloud":   return "iCloud Mail"
+        case "monlycee": return "MonLycée.net"
+        default:         return host
+        }
+    }
+
     var description: String {
         "IMAPServerConfig(host: \(host), port: \(port), username: \(username), password: <redacted>, providerID: \(providerID))"
     }
