@@ -489,6 +489,13 @@ private struct ChildSettingsRow: View {
                 child.rneCode = summary.rne
                 do {
                     try modelContext.save()
+                    // Warm the directory cache eagerly so the FIRST sync
+                    // after linking already uses the authoritative
+                    // mailDomains. Failure here is fine — the next sync
+                    // will fall back to the regular cache path.
+                    Task {
+                        try? await DirectorySchoolCache.refresh(rne: summary.rne)
+                    }
                 } catch {
                     // Without this log the parent would see the CTA disappear and
                     // assume the link landed, only for it to vanish on next launch.

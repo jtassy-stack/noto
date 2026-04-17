@@ -223,6 +223,10 @@ struct ActualitesView: View {
         guard !pronoteChildren.isEmpty else { return }
         guard let config = IMAPService.loadConfig() else { return }
 
+        // Pre-fetch the directory cache so each per-child whitelist uses
+        // the authoritative mailDomains when an RNE is linked.
+        let directorySchools = await DirectorySchoolCache.schools(for: pronoteChildren)
+
         let fetched: [IMAPMessageInfo]
         do {
             fetched = try await IMAPService.fetchInbox(config: config)
@@ -236,7 +240,12 @@ struct ActualitesView: View {
         let service = IMAPSyncService(modelContext: modelContext)
         for child in pronoteChildren {
             do {
-                try service.process(child: child, config: config, fetched: fetched)
+                try service.process(
+                    child: child,
+                    config: config,
+                    fetched: fetched,
+                    directorySchools: directorySchools
+                )
             } catch {
                 NSLog("[noto][error] IMAP process failed for %@: %@", child.firstName, error.localizedDescription)
                 // `emptyWhitelist` ships actionable copy pointing to Settings;
