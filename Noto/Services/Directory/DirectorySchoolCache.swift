@@ -54,7 +54,16 @@ enum DirectorySchoolCache {
     /// caller would rather show stale data than nothing (offline UX).
     static func loadEvenIfStale(rne: String) -> DirectorySchool? {
         guard let data = defaults.data(forKey: key(for: rne)) else { return nil }
-        return try? JSONDecoder().decode(CacheEntry.self, from: data).school
+        do {
+            return try JSONDecoder().decode(CacheEntry.self, from: data).school
+        } catch {
+            // Mirror `load(rne:)`'s log path so a corrupt entry surfaces
+            // ops-side. Drop the bad entry so we don't re-decode it on
+            // every call until the next refresh overwrites.
+            logger.warning("Failed to decode stale-path school for \(rne, privacy: .public): \(String(describing: error))")
+            defaults.removeObject(forKey: key(for: rne))
+            return nil
+        }
     }
 
     // MARK: - Save

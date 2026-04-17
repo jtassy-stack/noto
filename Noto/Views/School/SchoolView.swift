@@ -1108,13 +1108,9 @@ private struct MessagesListView: View {
     @MainActor
     private func syncIMAP() async {
         let service = IMAPSyncService(modelContext: modelContext)
-        // Pre-fetch the directory cache once — passed through so the
-        // whitelist uses each child's authoritative mailDomains when
-        // the parent has linked an RNE (Phase 8.5/8.6).
-        let directorySchools = await DirectorySchoolCache.schools(for: children)
         for child in children {
             do {
-                try await service.sync(for: child, directorySchools: directorySchools)
+                try await service.sync(for: child)
             } catch {
                 syncError = error.localizedDescription
             }
