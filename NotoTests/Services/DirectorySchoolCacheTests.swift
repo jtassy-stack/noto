@@ -255,8 +255,9 @@ extension DirectorySchoolCacheTests {
     }
 
     /// Minimal valid `/schools/:rne` JSON for the stub to return when a
-    /// test needs the refresh path to succeed.
-    static func schoolJSON(rne: String) -> Data {
+    /// test needs the refresh path to succeed. `nonisolated` so the
+    /// `@Sendable` stub handler can call it without a main-actor hop.
+    nonisolated static func schoolJSON(rne: String) -> Data {
         Data(#"""
         {
           "rne": "\#(rne)",

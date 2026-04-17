@@ -22,6 +22,8 @@ struct HomeView: View {
     @State private var showAbsence = false
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
+    @State private var showWellbeingSheet = false
+    @State private var wellbeingSignal: WellbeingSignal?
 
     // Card-tap destinations
     @State private var selectedHomework: Homework?
@@ -196,6 +198,9 @@ struct HomeView: View {
             .sheet(isPresented: $showAbsence) {
                 AbsenceView()
             }
+            .sheet(isPresented: $showWellbeingSheet) {
+                WellbeingResourcesView(signal: wellbeingSignal)
+            }
             .refreshable {
                 await performFullRefresh()
             }
@@ -294,6 +299,14 @@ struct HomeView: View {
 
         case .cancelled:
             NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+
+        case .wellbeing:
+            // `wellbeing` is always populated for this type — see
+            // `BriefingEngine.buildSchoolCards`. Fall back to the sheet
+            // with nil signal rather than silently swallowing the tap
+            // if an unexpected card slips through.
+            wellbeingSignal = card.wellbeing
+            showWellbeingSheet = true
         }
     }
 
