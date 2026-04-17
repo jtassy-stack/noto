@@ -12,7 +12,7 @@ private func entLog(_ message: @autoclosure () -> String) {
 /// Session managed via cookie jar — credentials stay on-device.
 final class ENTClient: Sendable {
     let baseURL: URL
-    private let session: URLSession
+    let session: URLSession
     /// Shared cookie storage for ENT sessions.
     /// HTTPCookieStorage() custom init silently drops setCookie calls — must use .shared.
     /// Session cookies (oneSessionId etc.) are short-lived tokens, not credentials.
