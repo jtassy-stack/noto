@@ -20,7 +20,13 @@ final class ENTSyncService {
         var photos: [ENTPhotoAttachment] = []
         var fetchErrors: [String] = []
 
-        do { conversations = try await client.fetchConversations() }
+        do {
+            let list = try await client.fetchConversations()
+            // The list endpoint returns summaries — bodies are absent. Fetch each message
+            // individually to populate the body. Failures are soft: a missing body is
+            // better than losing the whole message thread.
+            conversations = await withBodyFetch(list, client: client)
+        }
         catch { fetchErrors.append("messages: \(error.localizedDescription)") }
 
         do { words = try await client.fetchSchoolbook(childId: entChildId) }
@@ -143,6 +149,43 @@ final class ENTSyncService {
             modelContext.insert(p)
         }
         NSLog("[noto] ENT synced \(photos.count) new photos for \(child.firstName)")
+    }
+
+    // MARK: - Body fetch
+
+    /// Enrich conversation summaries with their full body by calling GET /conversation/message/<id>
+    /// per conversation. Sequential (not concurrent) to avoid hammering the ENT API.
+    /// A failure to fetch a body is logged and silently ignored — the message is still stored
+    /// with an empty body rather than dropped entirely.
+    private func withBodyFetch(_ conversations: [ENTConversation], client: ENTClient) async -> [ENTConversation] {
+        var enriched: [ENTConversation] = []
+        enriched.reserveCapacity(conversations.count)
+        for conv in conversations {
+            // If the list endpoint already provided a body (unlikely but future-proof), keep it.
+            guard conv.body == nil || conv.body?.isEmpty == true else {
+                enriched.append(conv)
+                continue
+            }
+            do {
+                if let detail = try await client.fetchMessage(id: conv.id), let body = detail.body {
+                    enriched.append(ENTConversation(
+                        id: conv.id,
+                        subject: conv.subject,
+                        from: conv.from,
+                        date: conv.date,
+                        body: body,
+                        unread: conv.unread,
+                        groupNames: conv.groupNames
+                    ))
+                } else {
+                    enriched.append(conv)
+                }
+            } catch {
+                NSLog("[noto][warn] fetchMessage(%@) body fetch failed: %@ — storing without body", conv.id, error.localizedDescription)
+                enriched.append(conv)
+            }
+        }
+        return enriched
     }
 
     // MARK: - Messages

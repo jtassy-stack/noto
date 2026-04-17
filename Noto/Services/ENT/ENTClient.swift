@@ -161,6 +161,9 @@ final class ENTClient: Sendable {
             return nil
         }
 
+        // Debug: log top-level keys so we can identify the correct body field name in production logs
+        entLog("[noto] fetchMessage(\(id)) keys=\(json.keys.sorted()), body=\(json["body"] as? String != nil), content=\(json["content"] as? String != nil), text=\(json["text"] as? String != nil)")
+
         return parseConversation(json)
     }
 
@@ -598,12 +601,19 @@ final class ENTClient: Sendable {
             date = parseISO(json["date"] as? String) ?? .now
         }
 
+        // The detail endpoint (GET /conversation/message/<id>) may use "body", "content",
+        // "message", or "text" — try all candidates. The list endpoint omits the body entirely.
+        let body = json["body"] as? String
+            ?? json["content"] as? String
+            ?? json["message"] as? String
+            ?? json["text"] as? String
+
         return ENTConversation(
             id: id,
             subject: json["subject"] as? String ?? "",
             from: from,
             date: date,
-            body: json["body"] as? String,
+            body: body,
             unread: json["unread"] as? Bool ?? false,
             groupNames: groupNames
         )
