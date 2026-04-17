@@ -45,6 +45,7 @@ struct IMAPSyncService {
     /// `process(child:config:fetched:directorySchools:)` so tests can
     /// exercise the whitelist / bypass / dedupe branches without a live
     /// server.
+    @MainActor
     func sync(
         for child: Child,
         directorySchools: [String: DirectorySchool] = [:]
