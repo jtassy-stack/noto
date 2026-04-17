@@ -198,7 +198,7 @@ struct MonLyceeIMAPSetupView: View {
 
         do {
             try await IMAPService.validate(config: config)
-            try IMAPService.saveConfig(config)
+            try IMAPService.addConfig(config)
             dismiss()
         } catch {
             errorMessage = AppPasswordGuidance.userErrorMessage(for: error, preset: preset)

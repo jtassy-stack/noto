@@ -9,6 +9,10 @@ import Foundation
 /// overridden to redact the password so any accidental `print(config)`
 /// or `os_log("\(config)")` cannot leak it to the unified log.
 struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
+    /// Stable per-account identity used for Keychain keying, dedup, and disconnect.
+    /// Optional in the Codable payload so blobs written before multi-account
+    /// support decode without error — a fresh UUID is assigned on decode.
+    let id: UUID
     let host: String
     let port: Int
     let username: String
@@ -59,7 +63,8 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     }
 
     /// Convenience: build a full config from a preset + credentials.
-    init(preset: Preset, username: String, password: String) {
+    init(preset: Preset, username: String, password: String, id: UUID = UUID()) {
+        self.id = id
         self.host = preset.host
         self.port = preset.port
         self.providerID = preset.providerID
@@ -67,12 +72,31 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
         self.password = password
     }
 
-    init(host: String, port: Int, username: String, password: String, providerID: String) {
+    init(host: String, port: Int, username: String, password: String, providerID: String, id: UUID = UUID()) {
+        self.id = id
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.providerID = providerID
+    }
+
+    // MARK: - Codable (backward compat)
+
+    private enum CodingKeys: String, CodingKey {
+        case id, host, port, username, password, providerID
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // `decodeIfPresent` returns nil only when the key is absent (legacy blob) —
+        // unlike `try?` it would still throw on a malformed UUID value.
+        id         = (try c.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
+        host       = try c.decode(String.self, forKey: .host)
+        port       = try c.decode(Int.self, forKey: .port)
+        username   = try c.decode(String.self, forKey: .username)
+        password   = try c.decode(String.self, forKey: .password)
+        providerID = try c.decode(String.self, forKey: .providerID)
     }
 
     /// Human-readable provider label shown in Settings.

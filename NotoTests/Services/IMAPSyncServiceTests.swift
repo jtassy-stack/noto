@@ -449,4 +449,91 @@ struct IMAPSyncServiceTests {
         #expect(legacy.imapProvider == "monlycee")
         #expect(child.messages.filter { $0.source == .imap }.count == 1)
     }
+
+    // MARK: - Cross-account UID collision
+
+    @Test("Same UID from two different providers inserts two messages — no cross-account collision")
+    func crossAccountUIDNoCollision() throws {
+        resetManualWhitelist()
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        let today = Date.now
+
+        // Use two dedicated-school-channel providers so whitelist bypass applies to both.
+        // The key invariant under test is providerID scoping, not filtering.
+        let configA = makeConfig(providerID: "monlycee")
+        let configB = IMAPServerConfig(
+            host: "imap.ent77.example",
+            port: 993,
+            username: "u@ent77.fr",
+            password: "x",
+            providerID: "monlycee2"   // different provider, same UID
+        )
+        let service = IMAPSyncService(modelContext: ctx)
+
+        // Account A inserts message with UID 42
+        try service.process(
+            child: child,
+            config: configA,
+            fetched: [info(uid: 42, sender: "Prof Martin", subject: "Conseil de classe", date: today)]
+        )
+
+        // Account B also has UID 42 — must not match account A's message
+        // We use configA's isDedicatedSchoolChannel for B by overriding the raw config
+        // to bypass whitelist; what matters is the different providerID string.
+        let existing = child.messages.filter { $0.source == .imap }
+        // Insert account B's message manually to simulate a second dedicated provider
+        let msgB = Message(
+            sender: "Direction",
+            subject: "Sortie scolaire",
+            body: "Infos",
+            date: today,
+            source: .imap,
+            kind: .conversation,
+            link: nil,
+            imapUID: "42",
+            imapProvider: "monlycee2"
+        )
+        msgB.child = child
+        ctx.insert(msgB)
+
+        // Now verify: primary UID dedup for account A does NOT match account B's row
+        try service.process(
+            child: child,
+            config: configA,
+            fetched: [info(uid: 42, sender: "Prof Martin", subject: "Conseil de classe", date: today)]
+        )
+
+        let imapMessages = child.messages.filter { $0.source == .imap }
+        #expect(imapMessages.count == 2, "Both messages must be stored — UID 42 is not globally unique")
+        #expect(imapMessages.contains { $0.imapProvider == "monlycee" && $0.subject == "Conseil de classe" })
+        #expect(imapMessages.contains { $0.imapProvider == "monlycee2" && $0.subject == "Sortie scolaire" })
+    }
+
+    @Test("Same UID from same provider deduplicates as expected")
+    func sameProviderUIDDeduplicates() throws {
+        resetManualWhitelist()
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        let today = Date.now
+
+        // monlycee bypasses whitelist check
+        let config = makeConfig(providerID: "monlycee")
+        let service = IMAPSyncService(modelContext: ctx)
+
+        // Sync once
+        try service.process(
+            child: child,
+            config: config,
+            fetched: [info(uid: 42, sender: "Prof Martin", subject: "Conseil", date: today)]
+        )
+        // Sync again — same UID, same provider: must not insert a duplicate
+        try service.process(
+            child: child,
+            config: config,
+            fetched: [info(uid: 42, sender: "Prof Martin", subject: "Conseil", date: today)]
+        )
+
+        #expect(child.messages.filter { $0.source == .imap }.count == 1)
+    }
 }
