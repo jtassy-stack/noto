@@ -203,6 +203,21 @@ final class BriefingEngine: ObservableObject {
             ))
         }
 
+        // Wellbeing signal — emitted only when multiple factors align,
+        // so we never paint the card for a single bad grade week. The
+        // copy is framed as observations, not diagnosis.
+        if let signal = WellbeingEngine.detect(for: child, now: now) {
+            cards.append(BriefingCard(
+                type: .wellbeing,
+                childName: signal.childName,
+                title: signal.title,
+                subtitle: signal.subtitle,
+                priority: signal.severity == .urgent ? .urgent : .normal,
+                icon: "heart.text.square",
+                wellbeing: signal
+            ))
+        }
+
         // Insights (difficulties, strengths, trends)
         for insight in child.insights {
             let (icon, priority): (String, BriefingPriority) = switch insight.type {
@@ -247,6 +262,10 @@ struct BriefingCard: Identifiable, Equatable {
     /// tab-routing types (`.cancelled`, `.message`, `.cultureReco`,
     /// `.familyReco`) which jump to a list view instead of a detail.
     let targetID: PersistentIdentifier?
+    /// Non-nil only for `.wellbeing` cards. Carries the factor list so
+    /// the resource sheet can show exactly what triggered this card
+    /// without re-running the detector.
+    let wellbeing: WellbeingSignal?
 
     init(
         type: BriefingCardType,
@@ -256,7 +275,8 @@ struct BriefingCard: Identifiable, Equatable {
         priority: BriefingPriority,
         icon: String,
         detail: String? = nil,
-        targetID: PersistentIdentifier? = nil
+        targetID: PersistentIdentifier? = nil,
+        wellbeing: WellbeingSignal? = nil
     ) {
         self.type = type
         self.childName = childName
@@ -266,6 +286,7 @@ struct BriefingCard: Identifiable, Equatable {
         self.icon = icon
         self.detail = detail
         self.targetID = targetID
+        self.wellbeing = wellbeing
     }
 }
 
@@ -276,4 +297,7 @@ enum BriefingCardType {
     case insight
     case cultureReco
     case familyReco
+    /// Multi-signal pattern detected by `WellbeingEngine`. Taps open the
+    /// `WellbeingResourcesView` sheet; not a link to a SwiftData detail.
+    case wellbeing
 }

@@ -22,6 +22,8 @@ struct HomeView: View {
     @State private var showAbsence = false
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
+    @State private var showWellbeingSheet = false
+    @State private var wellbeingSignal: WellbeingSignal?
 
     // Card-tap destinations
     @State private var selectedHomework: Homework?
@@ -196,6 +198,9 @@ struct HomeView: View {
             .sheet(isPresented: $showAbsence) {
                 AbsenceView()
             }
+            .sheet(isPresented: $showWellbeingSheet) {
+                WellbeingResourcesView(signal: wellbeingSignal)
+            }
             .refreshable {
                 await performFullRefresh()
             }
@@ -294,6 +299,13 @@ struct HomeView: View {
 
         case .cancelled:
             NotificationCenter.default.post(name: .navigateToSchool, object: nil)
+
+        case .wellbeing:
+            if card.wellbeing == nil {
+                logger.warning("Briefing card tap: .wellbeing card has nil wellbeing payload — sheet will show without signal context")
+            }
+            wellbeingSignal = card.wellbeing
+            showWellbeingSheet = true
         }
     }
 
