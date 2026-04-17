@@ -17,11 +17,11 @@ struct MailboxSetupView: View {
                     .font(.system(size: 44))
                     .foregroundStyle(NotoTheme.Colors.brand)
 
-                Text("Messagerie MonLycée")
+                Text("Ajouter une boîte mail")
                     .font(NotoTheme.Typography.title)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
 
-                Text("Entrez vos identifiants MonLycée pour accéder aux messages de l'école.\nVos informations restent sur cet appareil.")
+                Text("Connectez votre boîte mail scolaire (MonLycée, Gmail, Outlook…) pour centraliser les messages de l'école.\nVos identifiants restent sur cet appareil.")
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -90,7 +90,7 @@ struct MailboxSetupView: View {
         let config = IMAPServerConfig(preset: preset, username: email, password: password)
         do {
             try await IMAPService.validate(config: config)
-            try IMAPService.saveConfig(config)
+            try IMAPService.addConfig(config)
             onComplete()
         } catch {
             errorMessage = "Connexion échouée. Vérifiez vos identifiants."

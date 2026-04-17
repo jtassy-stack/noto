@@ -1060,7 +1060,7 @@ private struct MessagesListView: View {
     let children: [Child]
     @Environment(\.modelContext) private var modelContext
     @State private var selectedMessage: Message?
-    @State private var hasIMAPCredentials = IMAPService.isConfigured
+    @State private var hasIMAPCredentials = !IMAPService.loadConfigs().isEmpty
     @State private var syncError: String?
     @State private var isSyncing = false
 
@@ -1127,7 +1127,7 @@ private struct MessagesListView: View {
             await syncIMAP()
         }
         .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
-            hasIMAPCredentials = IMAPService.isConfigured
+            hasIMAPCredentials = !IMAPService.loadConfigs().isEmpty
         }
         .alert("Erreur de synchronisation", isPresented: Binding(get: { syncError != nil }, set: { if !$0 { syncError = nil } })) {
             Button("OK") { syncError = nil }
@@ -1143,34 +1143,36 @@ private struct MessagesListView: View {
     /// and responsive throughout.
     private func syncIMAP() async {
         guard !isSyncing else { return }
+        let configs = IMAPService.loadConfigs()
+        guard !configs.isEmpty else { return }
         isSyncing = true
         defer { isSyncing = false }
 
-        // De-duplicate IMAP fetch: one connection for all children that
-        // share the same mailbox, then replay locally per child.
-        guard let config = IMAPService.loadConfig() else { return }
         let directorySchools = await DirectorySchoolCache.schools(for: children)
-
-        let fetched: [IMAPMessageInfo]
-        do {
-            fetched = try await Task.detached(priority: .userInitiated) {
-                try await IMAPService.fetchInbox(config: config)
-            }.value
-        } catch {
-            syncError = error.localizedDescription
-            return
-        }
-
         let service = IMAPSyncService(modelContext: modelContext)
-        var childError: String?
-        for child in children {
+        var encounteredError: String?
+
+        for config in configs {
+            let fetched: [IMAPMessageInfo]
             do {
-                try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+                fetched = try await Task.detached(priority: .userInitiated) {
+                    try await IMAPService.fetchInbox(config: config)
+                }.value
             } catch {
-                childError = error.localizedDescription
+                encounteredError = error.localizedDescription
+                continue
+            }
+
+            for child in children {
+                do {
+                    try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+                } catch {
+                    encounteredError = error.localizedDescription
+                }
             }
         }
-        if let err = childError {
+
+        if let err = encounteredError {
             syncError = err
         } else {
             lastSyncDateInterval = Date.now.timeIntervalSince1970

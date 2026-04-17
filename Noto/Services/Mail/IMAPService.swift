@@ -13,51 +13,93 @@ struct IMAPMessageInfo: Sendable {
 
 /// Multi-provider IMAP client.
 ///
-/// Credentials are stored in Keychain as a JSON-encoded `IMAPServerConfig`.
-/// On first read after upgrading from the pre-Phase-7 MonLycée-hardcoded
-/// release, `loadConfig()` transparently hydrates the legacy
-/// `imap_credentials_monlycee` blob into an `IMAPServerConfig` so existing
-/// users don't need to re-auth.
+/// Supports multiple simultaneous accounts (e.g. Gmail personal + MonLycée
+/// school provisioned). Each account is stored by its `IMAPServerConfig.id`.
+/// The list is JSON-encoded into a single Keychain blob under `accountsKey`.
+///
+/// Migration path (oldest → newest):
+///   1. `legacyMonLyceeKey` — pre-Phase-7, MonLycée-only hardcoded creds
+///   2. `keychainKey` (`imap_config_v2`) — Phase 7, single-account JSON blob
+///   3. `accountsKey` (`imap_accounts_v3`) — current, array of accounts
+///
+/// `loadConfigs()` promotes the old blob into slot 0 on first read so
+/// existing users don't re-authenticate after upgrading.
 enum IMAPService {
 
     // MARK: - Keychain keys
 
-    /// Legacy key — MonLycée only, pre-Phase-7 install base.
-    /// Read-only after Phase 7: writes go to `keychainKey` and the
-    /// legacy blob is cleaned up on first successful `saveConfig`.
     static let legacyMonLyceeKey = "imap_credentials_monlycee"
+    static let keychainKey       = "imap_config_v2"
+    static let accountsKey       = "imap_accounts_v3"
 
-    /// Current key for the configured mailbox (single account per device).
-    static let keychainKey = "imap_config_v2"
-
-    /// Posted after `saveConfig` and `clearConfig` commit. Views that
-    /// render IMAP-dependent state but don't live inside SettingsView
-    /// (Actualités prompt banner, feed source badges, Settings
-    /// MailDomains sheet) subscribe to this to refresh without
-    /// requiring a tab re-appear.
     static let configDidChangeNotification = Notification.Name("noto.imap.configDidChange")
 
-    // MARK: - Config persistence
+    // MARK: - Multi-account persistence
 
-    static func saveConfig(_ config: IMAPServerConfig) throws {
-        let data = try JSONEncoder().encode(config)
-        try KeychainService.save(key: keychainKey, data: data)
-        // Best-effort legacy cleanup — failure here doesn't compromise
-        // the save we just committed.
+    static func loadConfigs() -> [IMAPServerConfig] {
+        // Try v3 array first
+        if let data = try? KeychainService.load(key: accountsKey),
+           let configs = try? JSONDecoder().decode([IMAPServerConfig].self, from: data),
+           !configs.isEmpty {
+            return configs
+        }
+        // Migrate from v2 single config
+        if let single = migrateSingleConfig() {
+            try? saveConfigs([single])
+            return [single]
+        }
+        return []
+    }
+
+    static func saveConfigs(_ configs: [IMAPServerConfig]) throws {
+        let data = try JSONEncoder().encode(configs)
+        try KeychainService.save(key: accountsKey, data: data)
+        NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
+    }
+
+    static func addConfig(_ config: IMAPServerConfig) throws {
+        var configs = loadConfigs()
+        configs.removeAll { $0.id == config.id }
+        configs.append(config)
+        try saveConfigs(configs)
+    }
+
+    static func removeConfig(id: UUID) throws {
+        var configs = loadConfigs()
+        configs.removeAll { $0.id == id }
+        try saveConfigs(configs)
+    }
+
+    static func clearAllConfigs() throws {
+        try? KeychainService.delete(key: accountsKey)
+        try? KeychainService.delete(key: keychainKey)
         try? KeychainService.delete(key: legacyMonLyceeKey)
         NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
     }
 
-    static func loadConfig() -> IMAPServerConfig? {
-        let primary = try? KeychainService.load(key: keychainKey)
-        let legacy = try? KeychainService.load(key: legacyMonLyceeKey)
-        return decodeConfig(primaryData: primary, legacyData: legacy)
+    static var isConfigured: Bool { !loadConfigs().isEmpty }
+
+    // MARK: - Single-account shims (backward compat for call sites not yet migrated)
+
+    static func loadConfig() -> IMAPServerConfig? { loadConfigs().first }
+
+    static func saveConfig(_ config: IMAPServerConfig) throws {
+        try addConfig(config)
     }
 
-    /// Pure decode path — factored out of `loadConfig` so the
-    /// hydration logic can be unit-tested without a Keychain seam.
-    /// Tries the primary v2 blob first, then the legacy MonLycée
-    /// blob. Returns nil if neither decodes successfully.
+    static func clearConfig() throws {
+        try clearAllConfigs()
+    }
+
+    // MARK: - Migration helpers
+
+    private static func migrateSingleConfig() -> IMAPServerConfig? {
+        let v2 = try? KeychainService.load(key: keychainKey)
+        let legacy = try? KeychainService.load(key: legacyMonLyceeKey)
+        return decodeConfig(primaryData: v2, legacyData: legacy)
+    }
+
+    /// Pure decode path exposed for unit tests.
     static func decodeConfig(primaryData: Data?, legacyData: Data?) -> IMAPServerConfig? {
         if let data = primaryData,
            let config = try? JSONDecoder().decode(IMAPServerConfig.self, from: data) {
@@ -74,20 +116,6 @@ enum IMAPService {
             )
         }
         return nil
-    }
-
-    static func clearConfig() throws {
-        try KeychainService.delete(key: keychainKey)
-        try KeychainService.delete(key: legacyMonLyceeKey)
-        NotificationCenter.default.post(name: configDidChangeNotification, object: nil)
-    }
-
-    /// Convenience — true when a mailbox is configured.
-    /// All UI call sites (SettingsView, SchoolView, ActualitesView,
-    /// OnboardingView) use this instead of direct Keychain reads so
-    /// the legacy-hydration path in `loadConfig` stays authoritative.
-    static var isConfigured: Bool {
-        loadConfig() != nil
     }
 
     // MARK: - Fetch

@@ -29,7 +29,7 @@ struct SettingsView: View {
     @State private var showAddChild = false
     @State private var showIMAPSetup = false
     @State private var showMailDomains = false
-    @State private var imapConfig: IMAPServerConfig?
+    @State private var imapConfigs: [IMAPServerConfig] = []
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
@@ -41,10 +41,8 @@ struct SettingsView: View {
     private var children: [Child] { family?.children ?? [] }
 
     private var whitelistCountLabel: String {
-        // Dedicated channels (monlycée.net) don't apply filtering — the
-        // row would show "0 entrées" which implies "nothing is synced"
-        // and contradicts what the parent actually sees in the feed.
-        if imapConfig?.isDedicatedSchoolChannel == true {
+        // If ALL accounts are dedicated school channels, no filtering applies.
+        if imapConfigs.allSatisfy(\.isDedicatedSchoolChannel) {
             return "Désactivé"
         }
         let count = MailWhitelist.build(from: children).count
@@ -52,7 +50,7 @@ struct SettingsView: View {
     }
 
     private var mailboxFilterRowLabel: String {
-        imapConfig?.isDedicatedSchoolChannel == true
+        imapConfigs.allSatisfy(\.isDedicatedSchoolChannel)
             ? "Filtrage courrier"
             : "Domaines autorisés"
     }
@@ -96,7 +94,7 @@ struct SettingsView: View {
 
                     childrenSection
                     integrationsSection
-                    if imapConfig != nil {
+                    if !imapConfigs.isEmpty {
                         mailboxSection
                     }
                     notificationsSection
@@ -179,8 +177,12 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 IntegrationRow(
                     title: "Boîte mail",
-                    subtitle: imapConfig.map { $0.username } ?? "Filtrer les emails scolaires",
-                    badge: imapConfig == nil ? .notConfigured : .connected,
+                    subtitle: imapConfigs.isEmpty
+                        ? "Filtrer les emails scolaires"
+                        : imapConfigs.count == 1
+                            ? imapConfigs[0].username
+                            : "\(imapConfigs.count) comptes configurés",
+                    badge: imapConfigs.isEmpty ? .notConfigured : .connected,
                     action: { showIMAPSetup = true }
                 )
                 SettingsDivider()
@@ -211,16 +213,15 @@ struct SettingsView: View {
 
     private var mailboxSection: some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("Boîte mail")
+            Text("Boîtes mail")
                 .sectionLabelStyle()
                 .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
-                InfoRow(label: "Fournisseur", value: imapConfig?.providerDisplayName ?? "—")
-                SettingsDivider()
-                InfoRow(label: "Compte", value: imapConfig?.username ?? "—")
-                SettingsDivider()
-                InfoRow(label: "Enfants couverts", value: imapCoveredChildrenLabel)
+                ForEach(Array(imapConfigs.enumerated()), id: \.element.id) { index, config in
+                    if index > 0 { SettingsDivider() }
+                    IMAPAccountRow(config: config, onDisconnect: { disconnectIMAP(id: config.id) })
+                }
                 SettingsDivider()
                 InfoRow(
                     label: mailboxFilterRowLabel,
@@ -231,13 +232,13 @@ struct SettingsView: View {
                 SettingsDivider()
                 InfoRow(label: "Dernière synchronisation", value: imapLastSyncLabel)
                 SettingsDivider()
-                Button(role: .destructive) {
-                    disconnectIMAP()
-                } label: {
+                Button { showIMAPSetup = true } label: {
                     HStack {
-                        Text("Déconnecter la boîte mail")
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                        Text("Ajouter une boîte mail")
                             .font(NotoTheme.Typography.body)
-                            .foregroundStyle(NotoTheme.Colors.danger)
+                            .foregroundStyle(NotoTheme.Colors.brand)
                         Spacer()
                     }
                     .padding(.horizontal, NotoTheme.Spacing.md)
@@ -393,7 +394,7 @@ struct SettingsView: View {
     }
 
     private func refreshIMAP() {
-        imapConfig = IMAPService.loadConfig()
+        imapConfigs = IMAPService.loadConfigs()
     }
 
     // MARK: Actions
@@ -410,15 +411,13 @@ struct SettingsView: View {
         try? modelContext.save()
     }
 
-    private func disconnectIMAP() {
+    private func disconnectIMAP(id: UUID) {
         do {
-            try IMAPService.clearConfig()
-            imapConfig = nil
+            try IMAPService.removeConfig(id: id)
+            imapConfigs = IMAPService.loadConfigs()
         } catch {
             NSLog("[noto][warn] disconnectIMAP failed: \(error.localizedDescription)")
-            // Re-read state so the UI reflects reality rather than an
-            // optimistic clear that didn't actually land.
-            imapConfig = IMAPService.loadConfig()
+            imapConfigs = IMAPService.loadConfigs()
         }
     }
 
@@ -431,9 +430,38 @@ struct SettingsView: View {
                 try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
             }
         }
-        try? IMAPService.clearConfig()
-        imapConfig = nil
+        try? IMAPService.clearAllConfigs()
+        imapConfigs = []
         try? modelContext.save()
+    }
+}
+
+// MARK: - IMAP Account Row
+
+private struct IMAPAccountRow: View {
+    let config: IMAPServerConfig
+    let onDisconnect: () -> Void
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(config.providerDisplayName)
+                    .font(NotoTheme.Typography.body)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text(config.username)
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            Spacer()
+            Button(role: .destructive, action: onDisconnect) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.5))
+                    .font(.system(size: 20))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, NotoTheme.Spacing.md)
+        .padding(.vertical, 14)
     }
 }
 
