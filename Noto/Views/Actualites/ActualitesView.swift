@@ -48,7 +48,11 @@ struct ActualitesView: View {
 
     @State private var activeFilter: FeedFilter = .tous
     @State private var isRefreshing = false
-    @State private var lastSyncDate: Date? = nil
+    /// Stored in UserDefaults so the 60-second cooldown survives tab
+    /// recreation, background/foreground cycles, and memory-pressure
+    /// eviction.  A raw TimeInterval (0 == never synced) avoids a
+    /// Date? round-trip through UserDefaults.
+    @AppStorage("imapActualitesLastSyncDate") private var lastSyncDateInterval: Double = 0
     @State private var path: [FeedDestination] = []
     @State private var showMonLyceeSetup = false
     @State private var imapConfigured = false
@@ -133,8 +137,8 @@ struct ActualitesView: View {
     private static let autoSyncCooldownSeconds: TimeInterval = 60
 
     private func shouldAutoSync() -> Bool {
-        guard let last = lastSyncDate else { return true }
-        return Date.now.timeIntervalSince(last) >= Self.autoSyncCooldownSeconds
+        lastSyncDateInterval == 0 ||
+            Date.now.timeIntervalSince1970 - lastSyncDateInterval >= Self.autoSyncCooldownSeconds
     }
 
     @MainActor
@@ -143,7 +147,7 @@ struct ActualitesView: View {
         isRefreshing = true
         defer {
             isRefreshing = false
-            lastSyncDate = .now
+            lastSyncDateInterval = Date.now.timeIntervalSince1970
         }
 
         let entChildren = children.filter { $0.schoolType == .ent }
@@ -302,7 +306,7 @@ struct ActualitesView: View {
                         children: children,
                         onSync: { await syncAll() },
                         isSyncing: isRefreshing,
-                        lastSyncDate: lastSyncDate
+                        lastSyncDate: lastSyncDateInterval > 0 ? Date(timeIntervalSince1970: lastSyncDateInterval) : nil
                     )
                 } else if filteredItems.isEmpty {
                     emptyState
