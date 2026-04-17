@@ -12,7 +12,7 @@ private func entLog(_ message: @autoclosure () -> String) {
 /// Session managed via cookie jar — credentials stay on-device.
 final class ENTClient: Sendable {
     let baseURL: URL
-    private let session: URLSession
+    let session: URLSession
     /// Shared cookie storage for ENT sessions.
     /// HTTPCookieStorage() custom init silently drops setCookie calls — must use .shared.
     /// Session cookies (oneSessionId etc.) are short-lived tokens, not credentials.
@@ -478,8 +478,9 @@ final class ENTClient: Sendable {
     }
 
     /// Authenticated data fetch for workspace documents (images, attachments).
-    /// Uses URLSession.shared so all image requests share a single HTTP/2 connection
-    /// instead of opening a new TCP+TLS connection per photo thumbnail.
+    /// Must use the private `session` (not URLSession.shared) so the ENT
+    /// session cookie is sent — unauthenticated requests receive an HTML login
+    /// redirect (200 text/html) which would be treated as sessionExpired.
     func fetchData(path: String) async throws -> Data {
         let urlString: String
         if path.hasPrefix("http") {
@@ -493,7 +494,7 @@ final class ENTClient: Sendable {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         entLog("[noto] ENT fetchData \(url.absoluteString)")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }

@@ -282,7 +282,7 @@ extension ENTClient {
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }
@@ -302,7 +302,7 @@ extension ENTClient {
         req.setValue(baseURL.absoluteString, forHTTPHeaderField: "Origin")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: req)
+        let (_, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse else {
             throw ENTError.invalidResponse("Not HTTP")
         }
