@@ -31,6 +31,22 @@ final class PronoteSyncService {
 
         NSLog("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
 
+        // Guard against wiping local data when the bridge returns nothing.
+        // Mirrors ENTSyncGate logic: preserve on empty-no-errors, fail on
+        // errors-with-no-data, proceed only when at least one category returned
+        // real rows.
+        let hasData = !grades.isEmpty || !lessons.isEmpty || !homework.isEmpty || !discussions.isEmpty
+        switch PronoteSyncGate.decide(hasData: hasData, failedCategories: failedCategories) {
+        case .proceed:
+            break
+        case .preserve:
+            NSLog("[noto][warn] Pronote sync for \(child.firstName) returned all-empty — preserving existing local data")
+            return
+        case .fail(let detail):
+            NSLog("[noto][error] Pronote sync for \(child.firstName) failed with no data — aborting wipe (\(detail))")
+            return
+        }
+
         clearExistingData(for: child)
         syncGrades(grades, for: child)
         syncSchedule(lessons, for: child)
@@ -142,5 +158,27 @@ final class PronoteSyncService {
             failedCategories.append(label)
             return []
         }
+    }
+}
+
+// MARK: - Sync decision gate
+
+/// Mirrors `ENTSyncGate`: prevents wiping SwiftData when the Pronote
+/// bridge returns empty lists (stale session, network hiccup, JSCore
+/// cold-start). Split from `sync()` for testability.
+enum PronoteSyncGate {
+    enum Decision: Equatable {
+        /// Real data returned — safe to clear local rows and insert fresh ones.
+        case proceed
+        /// All categories empty, no errors — treat as no-op.
+        case preserve
+        /// All categories empty AND at least one category failed — abort.
+        case fail(String)
+    }
+
+    static func decide(hasData: Bool, failedCategories: [String]) -> Decision {
+        if hasData { return .proceed }
+        if !failedCategories.isEmpty { return .fail(failedCategories.joined(separator: ", ")) }
+        return .preserve
     }
 }
