@@ -1062,6 +1062,21 @@ private struct MessagesListView: View {
     @State private var selectedMessage: Message?
     @State private var hasIMAPCredentials = IMAPService.isConfigured
     @State private var syncError: String?
+    @State private var isSyncing = false
+
+    /// Persist the last IMAP sync timestamp across tab recreation so the
+    /// cooldown survives background/foreground cycles and child-picker
+    /// changes.  Mirrors the AppStorage pattern used by HomeView.
+    @AppStorage("imapMessagesLastSyncDate") private var lastSyncDateInterval: Double = 0
+
+    /// Minimum seconds between automatic (non-pull-to-refresh) syncs.
+    /// 60 s matches the ActualitesView cooldown established in PR #29.
+    private static let autoSyncCooldownSeconds: TimeInterval = 60
+
+    private var shouldAutoSync: Bool {
+        lastSyncDateInterval == 0 ||
+            Date.now.timeIntervalSince1970 - lastSyncDateInterval >= Self.autoSyncCooldownSeconds
+    }
 
     private var allMessages: [(child: Child, msg: Message)] {
         children.flatMap { child in
@@ -1078,6 +1093,11 @@ private struct MessagesListView: View {
                     hasIMAPCredentials = true
                     Task { await syncIMAP() }
                 }
+            } else if allMessages.isEmpty && isSyncing {
+                // First-launch: cache is empty and a sync is in-flight.
+                // Show a spinner rather than a stale empty state.
+                ProgressView("Chargement des messages…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if allMessages.isEmpty {
                 ContentUnavailableView(
                     "Pas de messages",
@@ -1099,20 +1119,52 @@ private struct MessagesListView: View {
                 }
             }
         }
-        .task { await syncIMAP() }
+        // Show cached SwiftData rows immediately; only kick off a background
+        // sync if the cooldown has elapsed.  Pull-to-refresh bypasses the
+        // cooldown (explicit user intent).
+        .task {
+            guard shouldAutoSync else { return }
+            await syncIMAP()
+        }
         .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
             hasIMAPCredentials = IMAPService.isConfigured
         }
     }
 
-    @MainActor
+    /// Fetches the IMAP inbox in the background and writes new messages
+    /// into SwiftData.  The network I/O runs off the main actor (inside
+    /// `IMAPSyncService.sync`); only the SwiftData writes hop back to
+    /// the main actor.  The existing `allMessages` list stays visible
+    /// and responsive throughout.
     private func syncIMAP() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer {
+            isSyncing = false
+            lastSyncDateInterval = Date.now.timeIntervalSince1970
+        }
+
+        // De-duplicate IMAP fetch: one connection for all children that
+        // share the same mailbox, then replay locally per child.
+        guard let config = IMAPService.loadConfig() else { return }
+        let directorySchools = await DirectorySchoolCache.schools(for: children)
+
+        let fetched: [IMAPMessageInfo]
+        do {
+            fetched = try await Task.detached(priority: .userInitiated) {
+                try await IMAPService.fetchInbox(config: config)
+            }.value
+        } catch {
+            await MainActor.run { syncError = error.localizedDescription }
+            return
+        }
+
         let service = IMAPSyncService(modelContext: modelContext)
         for child in children {
             do {
-                try await service.sync(for: child)
+                try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
             } catch {
-                syncError = error.localizedDescription
+                await MainActor.run { syncError = error.localizedDescription }
             }
         }
     }

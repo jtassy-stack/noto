@@ -17,11 +17,30 @@ import SwiftData
 ///     construction a school-parent channel, and filtering would
 ///     silently drop legitimate senders outside the known school
 ///     domain.
-@MainActor
+///
+/// Threading contract
+/// ------------------
+/// `sync(for:directorySchools:)` does NOT require the caller to be on the
+/// main actor.  The expensive network I/O (`IMAPService.fetchInbox`) runs
+/// on whatever cooperative thread the Swift runtime assigns; only
+/// `process(child:config:fetched:directorySchools:)` — which touches
+/// SwiftData — must be called on the MainActor and is annotated
+/// accordingly.  Callers that are already on the main actor can call
+/// `sync` directly; the compiler will hop off automatically for the
+/// nonisolated part.
 struct IMAPSyncService {
     let modelContext: ModelContext
 
-    /// Full sync: load config, fetch remote inbox, process into SwiftData.
+    /// Full sync: load config, fetch remote inbox off the main actor,
+    /// then process the results back on the main actor.
+    ///
+    /// The network fetch (`IMAPService.fetchInbox`) is intentionally
+    /// called from a nonisolated context so it never blocks the main
+    /// thread while opening the TCP connection, logging in, and
+    /// streaming message headers.  SwiftData writes happen only after
+    /// the fetch completes and we're back on the main actor via
+    /// `processOnMain`.
+    ///
     /// Network + Keychain side effects live here; the pure logic is in
     /// `process(child:config:fetched:directorySchools:)` so tests can
     /// exercise the whitelist / bypass / dedupe branches without a live
@@ -34,13 +53,33 @@ struct IMAPSyncService {
             throw IMAPSyncError.noCredentials
         }
 
-        let fetched = try await IMAPService.fetchInbox(config: config)
+        // Fetch off the main actor — this is the expensive network hop.
+        let fetched = try await Task.detached(priority: .userInitiated) {
+            try await IMAPService.fetchInbox(config: config)
+        }.value
+
+        // Write results back on the main actor where SwiftData lives.
+        try await processOnMain(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+    }
+
+    /// Bridges the nonisolated `sync` path back onto the MainActor for
+    /// SwiftData writes.  Separate from the public `process` method so
+    /// the MainActor hop is explicit and unit-testable via `process`
+    /// without needing an actor boundary crossing.
+    @MainActor
+    private func processOnMain(
+        child: Child,
+        config: IMAPServerConfig,
+        fetched: [IMAPMessageInfo],
+        directorySchools: [String: DirectorySchool]
+    ) throws {
         try process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
     }
 
     /// Pure processing step — takes an already-fetched batch and applies
     /// whitelist filtering (or bypass), dedupe, and insert. Exposed so
     /// the bypass invariant has behavioural test coverage.
+    @MainActor
     ///
     /// - Parameter directorySchools: optional pre-fetched map of
     ///   `Child.rneCode` → `DirectorySchool`. When present, the
@@ -142,6 +181,7 @@ struct IMAPSyncService {
     /// conversations (which may legitimately collide on sender+subject+day
     /// when the school forwards ENT messages to parent email) are
     /// never absorbed or source-upgraded into IMAP.
+    @MainActor
     func findLegacyMatch(child: Child, info: IMAPMessageInfo) -> Message? {
         let cal = Calendar.current
         return child.messages.first { msg in
@@ -153,6 +193,7 @@ struct IMAPSyncService {
         }
     }
 
+    @MainActor
     func updateIfNeeded(existing: Message, with info: IMAPMessageInfo, config: IMAPServerConfig) {
         // Clean up sender format if previously stored as full RFC 5322.
         if existing.sender.contains("<") {
