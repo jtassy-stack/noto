@@ -11,14 +11,11 @@ struct HomeView: View {
     @Query private var families: [Family]
     @StateObject private var engine: BriefingEngineWrapper = .init()
     @ObservedObject private var pronoteService = PronoteService.shared
-
-    @AppStorage("lastSyncDate") private var lastSyncDateInterval: Double = 0
+    @ObservedObject private var syncCoordinator = SyncCoordinator.shared
 
     @State private var selectedChild: Child?
-    @State private var isSyncing = false
     @State private var showNoConnectionAlert = false
     @State private var showSettings = false
-    @State private var syncError: String?
     @State private var showAbsence = false
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
@@ -68,12 +65,8 @@ struct HomeView: View {
         return children.flatMap(\.grades).filter { $0.date >= sevenDaysAgo }.count
     }
 
-    private var lastSyncDate: Date? {
-        lastSyncDateInterval > 0 ? Date(timeIntervalSince1970: lastSyncDateInterval) : nil
-    }
-
     private var lastSyncLabel: String? {
-        guard let date = lastSyncDate else { return nil }
+        guard let date = syncCoordinator.lastSyncDate else { return nil }
         let seconds = Int(Date.now.timeIntervalSince(date))
         if seconds < 60 { return "Dernière sync: à l'instant" }
         if seconds < 3600 { return "Dernière sync: il y a \(seconds / 60) min" }
@@ -125,11 +118,11 @@ struct HomeView: View {
                         }
 
                         // MARK: Sync status (compact)
-                        if isSyncing || syncError != nil {
+                        if syncCoordinator.isSyncing || syncCoordinator.syncError != nil {
                             SyncStatusRow(
-                                isSyncing: isSyncing,
+                                isSyncing: syncCoordinator.isSyncing,
                                 lastSyncLabel: lastSyncLabel,
-                                syncError: syncError
+                                syncError: syncCoordinator.syncError
                             )
                         }
 
@@ -202,7 +195,9 @@ struct HomeView: View {
                 WellbeingResourcesView(signal: wellbeingSignal)
             }
             .refreshable {
-                await performFullRefresh()
+                // Pull-to-refresh bypasses the cooldown (user-initiated) but
+                // still deduplicates against any in-flight task by awaiting it.
+                await syncCoordinator.requestSync(force: true) { await self.performFullRefresh() }
             }
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
@@ -214,26 +209,27 @@ struct HomeView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
-                guard !isSyncing else { return }
-                Task { await performFullRefresh() }
+                // Route through coordinator — deduplicates concurrent fires and
+                // enforces the 60 s cooldown even if HomeView was re-created.
+                Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
             }
             // Cold-launch initial sync: when PronoteAutoConnect re-establishes
             // the bridge, fire a refresh if direct-Pronote children have no
             // data yet. Race-free alternative to posting a notification from
             // RootView (which could be dropped if HomeView hasn't subscribed).
             .onChange(of: pronoteService.isConnected) { _, connected in
-                guard connected, !isSyncing else { return }
+                guard connected else { return }
                 let directPronote = children.filter { $0.schoolType == .pronote && $0.entProvider == nil }
                 let hasEmpty = directPronote.contains {
                     $0.grades.isEmpty && $0.homework.isEmpty && $0.schedule.isEmpty
                 }
                 guard hasEmpty else { return }
-                Task { await performFullRefresh() }
+                Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
             }
             .sheet(isPresented: $showPronoteReconnect, onDismiss: {
                 // If reconnect succeeded, trigger a full refresh automatically
                 if pronoteService.bridge != nil {
-                    Task { await performFullRefresh() }
+                    Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
                 }
             }) {
                 NavigationStack { PronoteQRLoginView() }
@@ -311,11 +307,9 @@ struct HomeView: View {
 
     // MARK: - Refresh Logic
 
+    // NOTE: `performFullRefresh` is always invoked through `SyncCoordinator.requestSync`
+    // which owns isSyncing state, cooldown enforcement, and de-duplication.
     private func performFullRefresh() async {
-        isSyncing = true
-        syncError = nil
-        defer { isSyncing = false }
-
         var errors: [String] = []
         let targetChildren = selectedChild.map { [$0] } ?? children
         // Children with a direct Pronote bridge connection (QR code login)
@@ -354,9 +348,13 @@ struct HomeView: View {
                         continue
                     }
                     await syncService.sync(child: child, bridge: bridge, childIndex: idx)
+                    if !syncService.failedCategories.isEmpty {
+                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
+                    }
                 }
             } else {
                 showNoConnectionAlert = true
+                errors.append("Connexion à Pronote impossible. Reconnectez-vous via QR code si le problème persiste.")
             }
         }
 
@@ -376,6 +374,9 @@ struct HomeView: View {
                         continue
                     }
                     await syncService.sync(child: child, bridge: bridge, childIndex: idx)
+                    if !syncService.failedCategories.isEmpty {
+                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
+                    }
                 }
             } else {
                 // Fallback: sync from stored logbook data
@@ -392,8 +393,7 @@ struct HomeView: View {
             errors.append(contentsOf: entErrors)
         }
 
-        syncError = errors.isEmpty ? nil : errors.joined(separator: "\n")
-        lastSyncDateInterval = Date.now.timeIntervalSince1970
+        syncCoordinator.finishedSync(errors: errors.isEmpty ? nil : errors.joined(separator: "\n"))
         await refreshBriefing()
     }
 
