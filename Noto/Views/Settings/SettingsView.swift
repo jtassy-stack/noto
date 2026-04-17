@@ -57,15 +57,13 @@ struct SettingsView: View {
             : "Domaines autorisés"
     }
 
-    /// Most recent date of an IMAP-sourced message across all children.
-    /// Used as a proxy for last sync time since no separate sync timestamp
-    /// is stored. Returns nil if no IMAP messages have ever been synced.
+    @AppStorage("imapMessagesLastSyncDate") private var imapMessagesLastSyncInterval: Double = 0
+    @AppStorage("imapActualitesLastSyncDate") private var imapActualitesLastSyncInterval: Double = 0
+
     private var imapLastSyncDate: Date? {
-        children
-            .flatMap { $0.messages }
-            .filter { $0.source == .imap }
-            .map { $0.date }
-            .max()
+        let intervals = [imapMessagesLastSyncInterval, imapActualitesLastSyncInterval].filter { $0 > 0 }
+        guard let max = intervals.max() else { return nil }
+        return Date(timeIntervalSince1970: max)
     }
 
     /// Relative label for the last IMAP sync ("Il y a 12 min", "Hier", …).

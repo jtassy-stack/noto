@@ -1129,6 +1129,11 @@ private struct MessagesListView: View {
         .onReceive(NotificationCenter.default.publisher(for: IMAPService.configDidChangeNotification)) { _ in
             hasIMAPCredentials = IMAPService.isConfigured
         }
+        .alert("Erreur de synchronisation", isPresented: Binding(get: { syncError != nil }, set: { if !$0 { syncError = nil } })) {
+            Button("OK") { syncError = nil }
+        } message: {
+            Text(syncError ?? "")
+        }
     }
 
     /// Fetches the IMAP inbox in the background and writes new messages
@@ -1139,10 +1144,7 @@ private struct MessagesListView: View {
     private func syncIMAP() async {
         guard !isSyncing else { return }
         isSyncing = true
-        defer {
-            isSyncing = false
-            lastSyncDateInterval = Date.now.timeIntervalSince1970
-        }
+        defer { isSyncing = false }
 
         // De-duplicate IMAP fetch: one connection for all children that
         // share the same mailbox, then replay locally per child.
@@ -1155,17 +1157,23 @@ private struct MessagesListView: View {
                 try await IMAPService.fetchInbox(config: config)
             }.value
         } catch {
-            await MainActor.run { syncError = error.localizedDescription }
+            syncError = error.localizedDescription
             return
         }
 
         let service = IMAPSyncService(modelContext: modelContext)
+        var childError: String?
         for child in children {
             do {
                 try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                childError = error.localizedDescription
             }
+        }
+        if let err = childError {
+            syncError = err
+        } else {
+            lastSyncDateInterval = Date.now.timeIntervalSince1970
         }
     }
 }

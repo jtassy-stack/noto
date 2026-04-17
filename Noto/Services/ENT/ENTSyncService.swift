@@ -25,7 +25,7 @@ final class ENTSyncService {
             // The list endpoint returns summaries — bodies are absent. Fetch each message
             // individually to populate the body. Failures are soft: a missing body is
             // better than losing the whole message thread.
-            conversations = await withBodyFetch(list, client: client)
+            conversations = await withBodyFetch(list, client: client, fetchErrors: &fetchErrors)
         }
         catch { fetchErrors.append("messages: \(error.localizedDescription)") }
 
@@ -157,11 +157,12 @@ final class ENTSyncService {
     /// per conversation. Sequential (not concurrent) to avoid hammering the ENT API.
     /// A failure to fetch a body is logged and silently ignored — the message is still stored
     /// with an empty body rather than dropped entirely.
-    private func withBodyFetch(_ conversations: [ENTConversation], client: ENTClient) async -> [ENTConversation] {
+    private func withBodyFetch(_ conversations: [ENTConversation], client: ENTClient, fetchErrors: inout [String]) async -> [ENTConversation] {
         var enriched: [ENTConversation] = []
         enriched.reserveCapacity(conversations.count)
+        var bodyFailures = 0
+        let needsBody = conversations.filter { $0.body == nil || $0.body?.isEmpty == true }.count
         for conv in conversations {
-            // If the list endpoint already provided a body (unlikely but future-proof), keep it.
             guard conv.body == nil || conv.body?.isEmpty == true else {
                 enriched.append(conv)
                 continue
@@ -182,8 +183,12 @@ final class ENTSyncService {
                 }
             } catch {
                 NSLog("[noto][warn] fetchMessage(%@) body fetch failed: %@ — storing without body", conv.id, error.localizedDescription)
+                bodyFailures += 1
                 enriched.append(conv)
             }
+        }
+        if needsBody > 0 && bodyFailures * 2 >= needsBody {
+            fetchErrors.append("messages (corps): \(bodyFailures)/\(needsBody) échecs")
         }
         return enriched
     }
