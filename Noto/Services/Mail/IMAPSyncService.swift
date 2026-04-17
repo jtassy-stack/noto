@@ -23,21 +23,37 @@ struct IMAPSyncService {
 
     /// Full sync: load config, fetch remote inbox, process into SwiftData.
     /// Network + Keychain side effects live here; the pure logic is in
-    /// `process(child:config:fetched:)` so tests can exercise the
-    /// whitelist / bypass / dedupe branches without a live server.
-    func sync(for child: Child) async throws {
+    /// `process(child:config:fetched:directorySchools:)` so tests can
+    /// exercise the whitelist / bypass / dedupe branches without a live
+    /// server.
+    func sync(
+        for child: Child,
+        directorySchools: [String: DirectorySchool] = [:]
+    ) async throws {
         guard let config = IMAPService.loadConfig() else {
             throw IMAPSyncError.noCredentials
         }
 
         let fetched = try await IMAPService.fetchInbox(config: config)
-        try process(child: child, config: config, fetched: fetched)
+        try process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
     }
 
     /// Pure processing step — takes an already-fetched batch and applies
     /// whitelist filtering (or bypass), dedupe, and insert. Exposed so
     /// the bypass invariant has behavioural test coverage.
-    func process(child: Child, config: IMAPServerConfig, fetched: [IMAPMessageInfo]) throws {
+    ///
+    /// - Parameter directorySchools: optional pre-fetched map of
+    ///   `Child.rneCode` → `DirectorySchool`. When present, the
+    ///   whitelist builder uses each school's authoritative
+    ///   `mailDomains` (ENT + académie + commune services) rather
+    ///   than inferring from the establishment string. Populate via
+    ///   `DirectorySchoolCache.schools(for:)` in the caller.
+    func process(
+        child: Child,
+        config: IMAPServerConfig,
+        fetched: [IMAPMessageInfo],
+        directorySchools: [String: DirectorySchool] = [:]
+    ) throws {
         // Dedicated school channels bypass filtering entirely. The guard
         // runs BEFORE whitelist construction so a monlycée-only user with
         // no Pronote child and no manual entries doesn't hit
@@ -52,7 +68,7 @@ struct IMAPSyncService {
         if bypassFilter {
             whitelist = []
         } else {
-            whitelist = MailWhitelist.build(from: [child])
+            whitelist = MailWhitelist.build(from: [child], directorySchools: directorySchools)
             guard !whitelist.isEmpty else {
                 NSLog("[noto][warn] IMAP sync aborted — empty whitelist (provider=%@)", config.providerID)
                 throw IMAPSyncError.emptyWhitelist
