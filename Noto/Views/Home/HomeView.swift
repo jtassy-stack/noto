@@ -90,9 +90,6 @@ struct HomeView: View {
 
                 ScrollView {
                     LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
-                        // MARK: Command Bar
-                        CommandBarButton(action: { showCommandSheet = true })
-
                         // MARK: Header — Greeting
                         VStack(alignment: .leading, spacing: 0) {
                             HStack {
@@ -186,6 +183,12 @@ struct HomeView: View {
                     }
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: engine.cards)
                     .padding(NotoTheme.Spacing.md)
+                }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    CommandBarButton(action: { showCommandSheet = true })
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                        .background(NotoTheme.Colors.background)
                 }
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)

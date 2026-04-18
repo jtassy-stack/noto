@@ -278,17 +278,44 @@ private struct ChildSchoolView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
-                // MARK: Child header
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(child.firstName)
-                        .font(NotoTheme.Typography.screenTitle)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Text("\(child.grade) · \(child.displayEstablishment)")
-                        .font(NotoTheme.Typography.metadata)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                // MARK: Child header card
+                HStack(spacing: NotoTheme.Spacing.md) {
+                    Text(String(child.firstName.prefix(1)).uppercased())
+                        .font(NotoTheme.Typography.human(20))
+                        .foregroundStyle(NotoTheme.Colors.surface)
+                        .frame(width: 48, height: 48)
+                        .background(NotoTheme.Colors.brand)
+                        .clipShape(Circle())
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(child.firstName)
+                            .font(NotoTheme.Typography.human(22))
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text("\(child.grade) · \(child.displayEstablishment)")
+                            .font(NotoTheme.Typography.metadata)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        NotificationCenter.default.post(name: .navigateToHome, object: nil)
+                        NotificationCenter.default.post(name: .triggerFullSync, object: nil)
+                    } label: {
+                        Text("Synchro")
+                            .font(NotoTheme.Typography.functional(12, weight: .medium))
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(NotoTheme.Colors.brand.opacity(0.1))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(NotoTheme.Colors.brand.opacity(0.3), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, NotoTheme.Spacing.sm)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .notoCard()
 
                 // MARK: Adaptive content
                 if child.schoolType == .pronote {
