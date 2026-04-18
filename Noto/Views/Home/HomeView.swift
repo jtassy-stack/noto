@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var showWellbeingSheet = false
     @State private var wellbeingSignal: WellbeingSignal?
     @State private var showCommandSheet = false
+    @State private var pendingCommandNavigation: Notification.Name?
 
     // Card-tap destinations
     @State private var selectedHomework: Homework?
@@ -189,8 +190,13 @@ struct HomeView: View {
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showCommandSheet) {
-                CommandSheetView(children: children)
+            .sheet(isPresented: $showCommandSheet, onDismiss: {
+                if let nav = pendingCommandNavigation {
+                    NotificationCenter.default.post(name: nav, object: nil)
+                    pendingCommandNavigation = nil
+                }
+            }) {
+                CommandSheetView(children: children, onSelect: { pendingCommandNavigation = $0 })
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()

@@ -3,6 +3,7 @@ import SwiftUI
 struct CommandSheetView: View {
     @Environment(\.dismiss) private var dismiss
     let children: [Child]
+    let onSelect: (Notification.Name) -> Void
 
     @State private var query = ""
     @FocusState private var searchFocused: Bool
@@ -22,34 +23,34 @@ struct CommandSheetView: View {
         for child in children {
             items.append(CommandSuggestion(
                 title: "Notes de \(child.firstName)",
-                subtitle: "École · ouvrir directement",
+                subtitle: "Aller dans l'onglet École",
                 notification: .navigateToSchool
             ))
         }
 
         items.append(CommandSuggestion(
             title: "Carnet à signer",
-            subtitle: "Messages · carnets non signés",
+            subtitle: "Aller dans Messages",
             notification: .navigateToMessages
         ))
 
         items.append(CommandSuggestion(
             title: "Photos de la sortie",
-            subtitle: "Messages · dernières photos",
+            subtitle: "Aller dans Messages",
             notification: .navigateToMessages
         ))
 
         for child in children {
             items.append(CommandSuggestion(
                 title: "Sorties pour \(child.firstName)",
-                subtitle: "Sorties · filtrée par enfant",
+                subtitle: "Aller dans Sorties",
                 notification: .navigateToDiscover
             ))
         }
 
         items.append(CommandSuggestion(
             title: "Réglages des alertes",
-            subtitle: "Réglages",
+            subtitle: "Ouvrir les réglages",
             notification: .navigateToSettings
         ))
 
@@ -59,7 +60,6 @@ struct CommandSheetView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Search field
                 HStack(spacing: NotoTheme.Spacing.sm) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
@@ -73,9 +73,7 @@ struct CommandSheetView: View {
                         .autocorrectionDisabled()
 
                     if !query.isEmpty {
-                        Button {
-                            query = ""
-                        } label: {
+                        Button { query = "" } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 .font(.system(size: 16))
@@ -99,7 +97,8 @@ struct CommandSheetView: View {
                         Section {
                             ForEach(suggestions) { item in
                                 Button {
-                                    navigate(item)
+                                    onSelect(item.notification)
+                                    dismiss()
                                 } label: {
                                     HStack {
                                         VStack(alignment: .leading, spacing: 2) {
@@ -144,14 +143,6 @@ struct CommandSheetView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
-
-    private func navigate(_ item: CommandSuggestion) {
-        dismiss()
-        // Small delay lets the sheet dismiss before tab switch animation fires
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            NotificationCenter.default.post(name: item.notification, object: nil)
-        }
-    }
 }
 
 // MARK: - Model
@@ -161,10 +152,4 @@ private struct CommandSuggestion: Identifiable {
     let title: String
     let subtitle: String
     let notification: Notification.Name
-}
-
-// MARK: - Settings notification
-
-extension Notification.Name {
-    static let navigateToSettings = Notification.Name("noto.navigateToSettings")
 }

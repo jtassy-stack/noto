@@ -100,6 +100,7 @@ extension Notification.Name {
     /// `performFullRefresh()`. Pair with `navigateToHome` when the caller
     /// also wants the user to see the result.
     static let triggerFullSync    = Notification.Name("noto.triggerFullSync")
+    static let navigateToSettings = Notification.Name("noto.navigateToSettings")
     /// Posted after ENT cookies are imported and the session is valid.
     /// PhotoGridView observes this to retry thumbnail loading.
     static let entSessionReady    = Notification.Name("noto.entSessionReady")

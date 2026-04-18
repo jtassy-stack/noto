@@ -55,6 +55,11 @@ struct SchoolView: View {
                             selectedChild = children.first(where: { $0.hasAlert }) ?? children.first
                         }
                     }
+                    .onChange(of: children.map(\.id)) { _, ids in
+                        if let sel = selectedChild, !ids.contains(sel.id) {
+                            selectedChild = nil
+                        }
+                    }
                 }
             }
             .navigationTitle("École")
@@ -131,16 +136,18 @@ private struct SegmentedChildSelector: View {
     let children: [Child]
     @Binding var selectedChild: Child?
 
-    private var selectedBinding: Binding<Child> {
-        Binding(
-            get: { selectedChild ?? children[0] },
+    private var selectedBinding: Binding<Child>? {
+        guard let first = selectedChild ?? children.first else { return nil }
+        return Binding(
+            get: { selectedChild ?? first },
             set: { selectedChild = $0 }
         )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Enfant", selection: selectedBinding) {
+        guard let binding = selectedBinding else { return AnyView(EmptyView()) }
+        return AnyView(VStack(spacing: 0) {
+            Picker("Enfant", selection: binding) {
                 ForEach(children) { child in
                     HStack(spacing: 4) {
                         Text(child.firstName)
@@ -162,7 +169,7 @@ private struct SegmentedChildSelector: View {
             Rectangle()
                 .fill(NotoTheme.Colors.border)
                 .frame(height: 0.5)
-        }
+        })
     }
 }
 
@@ -236,17 +243,37 @@ private struct SchoolChildInterstitial: View {
     }
 }
 
-/// MARK: - Per-child school view (adaptive: Pronote profile vs ENT feed)
+// MARK: - Subject identifier wrapper (avoids module-wide String: Identifiable)
+
+private struct SubjectIdentifier: Identifiable {
+    let id: String
+}
+
+// MARK: - Per-child school view (adaptive: Pronote profile vs ENT feed)
 
 private struct ChildSchoolView: View {
     let child: Child
     @Binding var activeTab: SchoolTab?
     @Binding var showAbsence: Bool
-    @State private var showSchedule = false
-    @State private var showHomework = false
-    @State private var showAllGrades = false
-    @State private var selectedSubject: String?
-    @State private var selectedHW: Homework?
+    @State private var activeSheet: ActiveSheet?
+
+    private enum ActiveSheet: Identifiable {
+        case schedule
+        case homework
+        case allGrades
+        case subject(SubjectIdentifier)
+        case homeworkDetail(Homework)
+
+        var id: String {
+            switch self {
+            case .schedule:              "schedule"
+            case .homework:              "homework"
+            case .allGrades:             "allGrades"
+            case .subject(let s):        "subject-\(s.id)"
+            case .homeworkDetail(let hw): "hw-\(hw.id.debugDescription)"
+            }
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -273,6 +300,68 @@ private struct ChildSchoolView: View {
             .padding(NotoTheme.Spacing.md)
         }
         .background(NotoTheme.Colors.background)
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .schedule:
+                NavigationStack {
+                    ScheduleListView(children: [child])
+                        .navigationTitle("Emploi du temps")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { activeSheet = nil }
+                            }
+                        }
+                }
+            case .homework:
+                NavigationStack {
+                    HomeworkListView(children: [child])
+                        .navigationTitle("Devoirs")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { activeSheet = nil }
+                            }
+                        }
+                }
+            case .allGrades:
+                NavigationStack {
+                    GradesListView(children: [child])
+                        .navigationTitle("Notes")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { activeSheet = nil }
+                            }
+                        }
+                }
+            case .subject(let s):
+                NavigationStack {
+                    ScrollView {
+                        LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                            SubjectCardView(
+                                subject: s.id,
+                                grades: child.grades.filter { $0.subject == s.id },
+                                insight: child.insights.first { $0.subject == s.id },
+                                pendingHomework: child.homework.filter { $0.subject == s.id && !$0.done },
+                                cultureHint: nil
+                            )
+                        }
+                        .padding(NotoTheme.Spacing.md)
+                    }
+                    .background(NotoTheme.Colors.background)
+                    .navigationTitle(s.id)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Fermer") { activeSheet = nil }
+                        }
+                    }
+                }
+            case .homeworkDetail(let hw):
+                HomeworkDetailView(hw: hw)
+            }
+        }
         .toolbar {
             if child.schoolType == .ent {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -297,7 +386,7 @@ private struct ChildSchoolView: View {
                 .sectionLabelStyle()
             Spacer()
             if !upcomingHomework.isEmpty {
-                Button { showHomework = true } label: {
+                Button { activeSheet = .homework } label: {
                     Text("voir tout →")
                         .font(NotoTheme.Typography.functional(13, weight: .regular))
                         .foregroundStyle(NotoTheme.Colors.brand)
@@ -325,7 +414,7 @@ private struct ChildSchoolView: View {
             .signalCard(.positive)
         } else {
             ForEach(upcomingHomework.prefix(5), id: \.id) { hw in
-                Button { selectedHW = hw } label: {
+                Button { activeSheet = .homeworkDetail(hw) } label: {
                     HStack(spacing: NotoTheme.Spacing.sm) {
                         RoundedRectangle(cornerRadius: 4)
                             .strokeBorder(hw.done ? NotoTheme.Colors.success : NotoTheme.Colors.border, lineWidth: 2)
@@ -369,7 +458,7 @@ private struct ChildSchoolView: View {
             Text("NOTES RÉCENTES")
                 .sectionLabelStyle()
             Spacer()
-            Button { showAllGrades = true } label: {
+            Button { activeSheet = .allGrades } label: {
                 Text("bulletins →")
                     .font(NotoTheme.Typography.functional(13, weight: .regular))
                     .foregroundStyle(NotoTheme.Colors.brand)
@@ -420,7 +509,7 @@ private struct ChildSchoolView: View {
 
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: NotoTheme.Spacing.sm) {
             ForEach(subjectList, id: \.self) { subject in
-                Button { selectedSubject = subject } label: {
+                Button { activeSheet = .subject(.init(id: subject)) } label: {
                     HStack {
                         Text(subject)
                             .font(NotoTheme.Typography.human(15))
@@ -441,7 +530,28 @@ private struct ChildSchoolView: View {
             }
         }
 
-        // SECTION 4 — Bridge to Sorties
+        // SECTION 4 — Emploi du temps shortcut
+        Button { activeSheet = .schedule } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                Text("Emploi du temps")
+                    .font(NotoTheme.Typography.signalTitle)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .opacity(0.5)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+
+        // SECTION 5 — Bridge to Sorties
         Button {
             NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
         } label: {
@@ -465,71 +575,6 @@ private struct ChildSchoolView: View {
         }
         .buttonStyle(.plain)
 
-        // Detail sheets
-        Color.clear.frame(height: 0)
-            .sheet(isPresented: $showSchedule) {
-                NavigationStack {
-                    ScheduleListView(children: [child])
-                        .navigationTitle("Emploi du temps")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Fermer") { showSchedule = false }
-                            }
-                        }
-                }
-            }
-            .sheet(isPresented: $showHomework) {
-                NavigationStack {
-                    HomeworkListView(children: [child])
-                        .navigationTitle("Devoirs")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Fermer") { showHomework = false }
-                            }
-                        }
-                }
-            }
-            .sheet(isPresented: $showAllGrades) {
-                NavigationStack {
-                    GradesListView(children: [child])
-                        .navigationTitle("Notes")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Fermer") { showAllGrades = false }
-                            }
-                        }
-                }
-            }
-            .sheet(item: $selectedSubject) { subject in
-                NavigationStack {
-                    ScrollView {
-                        LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
-                            SubjectCardView(
-                                subject: subject,
-                                grades: child.grades.filter { $0.subject == subject },
-                                insight: child.insights.first { $0.subject == subject },
-                                pendingHomework: child.homework.filter { $0.subject == subject && !$0.done },
-                                cultureHint: nil
-                            )
-                        }
-                        .padding(NotoTheme.Spacing.md)
-                    }
-                    .background(NotoTheme.Colors.background)
-                    .navigationTitle(subject)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Fermer") { selectedSubject = nil }
-                        }
-                    }
-                }
-            }
-            .sheet(item: $selectedHW) { hw in
-                HomeworkDetailView(hw: hw)
-            }
     }
 
     // MARK: ENT: communication feed
@@ -1529,9 +1574,6 @@ struct ChildTag: View {
 // MARK: - Identifiable conformances for sheet
 
 extension Grade: Identifiable {}
-extension String: @retroactive Identifiable {
-    public var id: String { self }
-}
 extension Homework: Identifiable {}
 extension Message: Identifiable {}
 
