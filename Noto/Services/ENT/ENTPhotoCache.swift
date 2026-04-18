@@ -10,8 +10,11 @@ actor ENTPhotoCache {
     static let shared = ENTPhotoCache()
 
     private let cacheDir: URL
-    /// In-flight download tasks keyed by ENT path — prevents duplicate concurrent downloads.
-    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+
+    /// In-flight download tasks keyed by ENT path.
+    /// Stored with a nonce so clearAll() cancellations don't clobber a subsequent task
+    /// registered for the same path before the original caller's cleanup runs.
+    private var inFlight: [String: (nonce: UUID, task: Task<UIImage?, Never>)] = [:]
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -36,28 +39,42 @@ actor ENTPhotoCache {
         }
 
         // Deduplicate: reuse an existing in-flight download for the same path
-        if let existing = inFlight[path] {
-            return await existing.value  // releases actor lock while waiting
+        if let entry = inFlight[path] {
+            return await entry.task.value  // releases actor lock while waiting
         }
 
         // Launch a detached download task so it doesn't run on the actor executor
+        let nonce = UUID()
         let task = Task<UIImage?, Never>.detached {
             guard let data = try? await client.fetchData(path: path),
                   let img = UIImage(data: data) else { return nil }
-            try? data.write(to: fileURL)
+            do {
+                try data.write(to: fileURL)
+            } catch {
+                NSLog("[noto][warning] ENTPhotoCache: write failed for %@: %@", path, error.localizedDescription)
+            }
             return img
         }
-        inFlight[path] = task
+        inFlight[path] = (nonce: nonce, task: task)
         let result = await task.value  // releases actor lock — other paths download concurrently
-        inFlight[path] = nil
+        // Only remove if our task is still the registered one (clearAll may have removed it,
+        // and a subsequent caller may have registered a new task for the same path).
+        if inFlight[path]?.nonce == nonce {
+            inFlight[path] = nil
+        }
         return result
     }
 
-    /// Pre-warms the disk cache for a list of workspace paths concurrently.
+    /// Pre-warms the disk cache for a list of workspace paths.
+    /// Caps concurrency at 4 to avoid overwhelming the ENT server.
     func preload(paths: [String], client: ENTClient) async {
         await withTaskGroup(of: Void.self) { group in
+            let maxConcurrent = 4
+            var started = 0
             for path in paths {
+                if started >= maxConcurrent { await group.next() }
                 group.addTask { _ = await self.image(for: path, client: client) }
+                started += 1
             }
         }
     }
@@ -70,7 +87,7 @@ actor ENTPhotoCache {
 
     /// Remove all cached photos (e.g. on logout or child removal).
     func clearAll() throws {
-        for task in inFlight.values { task.cancel() }
+        for entry in inFlight.values { entry.task.cancel() }
         inFlight.removeAll()
         try FileManager.default.removeItem(at: cacheDir)
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
