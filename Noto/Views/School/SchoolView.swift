@@ -843,61 +843,106 @@ private struct GradeDetailView: View {
     let grade: Grade
     @Environment(\.dismiss) private var dismiss
 
+    /// Raw display e.g. "4 / 5" — uses Int when denominator is a whole number
+    private var rawLabel: String {
+        let denominator = grade.outOf == floor(grade.outOf) ? "\(Int(grade.outOf))" : String(format: "%.1f", grade.outOf)
+        let numerator = grade.value == floor(grade.value) ? "\(Int(grade.value))" : String(format: "%.1f", grade.value)
+        return "\(numerator) / \(denominator)"
+    }
+
+    /// Points contributed to the weighted average: normalizedValue × coefficient
+    private var weightedPoints: Double { grade.normalizedValue * grade.coefficient }
+
+    private var gradeColor: Color {
+        if let avg = grade.classAverage, avg > 0 {
+            let delta = grade.normalizedValue - avg
+            if delta >= 2  { return NotoTheme.Colors.success }
+            if delta >= -1 { return NotoTheme.Colors.textPrimary }
+            if delta >= -3 { return NotoTheme.Colors.warning }
+            return NotoTheme.Colors.danger
+        }
+        let n = grade.normalizedValue
+        if n >= 14 { return NotoTheme.Colors.success }
+        if n >= 10 { return NotoTheme.Colors.textPrimary }
+        if n >= 8  { return NotoTheme.Colors.warning }
+        return NotoTheme.Colors.danger
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                Section("Note") {
-                    HStack {
-                        Text("Valeur")
-                        Spacer()
-                        Text("\(String(format: "%.1f", grade.value)) / \(Int(grade.outOf))")
-                            .font(NotoTheme.Typography.data)
-                    }
-                    HStack {
-                        Text("Sur 20")
-                        Spacer()
-                        Text(String(format: "%.1f", grade.normalizedValue))
-                            .font(NotoTheme.Typography.data)
-                    }
-                    HStack {
-                        Text("Coefficient")
-                        Spacer()
-                        Text(String(format: "%.1f", grade.coefficient))
-                            .font(NotoTheme.Typography.data)
-                    }
-                }
+            ScrollView {
+                VStack(spacing: NotoTheme.Spacing.md) {
 
-                Section("Détails") {
-                    HStack {
-                        Text("Matière")
-                        Spacer()
-                        Text(grade.subject)
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    }
-                    HStack {
-                        Text("Date")
-                        Spacer()
-                        Text(grade.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "fr_FR"))))
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    }
-                    if let chapter = grade.chapter, !chapter.isEmpty {
-                        HStack {
-                            Text("Chapitre")
-                            Spacer()
+                    // Hero — raw grade + /20 equivalent
+                    VStack(spacing: NotoTheme.Spacing.xs) {
+                        Text(rawLabel)
+                            .font(NotoTheme.Typography.functional(48, weight: .bold))
+                            .foregroundStyle(gradeColor)
+                        if grade.outOf != 20 {
+                            Text("soit \(String(format: "%.1f", grade.normalizedValue)) / 20")
+                                .font(NotoTheme.Typography.functional(17, weight: .regular))
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                        if let chapter = grade.chapter, !chapter.isEmpty {
                             Text(chapter)
+                                .font(NotoTheme.Typography.metadata)
                                 .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
                         }
                     }
-                    if let comment = grade.comment, !comment.isEmpty {
-                        VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-                            Text("Commentaire")
-                            Text(comment)
-                                .font(NotoTheme.Typography.body)
-                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, NotoTheme.Spacing.lg)
+                    .notoCard()
+
+                    // Coefficient + weighted contribution
+                    HStack(spacing: NotoTheme.Spacing.cardGap) {
+                        statCell(
+                            label: "Coefficient",
+                            value: grade.coefficient == floor(grade.coefficient)
+                                ? "\(Int(grade.coefficient))"
+                                : String(format: "%.1f", grade.coefficient)
+                        )
+                        statCell(
+                            label: "Poids dans la moyenne",
+                            value: String(format: "%.2f", weightedPoints)
+                        )
+                    }
+
+                    // Class stats (if available)
+                    if let avg = grade.classAverage, avg > 0 {
+                        HStack(spacing: NotoTheme.Spacing.cardGap) {
+                            statCell(label: "Moy. classe", value: String(format: "%.1f", avg))
+                            if let min = grade.classMin, let max = grade.classMax, min > 0 || max > 0 {
+                                statCell(label: "Min – Max", value: "\(String(format: "%.1f", min)) – \(String(format: "%.1f", max))")
+                            }
                         }
                     }
+
+                    // Meta
+                    VStack(spacing: 0) {
+                        metaRow(label: "Date",
+                                value: grade.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "fr_FR"))))
+                        if let comment = grade.comment, !comment.isEmpty {
+                            Divider().padding(.leading, 14)
+                            HStack(alignment: .top) {
+                                Text("Commentaire")
+                                    .font(NotoTheme.Typography.metadata)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                Spacer()
+                                Text(comment)
+                                    .font(NotoTheme.Typography.metadata)
+                                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                        }
+                    }
+                    .notoCard()
                 }
+                .padding(NotoTheme.Spacing.md)
             }
+            .background(NotoTheme.Colors.background)
             .navigationTitle(grade.subject)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -906,6 +951,37 @@ private struct GradeDetailView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func statCell(label: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(NotoTheme.Typography.functional(22, weight: .semibold))
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+            Text(label)
+                .font(NotoTheme.Typography.metadata)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, NotoTheme.Spacing.md)
+        .notoCard()
+    }
+
+    @ViewBuilder
+    private func metaRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(NotoTheme.Typography.metadata)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            Spacer()
+            Text(value)
+                .font(NotoTheme.Typography.metadata)
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 
