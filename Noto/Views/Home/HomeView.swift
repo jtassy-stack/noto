@@ -21,6 +21,7 @@ struct HomeView: View {
     @State private var showPronoteReconnect = false
     @State private var showWellbeingSheet = false
     @State private var wellbeingSignal: WellbeingSignal?
+    @State private var showCommandSheet = false
 
     // Card-tap destinations
     @State private var selectedHomework: Homework?
@@ -88,6 +89,9 @@ struct HomeView: View {
 
                 ScrollView {
                     LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                        // MARK: Command Bar
+                        CommandBarButton(action: { showCommandSheet = true })
+
                         // MARK: Header — Greeting
                         VStack(alignment: .leading, spacing: 0) {
                             HStack {
@@ -137,7 +141,7 @@ struct HomeView: View {
                             ForEach(engine.cards.sorted { $0.priority > $1.priority }) { card in
                                 BriefingCardView(
                                     card: card,
-                                    showChildName: children.count > 1,
+                                    showChildName: true,
                                     onTap: { handleCardTap(card) }
                                 )
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -185,6 +189,9 @@ struct HomeView: View {
             .background(NotoTheme.Colors.background)
             } // VStack (child selector + scroll)
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showCommandSheet) {
+                CommandSheetView(children: children)
+            }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
@@ -207,6 +214,9 @@ struct HomeView: View {
                 if let sel = selectedChild, !childIds.contains(sel.id) {
                     selectedChild = nil
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToSettings)) { _ in
+                showSettings = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
                 // Route through coordinator — deduplicates concurrent fires and
@@ -1212,6 +1222,30 @@ private struct PronoteReconnectCard: View {
             RoundedRectangle(cornerRadius: NotoTheme.Radius.md)
                 .stroke(NotoTheme.Colors.amber.opacity(0.25), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Command Bar Button
+
+private struct CommandBarButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                Text("Chercher · sauter à une section…")
+                    .font(NotoTheme.Typography.functional(15, weight: .regular))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -26,13 +26,13 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             HomeView(onAddChild: { showAddChild = true })
                 .tabItem {
-                    Label("Accueil", systemImage: "house")
+                    Label("Aujourd'hui", systemImage: "house")
                 }
                 .tag(Tab.home)
 
             ActualitesView()
                 .tabItem {
-                    Label("Messages", systemImage: "newspaper")
+                    Label("Messages", systemImage: "envelope")
                 }
                 .badge(unreadMessagesBadge + unsignedCarnetsCount)
                 .tag(Tab.actualites)
@@ -46,7 +46,7 @@ struct MainTabView: View {
 
             DiscoverView()
                 .tabItem {
-                    Label("Accompagner", systemImage: "safari")
+                    Label("Sorties", systemImage: "safari")
                 }
                 .tag(Tab.discover)
         }

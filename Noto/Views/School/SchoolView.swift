@@ -29,23 +29,32 @@ struct SchoolView: View {
                         activeTab: $activeTab,
                         showAbsence: $showAbsence
                     )
-                } else if let child = selectedChild {
-                    VStack(spacing: 0) {
-                        SchoolChildPicker(
-                            children: children,
-                            selectedChild: $selectedChild
-                        )
-                        ChildSchoolView(
-                            child: child,
-                            activeTab: $activeTab,
-                            showAbsence: $showAbsence
-                        )
-                    }
                 } else {
-                    SchoolChildInterstitial(
-                        children: children,
-                        selectedChild: $selectedChild
-                    )
+                    VStack(spacing: 0) {
+                        if children.count <= 3 {
+                            SegmentedChildSelector(
+                                children: children,
+                                selectedChild: $selectedChild
+                            )
+                        } else {
+                            SchoolChildPicker(
+                                children: children,
+                                selectedChild: $selectedChild
+                            )
+                        }
+                        if let child = selectedChild ?? children.first {
+                            ChildSchoolView(
+                                child: child,
+                                activeTab: $activeTab,
+                                showAbsence: $showAbsence
+                            )
+                        }
+                    }
+                    .onAppear {
+                        if selectedChild == nil {
+                            selectedChild = children.first(where: { $0.hasAlert }) ?? children.first
+                        }
+                    }
                 }
             }
             .navigationTitle("École")
@@ -109,6 +118,47 @@ private struct SchoolChildPicker: View {
         }
         .background(NotoTheme.Colors.surface)
         .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(NotoTheme.Colors.border)
+                .frame(height: 0.5)
+        }
+    }
+}
+
+// MARK: - Segmented child selector (≤3 children)
+
+private struct SegmentedChildSelector: View {
+    let children: [Child]
+    @Binding var selectedChild: Child?
+
+    private var selectedBinding: Binding<Child> {
+        Binding(
+            get: { selectedChild ?? children[0] },
+            set: { selectedChild = $0 }
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Enfant", selection: selectedBinding) {
+                ForEach(children) { child in
+                    HStack(spacing: 4) {
+                        Text(child.firstName)
+                        if child.hasAlert && selectedChild?.id != child.id {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(NotoTheme.Colors.danger)
+                                .font(.system(size: 10))
+                        }
+                    }
+                    .tag(child)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.vertical, NotoTheme.Spacing.sm)
+            .background(NotoTheme.Colors.surface)
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedChild?.id)
+
             Rectangle()
                 .fill(NotoTheme.Colors.border)
                 .frame(height: 0.5)
@@ -186,7 +236,7 @@ private struct SchoolChildInterstitial: View {
     }
 }
 
-// MARK: - Per-child school view (adaptive: Pronote profile vs ENT feed)
+/// MARK: - Per-child school view (adaptive: Pronote profile vs ENT feed)
 
 private struct ChildSchoolView: View {
     let child: Child
@@ -194,6 +244,9 @@ private struct ChildSchoolView: View {
     @Binding var showAbsence: Bool
     @State private var showSchedule = false
     @State private var showHomework = false
+    @State private var showAllGrades = false
+    @State private var selectedSubject: String?
+    @State private var selectedHW: Homework?
 
     var body: some View {
         ScrollView {
@@ -234,101 +287,249 @@ private struct ChildSchoolView: View {
         }
     }
 
-    // MARK: Pronote: stats + subject cards
+    // MARK: Pronote: À faire → Notes récentes → Matières → Bridge
 
     @ViewBuilder
     private var pronoteProfile: some View {
-        // Stats overview
-        Text("VUE D'ENSEMBLE")
-            .sectionLabelStyle()
-
-        HStack(spacing: NotoTheme.Spacing.sm) {
-            statCard(value: overallAverage, label: "Moy. générale", color: NotoTheme.Colors.brand)
-            statCard(value: String(pendingHomeworkCount), label: "Devoirs", color: pendingHomeworkCount > 0 ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary)
-            statCard(value: String(unreadMessageCount), label: unreadMessageCount == 1 ? "Message" : "Messages", color: unreadMessageCount > 0 ? NotoTheme.Colors.danger : NotoTheme.Colors.textSecondary)
+        // SECTION 1 — À faire
+        HStack {
+            Text("À FAIRE — \(upcomingHomework.count) DEVOIR\(upcomingHomework.count != 1 ? "S" : "")")
+                .sectionLabelStyle()
+            Spacer()
+            if !upcomingHomework.isEmpty {
+                Button { showHomework = true } label: {
+                    Text("voir tout →")
+                        .font(NotoTheme.Typography.functional(13, weight: .regular))
+                        .foregroundStyle(NotoTheme.Colors.brand)
+                }
+            }
         }
 
-        // Subject cards
-        Text("PAR MATIÈRE")
-            .sectionLabelStyle()
-
-        ForEach(subjectList, id: \.self) { subject in
-            SubjectCardView(
-                subject: subject,
-                grades: child.grades.filter { $0.subject == subject },
-                insight: child.insights.first { $0.subject == subject },
-                pendingHomework: child.homework.filter { $0.subject == subject && !$0.done },
-                cultureHint: nil // TODO: link from CultureReco
-            )
-        }
-
-        // Quick access to detail views
-        Text("DÉTAIL")
-            .sectionLabelStyle()
-
-        Button { showSchedule = true } label: {
+        if upcomingHomework.isEmpty {
             HStack(spacing: NotoTheme.Spacing.sm) {
-                Image(systemName: "calendar")
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(NotoTheme.Colors.success)
                     .font(.system(size: 14))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rien à faire ✓")
+                        .font(NotoTheme.Typography.signalTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("Aucun devoir noté pour \(child.firstName)")
+                        .font(NotoTheme.Typography.metadata)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .signalCard(.positive)
+        } else {
+            ForEach(upcomingHomework.prefix(5), id: \.id) { hw in
+                Button { selectedHW = hw } label: {
+                    HStack(spacing: NotoTheme.Spacing.sm) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(hw.done ? NotoTheme.Colors.success : NotoTheme.Colors.border, lineWidth: 2)
+                            .background(hw.done ? NotoTheme.Colors.success.opacity(0.15) : Color.clear)
+                            .frame(width: 22, height: 22)
+                            .overlay {
+                                if hw.done {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(NotoTheme.Colors.success)
+                                }
+                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hw.subject)
+                                .font(NotoTheme.Typography.functional(14, weight: .semibold))
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                .lineLimit(1)
+                            if !hw.descriptionText.isEmpty {
+                                Text(hw.descriptionText)
+                                    .font(NotoTheme.Typography.metadata)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            Text("Pour \(hwDueLabel(hw))")
+                                .font(NotoTheme.Typography.metadata)
+                                .foregroundStyle(isUrgentHW(hw) ? NotoTheme.Colors.danger : NotoTheme.Colors.textSecondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .signalCard(isUrgentHW(hw) ? .urgent : .info)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        // SECTION 2 — Notes récentes
+        HStack {
+            Text("NOTES RÉCENTES")
+                .sectionLabelStyle()
+            Spacer()
+            Button { showAllGrades = true } label: {
+                Text("bulletins →")
+                    .font(NotoTheme.Typography.functional(13, weight: .regular))
                     .foregroundStyle(NotoTheme.Colors.brand)
-                Text("Emploi du temps")
-                    .font(NotoTheme.Typography.signalTitle)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .opacity(0.5)
+            }
+        }
+
+        if recentGrades.isEmpty {
+            Text("Aucune note disponible")
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .notoCard()
+        } else {
+            ForEach(recentGrades, id: \.id) { grade in
+                let isNeg = gradeIsNegative(grade)
+                HStack(spacing: NotoTheme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(grade.subject)
+                            .font(NotoTheme.Typography.human(18))
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        if let avg = grade.classAverage, avg > 0 {
+                            Text("moy. classe \(String(format: "%.1f", avg))")
+                                .font(NotoTheme.Typography.metadata)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(String(format: "%.1f", grade.normalizedValue))
+                            .font(NotoTheme.Typography.functional(24, weight: .bold))
+                            .foregroundStyle(isNeg ? NotoTheme.Colors.danger : NotoTheme.Colors.textPrimary)
+                        Text(gradeTrend(grade))
+                            .font(.system(size: 16))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .signalCard(isNeg ? .urgent : .info)
+            }
+        }
+
+        // SECTION 3 — Toutes les matières
+        Text("TOUTES LES MATIÈRES")
+            .sectionLabelStyle()
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: NotoTheme.Spacing.sm) {
+            ForEach(subjectList, id: \.self) { subject in
+                Button { selectedSubject = subject } label: {
+                    HStack {
+                        Text(subject)
+                            .font(NotoTheme.Typography.human(15))
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .opacity(0.5)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .notoCard()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        // SECTION 4 — Bridge to Sorties
+        Button {
+            NotificationCenter.default.post(name: .navigateToDiscover, object: nil)
+        } label: {
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                Text("En lien avec ses cours")
+                    .font(NotoTheme.Typography.functional(14, weight: .regular))
+                    .foregroundStyle(NotoTheme.Colors.cobalt)
+                HStack {
+                    Text("Sorties pour \(child.firstName) →")
+                        .font(NotoTheme.Typography.signalTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Spacer()
+                    Image(systemName: "safari")
+                        .foregroundStyle(NotoTheme.Colors.cobalt)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .notoCard()
+            .signalCard(.info)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showSchedule) {
-            NavigationStack {
-                ScheduleListView(children: [child])
-                    .navigationTitle("Emploi du temps")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Fermer") { showSchedule = false }
-                        }
-                    }
-            }
-        }
 
-        Button { showHomework = true } label: {
-            HStack(spacing: NotoTheme.Spacing.sm) {
-                Image(systemName: "pencil.and.list.clipboard")
-                    .font(.system(size: 14))
-                    .foregroundStyle(NotoTheme.Colors.brand)
-                Text("Tous les devoirs")
-                    .font(NotoTheme.Typography.signalTitle)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .opacity(0.5)
+        // Detail sheets
+        Color.clear.frame(height: 0)
+            .sheet(isPresented: $showSchedule) {
+                NavigationStack {
+                    ScheduleListView(children: [child])
+                        .navigationTitle("Emploi du temps")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { showSchedule = false }
+                            }
+                        }
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .notoCard()
-        }
-        .buttonStyle(.plain)
-        .sheet(isPresented: $showHomework) {
-            NavigationStack {
-                HomeworkListView(children: [child])
-                    .navigationTitle("Devoirs")
+            .sheet(isPresented: $showHomework) {
+                NavigationStack {
+                    HomeworkListView(children: [child])
+                        .navigationTitle("Devoirs")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { showHomework = false }
+                            }
+                        }
+                }
+            }
+            .sheet(isPresented: $showAllGrades) {
+                NavigationStack {
+                    GradesListView(children: [child])
+                        .navigationTitle("Notes")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fermer") { showAllGrades = false }
+                            }
+                        }
+                }
+            }
+            .sheet(item: $selectedSubject) { subject in
+                NavigationStack {
+                    ScrollView {
+                        LazyVStack(spacing: NotoTheme.Spacing.cardGap) {
+                            SubjectCardView(
+                                subject: subject,
+                                grades: child.grades.filter { $0.subject == subject },
+                                insight: child.insights.first { $0.subject == subject },
+                                pendingHomework: child.homework.filter { $0.subject == subject && !$0.done },
+                                cultureHint: nil
+                            )
+                        }
+                        .padding(NotoTheme.Spacing.md)
+                    }
+                    .background(NotoTheme.Colors.background)
+                    .navigationTitle(subject)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Fermer") { showHomework = false }
+                            Button("Fermer") { selectedSubject = nil }
                         }
                     }
+                }
             }
-        }
+            .sheet(item: $selectedHW) { hw in
+                HomeworkDetailView(hw: hw)
+            }
     }
 
     // MARK: ENT: communication feed
@@ -389,35 +590,41 @@ private struct ChildSchoolView: View {
         return subjects.sorted()
     }
 
-    private var overallAverage: String {
-        let grades = child.grades
-        guard !grades.isEmpty else { return "—" }
-        let weighted = grades.map { $0.normalizedValue * $0.coefficient }
-        let totalCoeff = grades.map(\.coefficient).reduce(0, +)
-        guard totalCoeff > 0 else { return "—" }
-        return String(format: "%.1f", weighted.reduce(0, +) / totalCoeff)
+    private var upcomingHomework: [Homework] {
+        let today = Calendar.current.startOfDay(for: Date.now)
+        return child.homework
+            .filter { !$0.done && $0.dueDate >= today }
+            .sorted { $0.dueDate < $1.dueDate }
     }
 
-    private var pendingHomeworkCount: Int {
-        child.homework.filter { !$0.done && $0.dueDate >= Date.now }.count
+    private var recentGrades: [Grade] {
+        child.grades
+            .sorted { $0.date > $1.date }
+            .prefix(3)
+            .map { $0 }
     }
 
-    private var unreadMessageCount: Int {
-        child.messages.filter { !$0.read }.count
+    private func isUrgentHW(_ hw: Homework) -> Bool {
+        Calendar.current.isDateInToday(hw.dueDate) || Calendar.current.isDateInTomorrow(hw.dueDate)
     }
 
-    private func statCard(value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(NotoTheme.Typography.dataLarge)
-                .foregroundStyle(color)
-            Text(label)
-                .font(NotoTheme.Typography.dataSmall)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .notoCard()
+    private func hwDueLabel(_ hw: Homework) -> String {
+        if Calendar.current.isDateInToday(hw.dueDate) { return "aujourd'hui" }
+        if Calendar.current.isDateInTomorrow(hw.dueDate) { return "demain" }
+        return hw.dueDate.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR")))
+    }
+
+    private func gradeIsNegative(_ grade: Grade) -> Bool {
+        guard let avg = grade.classAverage, avg > 0 else { return false }
+        return grade.normalizedValue < avg - 1
+    }
+
+    private func gradeTrend(_ grade: Grade) -> String {
+        guard let avg = grade.classAverage, avg > 0 else { return "→" }
+        let delta = grade.normalizedValue - avg
+        if delta > 1 { return "↑" }
+        if delta < -1 { return "↓" }
+        return "→"
     }
 
 }
@@ -1322,6 +1529,9 @@ struct ChildTag: View {
 // MARK: - Identifiable conformances for sheet
 
 extension Grade: Identifiable {}
+extension String: @retroactive Identifiable {
+    public var id: String { self }
+}
 extension Homework: Identifiable {}
 extension Message: Identifiable {}
 
