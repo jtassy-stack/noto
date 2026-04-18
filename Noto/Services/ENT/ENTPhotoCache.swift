@@ -3,12 +3,15 @@ import Foundation
 import UIKit
 
 /// Disk-backed cache for authenticated ENT workspace photos.
-/// Images are stored in <Caches>/noto_ent_photos/ keyed by a sanitized version of their ENT path.
-/// This avoids storing binary blobs in SwiftData while still supporting offline display.
+/// Images are stored in <Caches>/noto_ent_photos/ keyed by SHA256 of the ENT path.
+/// Downloads run concurrently via detached tasks; the actor only serializes dict lookups
+/// and disk-cache reads, releasing its lock while awaiting the network.
 actor ENTPhotoCache {
     static let shared = ENTPhotoCache()
 
     private let cacheDir: URL
+    /// In-flight download tasks keyed by ENT path — prevents duplicate concurrent downloads.
+    private var inFlight: [String: Task<UIImage?, Never>] = [:]
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -21,33 +24,41 @@ actor ENTPhotoCache {
     }
 
     /// Returns a cached image if available, otherwise downloads it via an authenticated ENTClient.
+    /// Multiple concurrent callers for the same path share a single download task.
+    /// Different paths download concurrently — the actor lock is released during network I/O.
     func image(for path: String, client: ENTClient) async -> UIImage? {
         let key = cacheKey(for: path)
         let fileURL = cacheDir.appendingPathComponent(key)
 
-        // Return cached image
+        // Fast path: disk cache hit (no network)
         if let data = try? Data(contentsOf: fileURL), let img = UIImage(data: data) {
             return img
         }
 
-        // Download and cache
-        guard let data = try? await client.fetchData(path: path),
-              let img = UIImage(data: data) else { return nil }
-
-        do {
-            try data.write(to: fileURL)
-        } catch {
-            NSLog("[noto][warning] ENTPhotoCache: write failed for %@: %@", path, error.localizedDescription)
+        // Deduplicate: reuse an existing in-flight download for the same path
+        if let existing = inFlight[path] {
+            return await existing.value  // releases actor lock while waiting
         }
-        return img
+
+        // Launch a detached download task so it doesn't run on the actor executor
+        let task = Task<UIImage?, Never>.detached {
+            guard let data = try? await client.fetchData(path: path),
+                  let img = UIImage(data: data) else { return nil }
+            try? data.write(to: fileURL)
+            return img
+        }
+        inFlight[path] = task
+        let result = await task.value  // releases actor lock — other paths download concurrently
+        inFlight[path] = nil
+        return result
     }
 
-    /// Pre-warms the disk cache for a list of workspace paths.
-    /// Already-cached photos return instantly from disk; others are downloaded sequentially
-    /// at background priority. Silently ignores failures (e.g. expired session → 401).
+    /// Pre-warms the disk cache for a list of workspace paths concurrently.
     func preload(paths: [String], client: ENTClient) async {
-        for path in paths {
-            _ = await image(for: path, client: client)
+        await withTaskGroup(of: Void.self) { group in
+            for path in paths {
+                group.addTask { _ = await self.image(for: path, client: client) }
+            }
         }
     }
 
@@ -59,6 +70,8 @@ actor ENTPhotoCache {
 
     /// Remove all cached photos (e.g. on logout or child removal).
     func clearAll() throws {
+        for task in inFlight.values { task.cancel() }
+        inFlight.removeAll()
         try FileManager.default.removeItem(at: cacheDir)
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
     }

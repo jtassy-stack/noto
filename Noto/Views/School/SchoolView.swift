@@ -263,6 +263,7 @@ private struct ChildSchoolView: View {
         case allGrades
         case subject(SubjectIdentifier)
         case homeworkDetail(Homework)
+        case gradeDetail(Grade)
 
         var id: String {
             switch self {
@@ -271,6 +272,7 @@ private struct ChildSchoolView: View {
             case .allGrades:             "allGrades"
             case .subject(let s):        "subject-\(s.id)"
             case .homeworkDetail(let hw): "hw-\(hw.id.debugDescription)"
+            case .gradeDetail(let g):    "grade-\(g.id.debugDescription)"
             }
         }
     }
@@ -387,6 +389,8 @@ private struct ChildSchoolView: View {
                 }
             case .homeworkDetail(let hw):
                 HomeworkDetailView(hw: hw)
+            case .gradeDetail(let grade):
+                GradeDetailView(grade: grade)
             }
         }
         .toolbar {
@@ -503,30 +507,38 @@ private struct ChildSchoolView: View {
         } else {
             ForEach(recentGrades, id: \.id) { grade in
                 let isNeg = gradeIsNegative(grade)
-                HStack(spacing: NotoTheme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(grade.subject)
-                            .font(NotoTheme.Typography.human(18))
-                            .foregroundStyle(NotoTheme.Colors.textPrimary)
-                        if let avg = grade.classAverage, avg > 0 {
-                            Text("moy. classe \(String(format: "%.1f", avg))")
-                                .font(NotoTheme.Typography.metadata)
+                Button { activeSheet = .gradeDetail(grade) } label: {
+                    HStack(spacing: NotoTheme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(grade.subject)
+                                .font(NotoTheme.Typography.human(18))
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            if let avg = grade.classAverage, avg > 0 {
+                                Text("moy. classe \(String(format: "%.1f", avg))")
+                                    .font(NotoTheme.Typography.metadata)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        VStack(alignment: .trailing, spacing: 0) {
+                            Text(String(format: "%.1f", grade.normalizedValue))
+                                .font(NotoTheme.Typography.functional(24, weight: .bold))
+                                .foregroundStyle(isNeg ? NotoTheme.Colors.danger : NotoTheme.Colors.textPrimary)
+                            Text(gradeTrend(grade))
+                                .font(.system(size: 16))
                                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                         }
-                    }
-                    Spacer(minLength: 0)
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(String(format: "%.1f", grade.normalizedValue))
-                            .font(NotoTheme.Typography.functional(24, weight: .bold))
-                            .foregroundStyle(isNeg ? NotoTheme.Colors.danger : NotoTheme.Colors.textPrimary)
-                        Text(gradeTrend(grade))
-                            .font(.system(size: 16))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .opacity(0.5)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .signalCard(isNeg ? .urgent : .info)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .signalCard(isNeg ? .urgent : .info)
+                .buttonStyle(.plain)
             }
         }
 
