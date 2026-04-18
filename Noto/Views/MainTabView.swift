@@ -26,13 +26,13 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             HomeView(onAddChild: { showAddChild = true })
                 .tabItem {
-                    Label("Accueil", systemImage: "house")
+                    Label("Aujourd'hui", systemImage: "house")
                 }
                 .tag(Tab.home)
 
             ActualitesView()
                 .tabItem {
-                    Label("Messages", systemImage: "newspaper")
+                    Label("Messages", systemImage: "envelope")
                 }
                 .badge(unreadMessagesBadge + unsignedCarnetsCount)
                 .tag(Tab.actualites)
@@ -46,7 +46,7 @@ struct MainTabView: View {
 
             DiscoverView()
                 .tabItem {
-                    Label("Accompagner", systemImage: "safari")
+                    Label("Sorties", systemImage: "safari")
                 }
                 .tag(Tab.discover)
         }
@@ -100,6 +100,7 @@ extension Notification.Name {
     /// `performFullRefresh()`. Pair with `navigateToHome` when the caller
     /// also wants the user to see the result.
     static let triggerFullSync    = Notification.Name("noto.triggerFullSync")
+    static let navigateToSettings = Notification.Name("noto.navigateToSettings")
     /// Posted after ENT cookies are imported and the session is valid.
     /// PhotoGridView observes this to retry thumbnail loading.
     static let entSessionReady    = Notification.Name("noto.entSessionReady")
