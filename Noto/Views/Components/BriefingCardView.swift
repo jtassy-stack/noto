@@ -19,7 +19,7 @@ struct BriefingCardView: View {
                 VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                     // N1 — WHO (serif, brand color, scanned first)
                     if showChildName {
-                        Text(card.childName)
+                        Text("Pour \(card.childName)")
                             .font(NotoTheme.Typography.childName)
                             .foregroundStyle(NotoTheme.Colors.brand)
                     }
