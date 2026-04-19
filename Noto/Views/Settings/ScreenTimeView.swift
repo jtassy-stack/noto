@@ -11,6 +11,13 @@ struct ScreenTimeView: View {
     @State private var monitoringEnabled = false
     @State private var thresholdHours: Int = ScreenTimeEventStore.loadThreshold()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    // Self-reported checklist items (parent marks as done manually)
+    @AppStorage("st_checklist_passcode") private var passcodeConfigured = false
+    @AppStorage("st_checklist_downtime") private var downtimeConfigured = false
+    @AppStorage("st_checklist_applimits") private var appLimitsConfigured = false
+    @AppStorage("st_checklist_content") private var contentRestrictionsConfigured = false
 
     private let store = ManagedSettingsStore()
 
@@ -34,6 +41,8 @@ struct ScreenTimeView: View {
                     @unknown default:
                         notDeterminedSection
                     }
+
+                    checklistSection
 
                     PrivacyNoticeCard(
                         text: "Les restrictions Temps d'écran sont gérées entièrement sur cet appareil. Aucune donnée n'est transmise à nos serveurs."
@@ -295,6 +304,118 @@ struct ScreenTimeView: View {
         }
     }
 
+    // MARK: - Checklist
+
+    private var checklistSection: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            HStack {
+                Text("Configuration recommandée")
+                    .sectionLabelStyle()
+                Spacer()
+                Text("\(checklistProgress)/\(checklistTotal)")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(checklistComplete ? NotoTheme.Colors.success : NotoTheme.Colors.textSecondary)
+            }
+            .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            VStack(spacing: 0) {
+                // 1 — FamilyControls authorization (auto-detected)
+                ChecklistRow(
+                    icon: "lock.shield",
+                    title: "Contrôle parental nōto",
+                    description: "Autorisez nōto à gérer les limites d'applications",
+                    done: manager.isAuthorized,
+                    auto: true,
+                    action: manager.isAuthorized ? nil : {
+                        Task { await manager.requestAuthorization() }
+                    }
+                )
+
+                SettingsDivider()
+
+                // 2 — Screen Time passcode (self-reported)
+                ChecklistRow(
+                    icon: "lock.rotation",
+                    title: "Code Temps d'écran",
+                    description: "Empêche votre enfant de désactiver les limites\nRéglages → Temps d'écran → Utiliser le code",
+                    done: passcodeConfigured,
+                    auto: false,
+                    onToggle: { passcodeConfigured = $0 },
+                    settingsPath: "Réglages → Temps d'écran → Utiliser le code"
+                )
+
+                SettingsDivider()
+
+                // 3 — Downtime (self-reported)
+                ChecklistRow(
+                    icon: "moon.stars",
+                    title: "Temps d'arrêt",
+                    description: "Bloquez les écrans la nuit et pendant les devoirs",
+                    done: downtimeConfigured,
+                    auto: false,
+                    onToggle: { downtimeConfigured = $0 },
+                    settingsPath: "Réglages → Temps d'écran → Temps d'arrêt"
+                )
+
+                SettingsDivider()
+
+                // 4 — App limits (self-reported)
+                ChecklistRow(
+                    icon: "timer",
+                    title: "Limites d'applications",
+                    description: "Limitez les réseaux sociaux, jeux et divertissement",
+                    done: appLimitsConfigured,
+                    auto: false,
+                    onToggle: { appLimitsConfigured = $0 },
+                    settingsPath: "Réglages → Temps d'écran → Limites des apps"
+                )
+
+                SettingsDivider()
+
+                // 5 — Content restrictions (self-reported)
+                ChecklistRow(
+                    icon: "hand.raised",
+                    title: "Restrictions de contenu",
+                    description: "Bloquez les contenus 18+ et les achats non autorisés",
+                    done: contentRestrictionsConfigured,
+                    auto: false,
+                    onToggle: { contentRestrictionsConfigured = $0 },
+                    settingsPath: "Réglages → Temps d'écran → Contenu et confidentialité"
+                )
+
+                SettingsDivider()
+
+                // 6 — nōto monitoring (auto-detected)
+                ChecklistRow(
+                    icon: "bell.badge",
+                    title: "Alertes nōto",
+                    description: "Recevez une alerte dans le briefing si la limite est dépassée",
+                    done: monitoringEnabled,
+                    auto: true,
+                    action: monitoringEnabled ? nil : {
+                        monitoringEnabled = true
+                        ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                    }
+                )
+            }
+            .notoCard()
+        }
+    }
+
+    private var checklistProgress: Int {
+        [
+            manager.isAuthorized,
+            passcodeConfigured,
+            downtimeConfigured,
+            appLimitsConfigured,
+            contentRestrictionsConfigured,
+            monitoringEnabled
+        ].filter { $0 }.count
+    }
+
+    private var checklistTotal: Int { 6 }
+    private var checklistComplete: Bool { checklistProgress == checklistTotal }
+
     // MARK: - Helpers
 
     private var appSelectionLabel: String {
@@ -329,5 +450,106 @@ struct ScreenTimeView: View {
         store.shield.applicationCategories = nil
         selection = FamilyActivitySelection()
         restrictionsApplied = false
+    }
+}
+
+// MARK: - ChecklistRow
+
+private struct ChecklistRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    let done: Bool
+    /// True = status is computed automatically; False = parent marks manually
+    let auto: Bool
+    var action: (() -> Void)? = nil
+    var onToggle: ((Bool) -> Void)? = nil
+    var settingsPath: String? = nil
+
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.md) {
+            // Status icon
+            ZStack {
+                Circle()
+                    .fill(done ? NotoTheme.Colors.success.opacity(0.12) : NotoTheme.Colors.border)
+                    .frame(width: 36, height: 36)
+                Image(systemName: done ? "checkmark" : icon)
+                    .font(.system(size: 14, weight: done ? .semibold : .regular))
+                    .foregroundStyle(done ? NotoTheme.Colors.success : NotoTheme.Colors.textSecondary)
+            }
+            .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(title)
+                        .font(NotoTheme.Typography.body)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    if auto && done {
+                        Text("Auto")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(NotoTheme.Colors.success)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(NotoTheme.Colors.success.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                    Spacer()
+                    // Manual toggle for self-reported items
+                    if !auto, let onToggle {
+                        Toggle("", isOn: Binding(get: { done }, set: { onToggle($0) }))
+                            .labelsHidden()
+                            .tint(NotoTheme.Colors.brand)
+                            .scaleEffect(0.8)
+                    }
+                }
+
+                Text(description)
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // CTA for auto items not yet done
+                if auto && !done, let action {
+                    Button(action: action) {
+                        Text("Configurer")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
+
+                // Settings path + open button for manual items not yet done
+                if !auto && !done, let path = settingsPath {
+                    HStack(spacing: 4) {
+                        Text(path)
+                            .font(.system(size: 11))
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .opacity(0.7)
+                        Spacer()
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                openURL(url)
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text("Ouvrir")
+                                    .font(.system(size: 11, weight: .medium))
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundStyle(NotoTheme.Colors.brand)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .padding(.horizontal, NotoTheme.Spacing.md)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 }

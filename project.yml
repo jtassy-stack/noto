@@ -31,8 +31,8 @@ targets:
       - sdk: FamilyControls.framework
       - sdk: DeviceActivity.framework
       - target: NotoDeviceActivity
-        embed: true
-        codeSign: true
+        embed: false
+        link: false
     settings:
       base:
         INFOPLIST_FILE: Noto/App/Info.plist
@@ -44,6 +44,23 @@ targets:
         DEVELOPMENT_ASSET_PATHS: "\"Noto/Preview Content\""
     entitlements:
       path: Noto/App/Noto.entitlements
+    postBuildScripts:
+      - name: Embed DeviceActivity extension (device only)
+        script: |
+          if [ "$PLATFORM_NAME" != "iphonesimulator" ]; then
+            PLUGINS_DIR="$BUILT_PRODUCTS_DIR/$PLUGINS_FOLDER_PATH"
+            mkdir -p "$PLUGINS_DIR"
+            SRC="$BUILT_PRODUCTS_DIR/NotoDeviceActivity.appex"
+            if [ -d "$SRC" ]; then
+              cp -r "$SRC" "$PLUGINS_DIR/"
+              codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
+                --entitlements "$SCRIPT_INPUT_FILE_0" \
+                "$PLUGINS_DIR/NotoDeviceActivity.appex"
+            fi
+          fi
+        inputFiles:
+          - $(SRCROOT)/NotoDeviceActivity/NotoDeviceActivity.entitlements
+        basedOnDependencyAnalysis: false
 
   NotoDeviceActivity:
     type: app-extension
@@ -60,6 +77,11 @@ targets:
         INFOPLIST_FILE: NotoDeviceActivity/Info.plist
         SWIFT_VERSION: "6.0"
         SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        MARKETING_VERSION: "2.0.0"
+        CURRENT_PROJECT_VERSION: 1
+        # Device Activity extensions only run on real devices
+        SUPPORTED_PLATFORMS: iphoneos
     entitlements:
       path: NotoDeviceActivity/NotoDeviceActivity.entitlements
 

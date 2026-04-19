@@ -9,9 +9,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>NotoDeviceActivity</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>NSExtension</key>
@@ -19,7 +19,7 @@
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.deviceactivity.monitor-extension</string>
 		<key>NSPrincipalClass</key>
-		<string>$(PRODUCT_MODULE_NAME).DeviceActivityMonitorExtension</string>
+		<string>NotoDeviceActivity.DeviceActivityMonitorExtension</string>
 	</dict>
 </dict>
 </plist>
