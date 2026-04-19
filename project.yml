@@ -27,6 +27,7 @@ targets:
     dependencies:
       - package: SwiftMail
         product: SwiftMail
+      - sdk: FamilyControls.framework
     settings:
       base:
         INFOPLIST_FILE: Noto/App/Info.plist
