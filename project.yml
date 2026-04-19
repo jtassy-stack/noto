@@ -80,6 +80,7 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
         MARKETING_VERSION: "2.0.0"
         CURRENT_PROJECT_VERSION: 1
+        PROVISIONING_PROFILE_SPECIFIER: "noto deviceactivity appstore"
         # Device Activity extensions only run on real devices
         SUPPORTED_PLATFORMS: iphoneos
     entitlements:
