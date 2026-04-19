@@ -183,7 +183,19 @@ jobs:
             -scheme "$SCHEME" \
             -clonedSourcePackagesDirPath SourcePackages
 
+      - name: Prepare App Store Connect API key
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.private_keys
+          printf '%s' "$API_KEY_BASE64" | base64 --decode \
+            > ~/.private_keys/AuthKey_${API_KEY_ID}.p8
+
       - name: Archive
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild archive \
             -project Noto.xcodeproj \
@@ -195,16 +207,11 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=ZU448G6529
-
-      - name: Prepare App Store Connect API key
-        env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
-        run: |
-          mkdir -p ~/.private_keys
-          printf '%s' "$API_KEY_BASE64" | base64 --decode \
-            > ~/.private_keys/AuthKey_${API_KEY_ID}.p8
+            DEVELOPMENT_TEAM=ZU448G6529 \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID "$API_KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
 
       - name: Export and upload to TestFlight
         env:
