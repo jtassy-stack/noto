@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UserNotifications
+import FamilyControls
 
 // MARK: - SettingsView (redesigned — phase 5)
 //
@@ -31,6 +32,8 @@ struct SettingsView: View {
     @State private var showMailDomains = false
     @State private var imapConfigs: [IMAPServerConfig] = []
     @State private var disconnectError: String?
+    @State private var showScreenTime = false
+    @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true
@@ -97,6 +100,7 @@ struct SettingsView: View {
                         mailboxSection
                     }
                     notificationsSection
+                    screenTimeSection
                     appearanceSection
                     aboutSection
                 }
@@ -131,6 +135,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showMailDomains) {
                 MailDomainsView()
+            }
+            .sheet(isPresented: $showScreenTime, onDismiss: { screenTimeManager.refresh() }) {
+                ScreenTimeView()
             }
             .task {
                 await refreshAuthStatus()
@@ -315,6 +322,42 @@ struct SettingsView: View {
         }
     }
 
+    private var screenTimeSection: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Temps d'écran")
+                .sectionLabelStyle()
+                .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            VStack(spacing: 0) {
+                IntegrationRow(
+                    title: "Contrôle parental",
+                    subtitle: screenTimeStatusLabel,
+                    badge: screenTimeBadge,
+                    action: { showScreenTime = true }
+                )
+            }
+            .notoCard()
+        }
+    }
+
+    private var screenTimeStatusLabel: String {
+        switch screenTimeManager.authorizationStatus {
+        case .approved:    return "Actif"
+        case .denied:      return "Accès refusé — toucher pour configurer"
+        case .notDetermined: return "Limiter les apps par enfant"
+        @unknown default:  return "Configurer"
+        }
+    }
+
+    private var screenTimeBadge: StatusBadge.Kind {
+        switch screenTimeManager.authorizationStatus {
+        case .approved:    return .connected
+        case .denied:      return .notConfigured
+        case .notDetermined: return .available
+        @unknown default:  return .available
+        }
+    }
+
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
             Text("Apparence")
@@ -473,7 +516,7 @@ private struct IMAPAccountRow: View {
 // MARK: - Shared row building blocks
 
 /// 1px horizontal divider used between rows inside a `.notoCard()` group.
-private struct SettingsDivider: View {
+struct SettingsDivider: View {
     var body: some View {
         Rectangle()
             .fill(NotoTheme.Colors.border)

@@ -28,7 +28,7 @@ enum TextSummarizer {
         }
 
         // Fallback: build items manually, then template
-        let items = buildBriefingItems(for: child)
+        let items = buildBriefingItems(for: child) + buildDeviceLevelItems()
         return templateSummary(items: items)
     }
 
@@ -100,7 +100,8 @@ enum TextSummarizer {
         // 2. L'emploi du temps du jour (cours annulés, changements)
         // 3. Les devoirs à rendre bientôt
         // 4. Les tendances (progrès ou difficultés)
-        // 5. Une recommandation culturelle si pertinente
+        // 5. Les alertes Temps d'écran si la limite a été dépassée (ex : "La limite de 2h a été atteinte 3 fois cette semaine")
+        // 6. Une recommandation culturelle si pertinente
         //
         // Sois bref (3-5 phrases max). Pas de liste à puces, écris en prose naturelle.
         // Si une matière est en difficulté et qu'il y a une reco culturelle liée, mentionne le lien.
@@ -195,6 +196,20 @@ enum TextSummarizer {
         return items.sorted { $0.priority > $1.priority }
     }
 
+    static func buildDeviceLevelItems() -> [BriefingItem] {
+        let screenAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+        guard !screenAlerts.isEmpty else { return [] }
+        let count = screenAlerts.count
+        let hours = screenAlerts.last?.thresholdHours ?? 2
+        return [BriefingItem(
+            type: .screenTime,
+            childName: "Appareil",
+            summary: "Limite temps d'écran \(hours)h dépassée · dernières 24h\(count > 1 ? " (\(count) fois)" : "")",
+            priority: count >= 2 ? .urgent : .normal,
+            date: screenAlerts.last?.date
+        )]
+    }
+
     // MARK: - Template-based fallback
 
     private static func templateSummary(items: [BriefingItem]) -> String {
@@ -209,6 +224,7 @@ enum TextSummarizer {
         let grades = items.filter { $0.type == .grade || $0.type == .insight }
         let culture = items.filter { $0.type == .cultureReco }
         let cancelled = items.filter { $0.type == .absence }
+        let screenTime = items.filter { $0.type == .screenTime }
 
         if !urgent.isEmpty {
             parts.append(urgent.map(\.summary).joined(separator: ". "))
@@ -229,6 +245,10 @@ enum TextSummarizer {
 
         if let difficulty = grades.first(where: { $0.priority == .urgent }) {
             parts.append(difficulty.summary)
+        }
+
+        if let st = screenTime.first {
+            parts.append(st.summary + ".")
         }
 
         if let reco = culture.first {
@@ -257,6 +277,7 @@ enum BriefingItemType {
     case absence
     case cultureReco
     case insight
+    case screenTime
 }
 
 enum BriefingPriority: Int, Comparable {

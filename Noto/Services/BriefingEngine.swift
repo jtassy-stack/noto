@@ -70,11 +70,29 @@ final class BriefingEngine: ObservableObject {
             }
         }
 
-        // 5. Generate text summary (build items on MainActor, summarize async)
+        // 5. Device-level screen-time card (once per briefing, not per child)
+        let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+        if !screenTimeAlerts.isEmpty {
+            let count = screenTimeAlerts.count
+            let latest = screenTimeAlerts.last!
+            newCards.append(BriefingCard(
+                type: .screenTime,
+                childName: "Appareil",
+                title: "Limite temps d'écran dépassée",
+                subtitle: count > 1
+                    ? "\(count) fois · dernières 24h · limite \(latest.thresholdHours)h"
+                    : "Limite \(latest.thresholdHours)h atteinte · dernières 24h",
+                priority: count >= 2 ? .urgent : .normal,
+                icon: "hourglass.badge.plus"
+            ))
+        }
+
+        // 6. Generate text summary (build items on MainActor, summarize async)
         let items = TextSummarizer.buildBriefingItems(for: child)
+            + TextSummarizer.buildDeviceLevelItems()
         briefingText = await TextSummarizer.summarize(briefingItems: items)
 
-        // 6. Sort cards by priority
+        // 7. Sort cards by priority
         cards = newCards.sorted { $0.priority > $1.priority }
     }
 
@@ -88,6 +106,23 @@ final class BriefingEngine: ObservableObject {
         for child in children {
             insightEngine.analyze(child: child)
             allCards.append(contentsOf: buildSchoolCards(for: child))
+        }
+
+        // Device-level screen-time card (once per family briefing)
+        let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+        if !screenTimeAlerts.isEmpty {
+            let count = screenTimeAlerts.count
+            let latest = screenTimeAlerts.last!
+            allCards.append(BriefingCard(
+                type: .screenTime,
+                childName: "Appareil",
+                title: "Limite temps d'écran dépassée",
+                subtitle: count > 1
+                    ? "\(count) fois · dernières 24h · limite \(latest.thresholdHours)h"
+                    : "Limite \(latest.thresholdHours)h atteinte · dernières 24h",
+                priority: count >= 2 ? .urgent : .normal,
+                icon: "hourglass.badge.plus"
+            ))
         }
 
         // Batch culture-api query for all children
@@ -146,6 +181,7 @@ final class BriefingEngine: ObservableObject {
         for child in children {
             allItems.append(contentsOf: TextSummarizer.buildBriefingItems(for: child))
         }
+        allItems.append(contentsOf: TextSummarizer.buildDeviceLevelItems())
         briefingText = await TextSummarizer.summarize(briefingItems: allItems)
 
         cards = allCards.sorted { $0.priority > $1.priority }
@@ -300,4 +336,5 @@ enum BriefingCardType {
     /// Multi-signal pattern detected by `WellbeingEngine`. Taps open the
     /// `WellbeingResourcesView` sheet; not a link to a SwiftData detail.
     case wellbeing
+    case screenTime
 }
