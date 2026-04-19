@@ -28,7 +28,7 @@ enum TextSummarizer {
         }
 
         // Fallback: build items manually, then template
-        let items = buildBriefingItems(for: child)
+        let items = buildBriefingItems(for: child) + buildDeviceLevelItems()
         return templateSummary(items: items)
     }
 
@@ -193,21 +193,21 @@ enum TextSummarizer {
             ))
         }
 
-        // Screen Time threshold events (last 24h)
-        let screenAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
-        if !screenAlerts.isEmpty {
-            let count = screenAlerts.count
-            let hours = screenAlerts.last?.thresholdHours ?? 2
-            items.append(BriefingItem(
-                type: .screenTime,
-                childName: child.firstName,
-                summary: "Limite temps d'écran \(hours)h dépassée\(count > 1 ? " \(count) fois" : "")",
-                priority: count >= 2 ? .urgent : .normal,
-                date: screenAlerts.last?.date
-            ))
-        }
-
         return items.sorted { $0.priority > $1.priority }
+    }
+
+    static func buildDeviceLevelItems() -> [BriefingItem] {
+        let screenAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+        guard !screenAlerts.isEmpty else { return [] }
+        let count = screenAlerts.count
+        let hours = screenAlerts.last?.thresholdHours ?? 2
+        return [BriefingItem(
+            type: .screenTime,
+            childName: "Appareil",
+            summary: "Limite temps d'écran \(hours)h dépassée · dernières 24h\(count > 1 ? " (\(count) fois)" : "")",
+            priority: count >= 2 ? .urgent : .normal,
+            date: screenAlerts.last?.date
+        )]
     }
 
     // MARK: - Template-based fallback

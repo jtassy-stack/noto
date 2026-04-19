@@ -8,6 +8,7 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         _ event: DeviceActivityEvent.Name,
         activity: DeviceActivityName
     ) {
+        super.eventDidReachThreshold(event, activity: activity)
         let hours = ScreenTimeEventStore.loadThreshold()
         ScreenTimeEventStore.append(ScreenTimeEventStore.Event(
             id: UUID(),

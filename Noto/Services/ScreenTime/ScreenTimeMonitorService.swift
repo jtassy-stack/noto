@@ -5,14 +5,14 @@ import Foundation
 /// The NotoDeviceActivity extension handles threshold callbacks and writes events
 /// to the shared App Group container; this service only configures the schedule.
 @MainActor
-final class ScreenTimeMonitorService: @unchecked Sendable {
+final class ScreenTimeMonitorService: Sendable {
     static let shared = ScreenTimeMonitorService()
 
     private let center = DeviceActivityCenter()
     private let activityName = DeviceActivityName("noto.screentime.daily")
     private let eventName = DeviceActivityEvent.Name("noto.screentime.threshold")
 
-    func startMonitoring(thresholdHours: Int) {
+    func startMonitoring(thresholdHours: Int) throws {
         ScreenTimeEventStore.storeThreshold(hours: thresholdHours)
 
         let schedule = DeviceActivitySchedule(
@@ -31,6 +31,7 @@ final class ScreenTimeMonitorService: @unchecked Sendable {
             )
         } catch {
             NSLog("[noto][warn] ScreenTimeMonitorService: startMonitoring failed: %@", error.localizedDescription)
+            throw error
         }
     }
 

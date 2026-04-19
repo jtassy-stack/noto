@@ -33,7 +33,7 @@ struct SettingsView: View {
     @State private var imapConfigs: [IMAPServerConfig] = []
     @State private var disconnectError: String?
     @State private var showScreenTime = false
-    @StateObject private var screenTimeManager = ScreenTimeManager.shared
+    @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
     @AppStorage("notif_difficulty") private var notifDifficulty: Bool = true

@@ -9,6 +9,7 @@ final class ScreenTimeManager: ObservableObject {
     static let shared = ScreenTimeManager()
 
     @Published private(set) var authorizationStatus: AuthorizationStatus = .notDetermined
+    @Published private(set) var lastAuthorizationError: Error?
 
     private init() {
         refresh()
@@ -23,16 +24,26 @@ final class ScreenTimeManager: ObservableObject {
     /// Requests FamilyControls authorization for the individual (child on this device).
     /// Call from a user gesture — iOS will show a system alert.
     func requestAuthorization() async {
+        lastAuthorizationError = nil
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
         } catch {
-            NSLog("[noto][warn] ScreenTimeManager: authorization request failed: %@", error.localizedDescription)
+            if let fcError = error as? FamilyControlsError, fcError == .authorizationCanceled {
+                NSLog("[noto][warn] ScreenTimeManager: authorization canceled by user")
+            } else {
+                NSLog("[noto][error] ScreenTimeManager: authorization request failed: %@", error.localizedDescription)
+                lastAuthorizationError = error
+            }
         }
         refresh()
     }
 
     func revokeAuthorization() async {
-        await AuthorizationCenter.shared.revokeAuthorization(completionHandler: { _ in })
+        await AuthorizationCenter.shared.revokeAuthorization { result in
+            if case .failure(let error) = result {
+                NSLog("[noto][error] ScreenTimeManager: revokeAuthorization failed: %@", error.localizedDescription)
+            }
+        }
         refresh()
     }
 }

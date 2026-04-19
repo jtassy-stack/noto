@@ -4,11 +4,12 @@ import ManagedSettings
 import DeviceActivity
 
 struct ScreenTimeView: View {
-    @StateObject private var manager = ScreenTimeManager.shared
+    @ObservedObject private var manager = ScreenTimeManager.shared
     @State private var selection = FamilyActivitySelection()
     @State private var showPicker = false
     @State private var restrictionsApplied = false
     @State private var monitoringEnabled = false
+    @State private var monitoringError: Error? = nil
     @State private var thresholdHours: Int = ScreenTimeEventStore.loadThreshold()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -68,6 +69,14 @@ struct ScreenTimeView: View {
         .familyActivityPicker(isPresented: $showPicker, selection: $selection)
         .onChange(of: selection) { applyRestrictions() }
 #endif
+        .alert("Impossible d'activer la surveillance", isPresented: Binding(
+            get: { monitoringError != nil },
+            set: { if !$0 { monitoringError = nil } }
+        )) {
+            Button("OK") { monitoringError = nil }
+        } message: {
+            Text(monitoringError?.localizedDescription ?? "")
+        }
     }
 
     // MARK: - State Sections
@@ -225,7 +234,12 @@ struct ScreenTimeView: View {
                             .tint(NotoTheme.Colors.brand)
                             .onChange(of: monitoringEnabled) { _, enabled in
                                 if enabled {
-                                    ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                                    do {
+                                        try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                                    } catch {
+                                        monitoringEnabled = false
+                                        monitoringError = error
+                                    }
                                 } else {
                                     ScreenTimeMonitorService.shared.stopMonitoring()
                                 }
@@ -244,7 +258,12 @@ struct ScreenTimeView: View {
                             Stepper("\(thresholdHours)h", value: $thresholdHours, in: 1...8)
                                 .fixedSize()
                                 .onChange(of: thresholdHours) { _, h in
-                                    ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: h)
+                                    do {
+                                        try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: h)
+                                    } catch {
+                                        monitoringEnabled = false
+                                        monitoringError = error
+                                    }
                                 }
                         }
                         .padding(.horizontal, NotoTheme.Spacing.md)
@@ -393,8 +412,12 @@ struct ScreenTimeView: View {
                     done: monitoringEnabled,
                     auto: true,
                     action: monitoringEnabled ? nil : {
-                        monitoringEnabled = true
-                        ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                        do {
+                            try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                            monitoringEnabled = true
+                        } catch {
+                            monitoringError = error
+                        }
                     }
                 )
             }

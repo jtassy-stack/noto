@@ -7,30 +7,79 @@ enum ScreenTimeEventStore {
     static let eventsKey = "noto_screentime_events"
     static let thresholdHoursKey = "noto_screentime_threshold_hours"
 
+    // MARK: - Models
+
     struct Event: Codable, Identifiable {
         let id: UUID
         let date: Date
         let activityName: String
         let label: String
         let thresholdHours: Int
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case date
+            case activityName
+            case label
+            case thresholdHours
+        }
     }
 
+    /// Version envelope — bumping `currentVersion` forces a clean slate on schema changes.
+    private struct StorageEnvelope: Codable {
+        static let currentVersion = 1
+        let version: Int
+        let events: [Event]
+    }
+
+    // MARK: - Write
+
     static func append(_ event: Event) {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in append")
+            return
+        }
         var events = load()
         events.append(event)
         let cutoff = Date.now.addingTimeInterval(-30 * 86_400)
         events = events.filter { $0.date >= cutoff }
-        if let data = try? JSONEncoder().encode(events) {
+        let envelope = StorageEnvelope(version: StorageEnvelope.currentVersion, events: events)
+        do {
+            let data = try JSONEncoder().encode(envelope)
             defaults.set(data, forKey: eventsKey)
+        } catch {
+            NSLog("[noto][error] ScreenTimeEventStore: JSONEncoder failed in append — %@", error.localizedDescription)
         }
     }
 
+    // MARK: - Read
+
+    /// Loads stored events. Returns `[]` on first install (absent key) or unrecoverable
+    /// decode failure; both cases are distinguishable via the logs.
     static func load() -> [Event] {
-        guard let defaults = UserDefaults(suiteName: appGroupID),
-              let data = defaults.data(forKey: eventsKey),
-              let events = try? JSONDecoder().decode([Event].self, from: data) else { return [] }
-        return events
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in load")
+            return []
+        }
+
+        // Key absent on first install — not an error, just return empty.
+        guard let data = defaults.data(forKey: eventsKey) else {
+            return []
+        }
+
+        // Decode envelope; log and return [] on failure WITHOUT overwriting existing data.
+        do {
+            let envelope = try JSONDecoder().decode(StorageEnvelope.self, from: data)
+            if envelope.version != StorageEnvelope.currentVersion {
+                NSLog("[noto][error] ScreenTimeEventStore: stored version %d != expected %d — discarding",
+                      envelope.version, StorageEnvelope.currentVersion)
+                return []
+            }
+            return envelope.events
+        } catch {
+            NSLog("[noto][error] ScreenTimeEventStore: JSONDecoder failed in load — %@", error.localizedDescription)
+            return []
+        }
     }
 
     static func recentEvents(withinDays days: Int = 7) -> [Event] {
@@ -38,11 +87,24 @@ enum ScreenTimeEventStore {
         return load().filter { $0.date >= cutoff }
     }
 
+    // MARK: - Threshold
+
     static func storeThreshold(hours: Int) {
-        UserDefaults(suiteName: appGroupID)?.set(hours, forKey: thresholdHoursKey)
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in storeThreshold")
+            return
+        }
+        defaults.set(hours, forKey: thresholdHoursKey)
     }
 
     static func loadThreshold() -> Int {
-        UserDefaults(suiteName: appGroupID)?.integer(forKey: thresholdHoursKey) ?? 2
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in loadThreshold")
+            return 2
+        }
+        // UserDefaults.integer(forKey:) returns 0 for an absent key — not nil —
+        // so the ?? operator cannot be used here to detect a missing key.
+        let stored = defaults.integer(forKey: thresholdHoursKey)
+        return stored > 0 ? stored : 2
     }
 }
