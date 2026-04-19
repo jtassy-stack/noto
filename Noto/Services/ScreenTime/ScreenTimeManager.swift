@@ -41,7 +41,10 @@ final class ScreenTimeManager: ObservableObject {
     func revokeAuthorization() async {
         await AuthorizationCenter.shared.revokeAuthorization { result in
             if case .failure(let error) = result {
-                NSLog("[noto][error] ScreenTimeManager: revokeAuthorization failed: %@", error.localizedDescription)
+                Task { @MainActor in
+                    NSLog("[noto][error] ScreenTimeManager: revokeAuthorization failed: %@", error.localizedDescription)
+                    self.lastAuthorizationError = error
+                }
             }
         }
         refresh()

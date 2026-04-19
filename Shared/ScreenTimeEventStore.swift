@@ -39,7 +39,11 @@ enum ScreenTimeEventStore {
             NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in append")
             return
         }
-        var events = load()
+        guard let existing = loadRaw() else {
+            NSLog("[noto][error] ScreenTimeEventStore: decode failure in append — existing data preserved, new event dropped")
+            return
+        }
+        var events = existing
         events.append(event)
         let cutoff = Date.now.addingTimeInterval(-30 * 86_400)
         events = events.filter { $0.date >= cutoff }
@@ -53,6 +57,18 @@ enum ScreenTimeEventStore {
     }
 
     // MARK: - Read
+
+    private static func loadRaw() -> [Event]? {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return nil }
+        guard let data = defaults.data(forKey: eventsKey) else { return [] }
+        do {
+            let envelope = try JSONDecoder().decode(StorageEnvelope.self, from: data)
+            guard envelope.version == StorageEnvelope.currentVersion else { return nil }
+            return envelope.events
+        } catch {
+            return nil
+        }
+    }
 
     /// Loads stored events. Returns `[]` on first install (absent key) or unrecoverable
     /// decode failure; both cases are distinguishable via the logs.

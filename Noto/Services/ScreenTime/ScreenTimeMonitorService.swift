@@ -13,8 +13,6 @@ final class ScreenTimeMonitorService: Sendable {
     private let eventName = DeviceActivityEvent.Name("noto.screentime.threshold")
 
     func startMonitoring(thresholdHours: Int) throws {
-        ScreenTimeEventStore.storeThreshold(hours: thresholdHours)
-
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
             intervalEnd: DateComponents(hour: 23, minute: 59),
@@ -33,6 +31,7 @@ final class ScreenTimeMonitorService: Sendable {
             NSLog("[noto][warn] ScreenTimeMonitorService: startMonitoring failed: %@", error.localizedDescription)
             throw error
         }
+        ScreenTimeEventStore.storeThreshold(hours: thresholdHours)
     }
 
     func stopMonitoring() {

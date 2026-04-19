@@ -257,10 +257,11 @@ struct ScreenTimeView: View {
                             Spacer()
                             Stepper("\(thresholdHours)h", value: $thresholdHours, in: 1...8)
                                 .fixedSize()
-                                .onChange(of: thresholdHours) { _, h in
+                                .onChange(of: thresholdHours) { oldValue, h in
                                     do {
                                         try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: h)
                                     } catch {
+                                        thresholdHours = oldValue
                                         monitoringEnabled = false
                                         monitoringError = error
                                     }
@@ -272,6 +273,10 @@ struct ScreenTimeView: View {
                 }
                 .notoCard()
             }
+        }
+        .onAppear {
+            let store = ManagedSettingsStore()
+            restrictionsApplied = store.shield.applications != nil || store.shield.applicationCategories != nil
         }
     }
 
@@ -302,7 +307,7 @@ struct ScreenTimeView: View {
 
                 Button {
                     if let url = URL(string: "app-settings:") {
-                        UIApplication.shared.open(url)
+                        openURL(url)
                     }
                 } label: {
                     HStack {
