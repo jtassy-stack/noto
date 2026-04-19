@@ -24,10 +24,15 @@ targets:
     sources:
       - path: Noto
       - path: Noto/Resources/Assets.xcassets
+      - path: Shared
     dependencies:
       - package: SwiftMail
         product: SwiftMail
       - sdk: FamilyControls.framework
+      - sdk: DeviceActivity.framework
+      - target: NotoDeviceActivity
+        embed: true
+        codeSign: true
     settings:
       base:
         INFOPLIST_FILE: Noto/App/Info.plist
@@ -39,6 +44,24 @@ targets:
         DEVELOPMENT_ASSET_PATHS: "\"Noto/Preview Content\""
     entitlements:
       path: Noto/App/Noto.entitlements
+
+  NotoDeviceActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotoDeviceActivity
+      - path: Shared
+    dependencies:
+      - sdk: DeviceActivity.framework
+      - sdk: FamilyControls.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.noto.app.deviceactivity
+        INFOPLIST_FILE: NotoDeviceActivity/Info.plist
+        SWIFT_VERSION: "6.0"
+        SKIP_INSTALL: YES
+    entitlements:
+      path: NotoDeviceActivity/NotoDeviceActivity.entitlements
 
   NotoTests:
     type: bundle.unit-test

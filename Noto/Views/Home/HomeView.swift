@@ -321,6 +321,9 @@ struct HomeView: View {
             }
             wellbeingSignal = card.wellbeing
             showWellbeingSheet = true
+
+        case .screenTime:
+            NotificationCenter.default.post(name: .navigateToSettings, object: nil)
         }
     }
 

@@ -203,6 +203,23 @@ final class BriefingEngine: ObservableObject {
             ))
         }
 
+        // Screen Time threshold alerts (last 24h)
+        let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+        if !screenTimeAlerts.isEmpty {
+            let count = screenTimeAlerts.count
+            let latest = screenTimeAlerts.last!
+            cards.append(BriefingCard(
+                type: .screenTime,
+                childName: child.firstName,
+                title: "Limite temps d'écran dépassée",
+                subtitle: count > 1
+                    ? "\(count) fois aujourd'hui · limite \(latest.thresholdHours)h"
+                    : "Limite \(latest.thresholdHours)h atteinte",
+                priority: count >= 2 ? .urgent : .normal,
+                icon: "hourglass.badge.plus"
+            ))
+        }
+
         // Wellbeing signal — emitted only when multiple factors align,
         // so we never paint the card for a single bad grade week. The
         // copy is framed as observations, not diagnosis.
@@ -300,4 +317,5 @@ enum BriefingCardType {
     /// Multi-signal pattern detected by `WellbeingEngine`. Taps open the
     /// `WellbeingResourcesView` sheet; not a link to a SwiftData detail.
     case wellbeing
+    case screenTime
 }

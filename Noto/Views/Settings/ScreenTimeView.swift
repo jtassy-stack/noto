@@ -1,12 +1,15 @@
 import SwiftUI
 import FamilyControls
 import ManagedSettings
+import DeviceActivity
 
 struct ScreenTimeView: View {
     @StateObject private var manager = ScreenTimeManager.shared
     @State private var selection = FamilyActivitySelection()
     @State private var showPicker = false
     @State private var restrictionsApplied = false
+    @State private var monitoringEnabled = false
+    @State private var thresholdHours: Int = ScreenTimeEventStore.loadThreshold()
     @Environment(\.dismiss) private var dismiss
 
     private let store = ManagedSettingsStore()
@@ -48,7 +51,10 @@ struct ScreenTimeView: View {
                 }
             }
         }
-        .onAppear { manager.refresh() }
+        .onAppear {
+            manager.refresh()
+            monitoringEnabled = ScreenTimeMonitorService.shared.isMonitoring
+        }
 #if !targetEnvironment(simulator)
         .familyActivityPicker(isPresented: $showPicker, selection: $selection)
         .onChange(of: selection) { applyRestrictions() }
@@ -187,6 +193,57 @@ struct ScreenTimeView: View {
                 }
             }
             .notoCard()
+
+            // Monitoring / alerting section
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+                Text("Alertes nōto")
+                    .sectionLabelStyle()
+                    .padding(.horizontal, NotoTheme.Spacing.xs)
+
+                VStack(spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Surveiller l'utilisation")
+                                .font(NotoTheme.Typography.body)
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            Text("Alerte dans le briefing si la limite est dépassée")
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $monitoringEnabled)
+                            .labelsHidden()
+                            .tint(NotoTheme.Colors.brand)
+                            .onChange(of: monitoringEnabled) { _, enabled in
+                                if enabled {
+                                    ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                                } else {
+                                    ScreenTimeMonitorService.shared.stopMonitoring()
+                                }
+                            }
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .padding(.vertical, 14)
+
+                    if monitoringEnabled {
+                        SettingsDivider()
+                        HStack {
+                            Text("Limite journalière")
+                                .font(NotoTheme.Typography.body)
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            Spacer()
+                            Stepper("\(thresholdHours)h", value: $thresholdHours, in: 1...8)
+                                .fixedSize()
+                                .onChange(of: thresholdHours) { _, h in
+                                    ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: h)
+                                }
+                        }
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, 14)
+                    }
+                }
+                .notoCard()
+            }
         }
     }
 
