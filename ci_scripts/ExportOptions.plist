@@ -16,6 +16,8 @@
 	<dict>
 		<key>fr.noto.app</key>
 		<string>noto appstore</string>
+		<key>fr.noto.app.deviceactivity</key>
+		<string>noto deviceactivity appstore</string>
 	</dict>
 </dict>
 </plist>
