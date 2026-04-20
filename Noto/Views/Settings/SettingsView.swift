@@ -454,6 +454,13 @@ struct SettingsView: View {
         } catch {
             NSLog("[noto][warn] disconnect(child:) Keychain delete failed: \(error.localizedDescription)")
         }
+        if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
+            do {
+                try KeychainService.delete(key: "ed_credentials_\(accountId)")
+            } catch {
+                NSLog("[noto][warn] disconnect(child:) ED Keychain delete failed: \(error.localizedDescription)")
+            }
+        }
         modelContext.delete(child)
         try? modelContext.save()
     }
@@ -470,13 +477,16 @@ struct SettingsView: View {
     }
 
     private func clearAllData() {
-        for family in families {
-            modelContext.delete(family)
-        }
         if let children = family?.children {
             for child in children {
                 try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
+                if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
+                    try? KeychainService.delete(key: "ed_credentials_\(accountId)")
+                }
             }
+        }
+        for family in families {
+            modelContext.delete(family)
         }
         try? IMAPService.clearAllConfigs()
         imapConfigs = []

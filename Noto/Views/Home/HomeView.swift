@@ -535,7 +535,8 @@ struct HomeView: View {
                 do {
                     try await syncService.sync(child: child, client: client)
                 } catch {
-                    errors.append("\(child.firstName) (ED) : sync échouée")
+                    NSLog("[noto][error] ED sync failed for %@: %@", child.firstName, error.localizedDescription)
+                    errors.append("\(child.firstName) (ED) : sync échouée — \(error.localizedDescription)")
                 }
             }
         }

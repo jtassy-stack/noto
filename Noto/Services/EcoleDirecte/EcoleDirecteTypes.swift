@@ -61,31 +61,16 @@ struct EDMessage: Sendable {
 }
 
 // MARK: - Grade value parser
-//
-// TODO: Implémente cette fonction (5-10 lignes)
-//
-// École Directe retourne les notes en chaînes françaises :
-//   - "12,5"    → 12.5 / outOf (valeur normale)
-//   - "Abs"     → absent (nil)
-//   - "Disp"    → dispensé (nil)
-//   - "NE"      → non évalué (nil)
-//   - "/"       → non renseigné (nil)
-//   - ""        → vide (nil)
-//
-// La fonction normalise vers /20 si outOf != 20 (coefficient /20 = valeur * 20 / outOf).
-// Retourne nil pour toutes les valeurs non-numériques.
-//
-// Contrainte : outOf peut valoir 0 (piège division par zéro).
-func parseGradeValue(_ raw: String, outOf: Double) -> Double? {
+
+/// Returns the raw parsed numeric value without normalizing to /20.
+/// Normalization is handled by `Grade.normalizedValue` which keeps the original outOf.
+/// Returns nil for non-gradeable markers ("Abs", "Disp", "NE", "Inf", "Exc", "/") or invalid input.
+func parseGradeValue(_ raw: String) -> Double? {
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
-    // Non-numeric markers — not an error, just not a gradeable result
     guard !trimmed.isEmpty,
           trimmed != "/",
           !["Abs", "Disp", "NE", "Inf", "Exc"].contains(trimmed) else { return nil }
-    guard outOf > 0 else { return nil }
-    // ED uses French decimal separator (comma) — normalize before parsing
-    guard let value = Double(trimmed.replacingOccurrences(of: ",", with: ".")) else { return nil }
-    return outOf == 20 ? value : (value * 20) / outOf
+    return Double(trimmed.replacingOccurrences(of: ",", with: "."))
 }
 
 // MARK: - Errors
@@ -110,11 +95,14 @@ enum EcoleDirecteError: Error, LocalizedError {
     }
 }
 
-// MARK: - Internal date helpers
+// MARK: - Date / HTML helpers
 
+/// Parses ED date strings (always French school-year dates in Europe/Paris timezone).
+/// Uses en_US_POSIX locale to guarantee Gregorian calendar on all device locales.
 func edParseDate(_ string: String) -> Date? {
     let f = DateFormatter()
-    f.locale = Locale(identifier: "fr_FR")
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(identifier: "Europe/Paris") ?? .current
     for format in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "dd/MM/yyyy"] {
         f.dateFormat = format
         if let d = f.date(from: string) { return d }

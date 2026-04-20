@@ -74,27 +74,37 @@ struct EcoleDirecteLoginView: View {
         }
 
         do {
-            // We don't know the accountId yet — use a temporary key for initial login
-            let tempClient = EcoleDirecteClient(accountId: "setup")
-            let loginResponse = try await tempClient.login(username: username, password: password)
+            // Step 1 — discovery login to determine the real accountId.
+            // Uses a temporary accountId key; the "setup" Keychain entry is cleaned up below.
+            let discoveryClient = EcoleDirecteClient(accountId: "setup")
+            let loginResponse = try await discoveryClient.login(username: username, password: password)
 
             guard let account = loginResponse.accounts.first else {
                 throw EcoleDirecteError.noAccountFound
             }
-
             guard !account.eleves.isEmpty else {
                 errorMessage = "Aucun élève trouvé sur ce compte."
                 isLoading = false
                 return
             }
 
-            // Persist children
             let accountIdStr = String(account.id)
+
+            // Step 2 — create the real client, transfer the already-acquired token
+            // (avoids a second HTTP round-trip), then save credentials under the real key.
+            let client = EcoleDirecteClient(accountId: accountIdStr)
+            await client.setToken(loginResponse.token)
+            await client.storeCredentials(username: username, password: password)
+
+            // Clean up the temporary "setup" Keychain entry created during discovery
+            try? KeychainService.delete(key: "ed_credentials_setup")
+
+            // Step 3 — persist children
             for eleve in account.eleves {
-                let existing = family.children.first {
+                let alreadyExists = family.children.contains {
                     $0.schoolType == .ecoledirecte && $0.entChildId == String(eleve.id)
                 }
-                if existing != nil { continue }   // already added — skip
+                guard !alreadyExists else { continue }
 
                 let child = Child(
                     firstName: eleve.firstName,
@@ -110,16 +120,18 @@ struct EcoleDirecteLoginView: View {
             }
             try modelContext.save()
 
-            // Immediate sync using a fresh client keyed by the real accountId
-            let client = EcoleDirecteClient(accountId: accountIdStr)
-            _ = try await client.login(username: username, password: password)
-
+            // Step 4 — immediate sync (non-fatal: child is saved even if sync fails)
             let syncService = EcoleDirecteSyncService(modelContext: modelContext)
             for child in family.children where child.schoolType == .ecoledirecte {
-                try? await syncService.sync(child: child, client: client)
+                do {
+                    try await syncService.sync(child: child, client: client)
+                } catch {
+                    NSLog("[noto][warn] ED initial sync for %@: %@", child.firstName, error.localizedDescription)
+                    // Non-fatal — HomeView will retry and surface errors via the sync banner
+                }
             }
 
-            onDismissAll?() ?? dismiss()
+            if let onDismissAll { onDismissAll() } else { dismiss() }
         } catch EcoleDirecteError.badCredentials {
             errorMessage = "Identifiants incorrects. Vérifiez votre identifiant et mot de passe."
         } catch EcoleDirecteError.accountBlocked {

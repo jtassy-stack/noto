@@ -44,7 +44,7 @@ final class EcoleDirecteSyncService {
             catch { fetchErrors.append("messages: \(error.localizedDescription)") }
         }
 
-        let hasData = !grades.isEmpty || !lessons.isEmpty || !homework.isEmpty
+        let hasData = !grades.isEmpty || !lessons.isEmpty || !homework.isEmpty || !messages.isEmpty
         switch EDSyncGate.decide(hasData: hasData, fetchErrors: fetchErrors) {
         case .proceed:
             break
@@ -75,11 +75,12 @@ final class EcoleDirecteSyncService {
 
     private func syncGrades(_ edGrades: [EDGrade], for child: Child) {
         for eg in edGrades {
-            guard let value = parseGradeValue(eg.rawValue, outOf: eg.outOf) else { continue }
+            // Parse raw value without normalizing — Grade.normalizedValue handles /20 conversion
+            guard let value = parseGradeValue(eg.rawValue) else { continue }
             let grade = Grade(
                 subject: eg.subject,
                 value: value,
-                outOf: 20,
+                outOf: eg.outOf,
                 coefficient: eg.coefficient,
                 date: eg.date
             )

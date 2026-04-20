@@ -30,54 +30,68 @@ actor EcoleDirecteClient {
 
     /// Authenticate and store the token. Credentials are saved to Keychain for future re-auth.
     func login(username: String, password: String) async throws -> EDLoginResponse {
-        let body = "data=" + ("""
-        {"identifiant":"\(username.edEscaped)","motdepasse":"\(password.edEscaped)","isReLogin":false,"uuid":""}
-        """).trimmingCharacters(in: .whitespaces).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+        // Build form-encoded body via URLComponents so special chars (&, =, +, #) in
+        // passwords are correctly percent-encoded for application/x-www-form-urlencoded.
+        let payload: [String: Any] = [
+            "identifiant": username,
+            "motdepasse": password,
+            "isReLogin": false,
+            "uuid": ""
+        ]
+        let jsonData = try JSONSerialization.data(withJSONObject: payload)
+        let jsonStr = String(data: jsonData, encoding: .utf8) ?? "{}"
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "data", value: jsonStr)]
+        let body = components.percentEncodedQuery ?? "data={}"
 
         let (data, _) = try await post(path: "/login.awp", body: body, token: nil)
         let response = try parseLoginResponse(data)
 
         token = response.token
-        // Store credentials for silent re-auth
-        let creds = "\(username):\(password)"
-        try? KeychainService.save(key: "ed_credentials_\(accountId)", data: Data(creds.utf8))
-        edLog("[noto] ED login OK — token acquired, \(response.accounts.count) account(s)")
+        do {
+            try KeychainService.save(key: "ed_credentials_\(accountId)", data: Data("\(username):\(password)".utf8))
+        } catch {
+            // Non-fatal but silent re-auth will be broken — log prominently
+            NSLog("[noto][error] ED Keychain save failed for account %@: %@ — silent re-auth disabled", accountId, error.localizedDescription)
+        }
+        NSLog("[noto] ED login OK for account %@", accountId)
         return response
     }
 
+    /// Pre-loads a known-valid token acquired by another client (e.g. a discovery client
+    /// used before the real accountId was known). Avoids a second HTTP round-trip.
+    func setToken(_ t: String) {
+        token = t
+    }
+
+    /// Saves credentials under this client's accountId without performing a network login.
+    /// Used after token transfer from a discovery client.
+    func storeCredentials(username: String, password: String) {
+        do {
+            try KeychainService.save(key: "ed_credentials_\(accountId)", data: Data("\(username):\(password)".utf8))
+        } catch {
+            NSLog("[noto][error] ED storeCredentials failed for account %@: %@", accountId, error.localizedDescription)
+        }
+    }
+
     // MARK: - Token management
-    //
-    // TODO: Implémente la stratégie de renouvellement de token (5-10 lignes).
-    //
-    // Cette fonction est appelée avant chaque requête API.
-    // Le token ED expire après ~30 min d'inactivité (l'API répond code:520).
-    //
-    // Options à considérer :
-    //   A. Si `token == nil`, tenter un re-login silencieux via les credentials Keychain.
-    //      Si pas de credentials → throw .tokenExpired (l'UI affiche "reconnectez-vous").
-    //   B. Ne rien faire ici — laisser les appelants gérer l'erreur .tokenExpired
-    //      en catchant et en relançant via `login(username:password:)`.
-    //   C. Hybrid : re-login silencieux si credentials présents, throw si absents.
-    //
-    // Impact UX :
-    //   - Option A (silencieux) : le parent ne voit jamais d'erreur de session → meilleur UX
-    //   - Option B (explicite) : plus simple, mais le parent retape son MDP souvent
-    //   - Option C : compromis recommandé
-    //
-    // Contrainte privacy : ne pas logger les credentials, même en DEBUG.
-    //
+
+    /// Ensures a valid token before each request. If nil, attempts silent re-auth
+    /// from Keychain credentials. Throws `.tokenExpired` if none are stored.
     func ensureValidToken() async throws {
         guard token == nil else { return }
-        // Token absent — attempt silent re-auth from stored Keychain credentials
         guard let credsData = try? KeychainService.load(key: "ed_credentials_\(accountId)"),
               let creds = String(data: credsData, encoding: .utf8) else {
             throw EcoleDirecteError.tokenExpired
         }
         let parts = creds.split(separator: ":", maxSplits: 1)
-        guard parts.count == 2 else { throw EcoleDirecteError.tokenExpired }
+        guard parts.count == 2 else {
+            NSLog("[noto][error] ED Keychain credentials malformed for account %@", accountId)
+            throw EcoleDirecteError.invalidResponse("Identifiants stockés corrompus — reconnectez-vous")
+        }
         let response = try await login(username: String(parts[0]), password: String(parts[1]))
         token = response.token
-        edLog("[noto] ED silent re-auth OK for account \(accountId)")
+        NSLog("[noto] ED silent re-auth OK for account %@", accountId)
     }
 
     // MARK: - Fetch endpoints
@@ -90,7 +104,10 @@ actor EcoleDirecteClient {
 
     func fetchSchedule(eleveId: Int, from: Date, to: Date) async throws -> [EDLesson] {
         try await ensureValidToken()
+        // en_US_POSIX + Europe/Paris ensures Gregorian year on all device locales
         let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "Europe/Paris") ?? .current
         fmt.dateFormat = "yyyy-MM-dd"
         let dateDebut = fmt.string(from: from)
         let dateFin = fmt.string(from: to)
@@ -122,7 +139,6 @@ actor EcoleDirecteClient {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // ED API expects these headers to avoid bot detection
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
         request.setValue("https://www.ecoledirecte.com", forHTTPHeaderField: "Referer")
         request.setValue("same-origin", forHTTPHeaderField: "Sec-Fetch-Site")
@@ -136,14 +152,22 @@ actor EcoleDirecteClient {
         }
         edLog("[noto] ED POST \(url.path) → \(http.statusCode) \(data.count)B")
 
-        // Parse top-level code even on HTTP 200 — ED always returns 200 but uses a `code` field
+        // ED always returns HTTP 200; actual status is in the `code` field
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let code = json["code"] as? Int {
+           let code = json["code"] as? Int, code != 200 {
+            let message = json["message"] as? String ?? "code \(code)"
             switch code {
-            case 520: throw EcoleDirecteError.tokenExpired
-            case 521: throw EcoleDirecteError.accountBlocked
-            case 505: throw EcoleDirecteError.badCredentials
-            default: break
+            case 520:
+                // Invalidate stale token so ensureValidToken() triggers re-auth on next call
+                self.token = nil
+                throw EcoleDirecteError.tokenExpired
+            case 521:
+                throw EcoleDirecteError.accountBlocked
+            case 505:
+                throw EcoleDirecteError.badCredentials
+            default:
+                NSLog("[noto][error] ED API error code %d: %@", code, message)
+                throw EcoleDirecteError.invalidResponse("Erreur École Directe (code \(code)): \(message)")
             }
         }
 
@@ -193,7 +217,7 @@ actor EcoleDirecteClient {
         for periode in periodes {
             let notes = periode["notes"] as? [[String: Any]] ?? []
             for note in notes {
-                guard let id = note["id"].map({ "\($0)" }) else { continue }
+                guard let id = anyToString(note["id"]) else { continue }
                 let outOf = (note["noteSur"] as? String).flatMap(Double.init) ?? 20
                 let coeff = (note["coefficient"] as? String).flatMap(Double.init) ?? 1
                 let avg = (note["moyenneClasse"] as? String).flatMap(Double.init)
@@ -217,7 +241,7 @@ actor EcoleDirecteClient {
               let lessons = root["data"] as? [[String: Any]] else { return [] }
 
         return lessons.compactMap { l in
-            guard let id = l["idDuCours"].map({ "\($0)" }) else { return nil }
+            guard let id = anyToString(l["idDuCours"]) else { return nil }
             let dateStr = l["date"] as? String ?? ""
             let start = l["hDebut"] as? String ?? ""
             let end = l["hFin"] as? String ?? ""
@@ -248,7 +272,7 @@ actor EcoleDirecteClient {
             for matiere in matieres {
                 guard let aFaire = matiere["aFaire"] as? [String: Any],
                       let contenu = aFaire["contenu"] as? String, !contenu.isEmpty else { continue }
-                let id = aFaire["id"].map({ "\($0)" }) ?? "\(dateStr)-\(matiere["codeMatiere"] as? String ?? "?")"
+                let id = anyToString(aFaire["id"]) ?? "\(dateStr)-\(matiere["codeMatiere"] as? String ?? "?")"
                 homework.append(EDHomework(
                     id: id,
                     subject: matiere["libelle"] as? String ?? "?",
@@ -290,11 +314,13 @@ actor EcoleDirecteClient {
     }
 }
 
-// MARK: - String helpers
+// MARK: - Helpers
 
-private extension String {
-    var edEscaped: String {
-        replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+/// Converts Any? (Int or String) to String — ED API mixes both for ID fields.
+private func anyToString(_ value: Any?) -> String? {
+    switch value {
+    case let n as Int: return String(n)
+    case let s as String where !s.isEmpty: return s
+    default: return nil
     }
 }
