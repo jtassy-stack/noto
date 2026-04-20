@@ -577,6 +577,7 @@ private struct ChildSettingsRow: View {
         switch child.schoolType {
         case .pronote: "Pronote"
         case .ent: child.entProvider?.name ?? "ENT"
+        case .ecoledirecte: "École Directe"
         }
     }
 

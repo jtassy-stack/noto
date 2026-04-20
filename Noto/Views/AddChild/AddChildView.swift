@@ -52,6 +52,19 @@ struct AddChildView: View {
                         }
                         .buttonStyle(.plain)
                     }
+
+                    // École Directe
+                    NavigationLink {
+                        EcoleDirecteLoginView(onDismissAll: { dismiss() })
+                    } label: {
+                        ServiceCard(
+                            title: "École Directe",
+                            subtitle: "Collège, lycée — établissements privés",
+                            color: Color(hex: 0x0063A0),
+                            icon: "graduationcap.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
 
