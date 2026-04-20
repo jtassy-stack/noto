@@ -340,6 +340,8 @@ struct HomeView: View {
         let monlyceeChildren = targetChildren.filter { $0.entProvider == .monlycee }
         // Pure ENT children (PCN etc)
         let entChildren = targetChildren.filter { $0.schoolType == .ent && $0.entProvider != .monlycee }
+        // École Directe children
+        let edChildren = targetChildren.filter { $0.schoolType == .ecoledirecte }
 
         // Direct Pronote sync (QR code login)
         if !directPronoteChildren.isEmpty {
@@ -415,6 +417,12 @@ struct HomeView: View {
             errors.append(contentsOf: entErrors)
         }
 
+        // École Directe sync
+        if !edChildren.isEmpty {
+            let edErrors = await syncEcoleDirecteChildren(edChildren)
+            errors.append(contentsOf: edErrors)
+        }
+
         syncCoordinator.finishedSync(errors: errors.isEmpty ? nil : errors.joined(separator: "\n"))
         await refreshBriefing()
     }
@@ -483,6 +491,52 @@ struct HomeView: View {
                 let preloadClient = client
                 Task.detached(priority: .background) {
                     await ENTPhotoCache.shared.preload(paths: photoPaths, client: preloadClient)
+                }
+            }
+        }
+
+        return errors
+    }
+
+    @discardableResult
+    private func syncEcoleDirecteChildren(_ edChildren: [Child]) async -> [String] {
+        var errors: [String] = []
+        let syncService = EcoleDirecteSyncService(modelContext: modelContext)
+
+        // Group by accountId so we login once per famille account
+        var byAccount: [String: [Child]] = [:]
+        for child in edChildren {
+            let key = child.edAccountId ?? child.entChildId ?? child.firstName
+            byAccount[key, default: []].append(child)
+        }
+
+        for (accountId, children) in byAccount {
+            let credKey = "ed_credentials_\(accountId)"
+            guard let credsData = try? KeychainService.load(key: credKey),
+                  let creds = String(data: credsData, encoding: .utf8) else {
+                errors.append("École Directe : identifiants manquants — reconnectez-vous")
+                continue
+            }
+            let parts = creds.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else {
+                errors.append("École Directe : identifiants corrompus")
+                continue
+            }
+
+            let client = EcoleDirecteClient(accountId: accountId)
+            do {
+                _ = try await client.login(username: String(parts[0]), password: String(parts[1]))
+            } catch {
+                errors.append("École Directe : reconnexion échouée — \(error.localizedDescription)")
+                continue
+            }
+
+            for child in children {
+                do {
+                    try await syncService.sync(child: child, client: client)
+                } catch {
+                    NSLog("[noto][error] ED sync failed for %@: %@", child.firstName, error.localizedDescription)
+                    errors.append("\(child.firstName) (ED) : sync échouée — \(error.localizedDescription)")
                 }
             }
         }
@@ -722,6 +776,7 @@ private struct ChildStoryRing: View {
         switch child.schoolType {
         case .ent: return NotoTheme.Colors.cobalt
         case .pronote: return NotoTheme.Colors.pronote
+        case .ecoledirecte: return Color(hex: 0x0063A0)
         }
     }
 
@@ -729,6 +784,7 @@ private struct ChildStoryRing: View {
         switch child.schoolType {
         case .ent: return child.entProvider?.rawValue.uppercased() ?? "ENT"
         case .pronote: return "PRO"
+        case .ecoledirecte: return "ED"
         }
     }
 

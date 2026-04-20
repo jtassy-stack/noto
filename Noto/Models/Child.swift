@@ -4,6 +4,7 @@ import SwiftData
 enum SchoolType: String, Codable {
     case pronote
     case ent
+    case ecoledirecte
 }
 
 enum SchoolLevel: String, Codable, CaseIterable {
@@ -25,8 +26,9 @@ final class Child {
     /// Used as the primary dedupe key when a parent re-runs QR login.
     /// Nil for ENT children and for synthetic fallback children.
     var pawnoteID: String?
-    var entChildId: String?        // ENT user ID for schoolbook API
+    var entChildId: String?        // ENT user ID (PCN/MonLycée) or élève ID (École Directe)
     var entProvider: ENTProvider?   // pcn or monlycee
+    var edAccountId: String?       // École Directe famille account ID (from login response)
     var entClassName: String?      // Full class name from ENT (e.g. "CM1 - CM2 A - M. Lucas") for message filtering
     /// Répertoire National des Établissements code. Populated during
     /// onboarding from the directory API school picker (Phase 8.6).
@@ -81,10 +83,11 @@ extension Child {
     /// Generic fallback label when the stored establishment is URL-shaped.
     /// Prefers the ENT provider name when available, then a schoolType-derived label.
     private var genericSchoolLabel: String {
-        if schoolType == .ent {
-            return entProvider?.name ?? "ENT"
+        switch schoolType {
+        case .ent: return entProvider?.name ?? "ENT"
+        case .ecoledirecte: return "École Directe"
+        default: return "École"
         }
-        return "École"
     }
 
     /// Parent-facing label for the school. Masks raw URLs that leak from the
