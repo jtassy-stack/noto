@@ -341,13 +341,19 @@ struct DiscoverView: View {
             }()
             logger.info("BO topics for \(child.firstName) / \(child.grade) (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
+            // Cultural content is usually tagged with broad age bands
+            // ("8-14", "en famille"); a 1-year grade window filters out most
+            // of it via overlap checks.
+            let queryAgeMin = max(3, age.min - 2)
+            let queryAgeMax = min(18, age.max + 3)
+
             do {
                 var results = try await client.searchThematic(
                     query: uniqueTopics.joined(separator: " "),
                     types: ["event", "podcast", "oeuvre"],
                     grade: apiGrade,
-                    ageMin: age.min,
-                    ageMax: age.max,
+                    ageMin: queryAgeMin,
+                    ageMax: queryAgeMax,
                     geo: geo,
                     limit: children.count > 1 ? 12 : 20
                 )
