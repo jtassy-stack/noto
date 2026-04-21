@@ -24,6 +24,7 @@ struct NotoApp: App {
             ScheduleEntry.self,
             Homework.self,
             Message.self,
+            SchoolPhoto.self,
             Curriculum.self,
             CultureReco.self,
             Insight.self,

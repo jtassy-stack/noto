@@ -47,6 +47,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Install xcpretty
+        run: gem install xcpretty --no-document
+
       - name: Cache Swift packages
         uses: actions/cache@v4
         with:
@@ -72,7 +75,19 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty || true
+            2>&1 | tee /tmp/build.log | xcpretty
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          echo "=== BUILD ERRORS ==="
+          grep " error:" /tmp/build.log | head -30 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 /tmp/build.log
+          echo "=== ANNOTATION ERRORS ==="
+          grep " error:" /tmp/build.log | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Run unit tests
         run: |
