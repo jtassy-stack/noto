@@ -425,6 +425,222 @@
           ]
         }
       ]
+    },
+    {
+      "level": "1re",
+      "cycle": 5,
+      "subjects": [
+        {
+          "name": "Français",
+          "themes": [
+            { "theme": "La poésie du XIXe au XXIe siècle", "keywords": ["poésie", "Baudelaire", "Rimbaud", "Apollinaire", "Ponge", "symbolisme", "surréalisme"], "period": "Trimestre 1" },
+            { "theme": "La littérature d'idées du XVIe au XVIIIe siècle", "keywords": ["essai", "Montaigne", "La Bruyère", "Voltaire", "Lumières", "argumentation", "satire"], "period": "Trimestre 2" },
+            { "theme": "Le roman et le récit du Moyen Âge au XXIe siècle", "keywords": ["roman", "récit", "Madame de Lafayette", "Balzac", "Flaubert", "Colette", "réalisme"], "period": "Trimestre 2" },
+            { "theme": "Le théâtre du XVIIe au XXIe siècle", "keywords": ["théâtre", "tragédie", "comédie", "Molière", "Marivaux", "Beaumarchais", "Lagarce"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "L'Europe face aux révolutions (1789-1848)", "keywords": ["Révolution française", "Empire", "Napoléon", "Restauration", "1848", "Printemps des peuples", "Congrès de Vienne"], "period": "Trimestre 1" },
+            { "theme": "La France dans l'Europe des nationalités (1848-1871)", "keywords": ["IIe République", "Second Empire", "Napoléon III", "unité italienne", "unité allemande", "Commune de Paris"], "period": "Trimestre 2" },
+            { "theme": "La Troisième République avant 1914 : un régime, un empire colonial", "keywords": ["IIIe République", "Jules Ferry", "laïcité", "1905", "Dreyfus", "colonisation", "empire français"], "period": "Trimestre 2" },
+            { "theme": "La Première Guerre mondiale et les totalitarismes", "keywords": ["Première Guerre mondiale", "1914-1918", "Verdun", "tranchées", "Traité de Versailles", "crise de 1929", "totalitarisme", "URSS", "fascisme", "nazisme"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "La métropolisation : un processus mondial différencié", "keywords": ["métropole", "métropolisation", "ville mondiale", "hiérarchie urbaine", "Paris", "mégapole"], "period": "Trimestre 1" },
+            { "theme": "Une diversification des espaces et des acteurs de la production", "keywords": ["espace productif", "industrie", "services", "délocalisation", "Silicon Valley", "firme transnationale"], "period": "Trimestre 2" },
+            { "theme": "Les espaces ruraux : multifonctionnalité ou fragmentation", "keywords": ["rural", "agriculture", "PAC", "périurbain", "tourisme vert", "déprise"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Enseignement scientifique",
+          "themes": [
+            { "theme": "Une longue histoire de la matière", "keywords": ["matière", "atome", "élément chimique", "big bang", "nucléosynthèse", "cristal", "cellule"], "period": "Trimestre 1" },
+            { "theme": "Le Soleil, notre source d'énergie", "keywords": ["Soleil", "énergie solaire", "photosynthèse", "rayonnement", "bilan radiatif", "climat"], "period": "Trimestre 2" },
+            { "theme": "La Terre, un astre singulier", "keywords": ["Terre", "géologie", "biosphère", "tectonique", "âge de la Terre", "Ératosthène"], "period": "Trimestre 2" },
+            { "theme": "Son et musique, porteurs d'information", "keywords": ["son", "musique", "gamme", "acoustique", "fréquence", "spectre sonore", "numérisation"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Suites numériques et modélisation", "keywords": ["suite", "arithmétique", "géométrique", "récurrence", "limite", "modélisation"], "period": "Trimestre 1" },
+            { "theme": "Dérivation et étude de fonctions", "keywords": ["dérivée", "fonction", "tangente", "variation", "extremum", "polynôme"], "period": "Trimestre 2" },
+            { "theme": "Fonctions trigonométriques et exponentielles", "keywords": ["sinus", "cosinus", "cercle trigonométrique", "exponentielle", "logarithme"], "period": "Trimestre 2" },
+            { "theme": "Probabilités conditionnelles et variables aléatoires", "keywords": ["probabilité conditionnelle", "indépendance", "variable aléatoire", "espérance", "loi binomiale"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "themes": [
+            { "theme": "Constitution et transformations de la matière", "keywords": ["réaction chimique", "synthèse", "oxydoréduction", "acide", "base", "pH", "titrage"], "period": "Trimestre 1" },
+            { "theme": "Mouvement et interactions", "keywords": ["mouvement", "force", "énergie cinétique", "Newton", "référentiel", "interaction gravitationnelle"], "period": "Trimestre 2" },
+            { "theme": "Ondes et signaux", "keywords": ["onde", "lumière", "optique géométrique", "lentille", "image", "son", "spectre"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "themes": [
+            { "theme": "Génétique et évolution", "keywords": ["ADN", "génome", "mutation", "gène", "expression génétique", "évolution", "sélection naturelle"], "period": "Trimestre 1" },
+            { "theme": "La Terre, la vie et l'organisation du vivant", "keywords": ["cellule", "métabolisme", "enzyme", "phénotype", "chromosome", "méiose"], "period": "Trimestre 2" },
+            { "theme": "Enjeux planétaires contemporains — écosystèmes", "keywords": ["écosystème", "biodiversité", "agrosystème", "climat", "cycle du carbone"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SES",
+          "themes": [
+            { "theme": "Comment un marché concurrentiel fonctionne-t-il ?", "keywords": ["marché", "offre", "demande", "prix", "concurrence", "monopole"], "period": "Trimestre 1" },
+            { "theme": "Comment les agents économiques se financent-ils ?", "keywords": ["financement", "crédit", "banque", "épargne", "marchés financiers", "taux d'intérêt"], "period": "Trimestre 2" },
+            { "theme": "Comment se forme et s'exprime l'opinion publique ?", "keywords": ["opinion publique", "sondage", "médias", "démocratie", "vote"], "period": "Trimestre 2" },
+            { "theme": "Déviance, contrôle social et socialisation", "keywords": ["déviance", "norme", "contrôle social", "socialisation", "Durkheim", "Becker"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HGGSP",
+          "themes": [
+            { "theme": "La démocratie : fragilités et recompositions", "keywords": ["démocratie", "dictature", "Athènes", "Athènes antique", "populisme", "démocraties illibérales"], "period": "Trimestre 1" },
+            { "theme": "Analyser les dynamiques des puissances internationales", "keywords": ["puissance", "États-Unis", "Chine", "hégémonie", "géopolitique", "soft power"], "period": "Trimestre 2" },
+            { "theme": "Étudier les divisions politiques du monde : les frontières", "keywords": ["frontière", "mur", "Schengen", "conflit frontalier", "géopolitique"], "period": "Trimestre 2" },
+            { "theme": "S'informer : un regard critique sur les sources et modes de communication", "keywords": ["information", "médias", "presse", "fake news", "réseaux sociaux", "liberté de la presse"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HLP",
+          "themes": [
+            { "theme": "Les pouvoirs de la parole", "keywords": ["rhétorique", "éloquence", "Socrate", "Cicéron", "discours", "sophistes"], "period": "Trimestre 1" },
+            { "theme": "Les représentations du monde — voyages et découvertes", "keywords": ["voyage", "découverte", "Montaigne", "Lévi-Strauss", "ethnographie", "altérité"], "period": "Trimestre 2" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "themes": [
+            { "theme": "Identités et échanges — monde anglophone", "keywords": ["identité", "migration", "diaspora", "multiculturalisme", "Commonwealth"], "period": "Trimestre 1" },
+            { "theme": "Art et pouvoir", "keywords": ["art engagé", "propagande", "cinéma politique", "Banksy", "protest song"], "period": "Trimestre 2" },
+            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["réseaux sociaux", "cyberactivisme", "surveillance", "GAFAM", "vie privée"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "themes": [
+            { "theme": "Fondements et fragilités du lien social", "keywords": ["solidarité", "République", "laïcité", "service public", "égalité", "fraternité"], "period": "Année" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "Tle",
+      "cycle": 5,
+      "subjects": [
+        {
+          "name": "Philosophie",
+          "themes": [
+            { "theme": "La conscience et l'inconscient", "keywords": ["conscience", "inconscient", "Freud", "Descartes", "sujet", "introspection"], "period": "Trimestre 1" },
+            { "theme": "La liberté et le devoir", "keywords": ["liberté", "libre arbitre", "Kant", "Sartre", "devoir", "morale"], "period": "Trimestre 1" },
+            { "theme": "Le bonheur et le désir", "keywords": ["bonheur", "désir", "Épicure", "stoïcisme", "Platon", "eudémonisme"], "period": "Trimestre 2" },
+            { "theme": "L'art et la technique", "keywords": ["art", "beau", "esthétique", "technique", "Heidegger", "Kant", "œuvre"], "period": "Trimestre 2" },
+            { "theme": "La vérité, le langage et la raison", "keywords": ["vérité", "langage", "Wittgenstein", "science", "raison", "Popper", "Nietzsche"], "period": "Trimestre 3" },
+            { "theme": "La justice, l'État et la société", "keywords": ["justice", "État", "Rousseau", "Hobbes", "Rawls", "contrat social", "politique"], "period": "Trimestre 3" },
+            { "theme": "Le temps, la nature et la religion", "keywords": ["temps", "nature", "Bergson", "religion", "Spinoza", "métaphysique"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "themes": [
+            { "theme": "Fragilités des démocraties, totalitarismes et Seconde Guerre mondiale (1929-1945)", "keywords": ["crise de 1929", "Front populaire", "stalinisme", "nazisme", "Shoah", "Seconde Guerre mondiale", "Résistance", "1945"], "period": "Trimestre 1" },
+            { "theme": "La multiplication des acteurs internationaux dans un monde bipolaire (1945-1970)", "keywords": ["guerre froide", "ONU", "décolonisation", "Algérie", "Bandung", "tiers-monde", "rideau de fer"], "period": "Trimestre 2" },
+            { "theme": "Les remises en cause économiques, politiques et sociales des années 1970-1991", "keywords": ["chocs pétroliers", "néolibéralisme", "chute du mur", "URSS", "Gorbatchev", "Reagan", "Mitterrand"], "period": "Trimestre 2" },
+            { "theme": "Le monde, l'Europe et la France depuis les années 1990", "keywords": ["mondialisation", "Union européenne", "11 septembre", "terrorisme", "alternance politique", "Ve République"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "themes": [
+            { "theme": "Mers et océans : au cœur de la mondialisation", "keywords": ["océan", "maritimisation", "commerce maritime", "ressources halieutiques", "piraterie", "ZEE"], "period": "Trimestre 1" },
+            { "theme": "Dynamiques territoriales, coopérations et tensions dans la mondialisation", "keywords": ["mondialisation", "coopération", "OMC", "inégalités mondiales", "Sud global"], "period": "Trimestre 2" },
+            { "theme": "L'Union européenne dans la mondialisation", "keywords": ["Union européenne", "euro", "Schengen", "Brexit", "frontière externe", "politique commune"], "period": "Trimestre 3" },
+            { "theme": "La France et ses régions dans l'Union européenne et la mondialisation", "keywords": ["aménagement", "métropole française", "régions", "outre-mer", "DROM", "attractivité"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Enseignement scientifique",
+          "themes": [
+            { "theme": "Science, climat et société", "keywords": ["climat", "réchauffement", "GIEC", "effet de serre", "CO2", "transition écologique"], "period": "Trimestre 1" },
+            { "theme": "Le futur des énergies", "keywords": ["énergie", "renouvelable", "nucléaire", "éolien", "solaire", "sobriété énergétique"], "period": "Trimestre 2" },
+            { "theme": "Une histoire du vivant", "keywords": ["évolution", "biodiversité", "arbre phylogénétique", "extinction", "ADN ancien"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "themes": [
+            { "theme": "Combinatoire, suites et récurrence", "keywords": ["combinatoire", "dénombrement", "factorielle", "récurrence", "suite", "convergence"], "period": "Trimestre 1" },
+            { "theme": "Fonction exponentielle, logarithme et dérivation", "keywords": ["exponentielle", "logarithme népérien", "dérivée", "convexité", "tangente"], "period": "Trimestre 2" },
+            { "theme": "Primitives et calcul intégral", "keywords": ["primitive", "intégrale", "aire sous la courbe", "théorème fondamental"], "period": "Trimestre 2" },
+            { "theme": "Probabilités — lois discrètes et continues", "keywords": ["loi binomiale", "loi normale", "variable aléatoire", "espérance", "variance", "intervalle de fluctuation"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "themes": [
+            { "theme": "Constitution et transformations — cinétique et équilibres", "keywords": ["cinétique chimique", "équilibre", "constante d'équilibre", "acide-base", "pile", "électrolyse"], "period": "Trimestre 1" },
+            { "theme": "Mouvement et interactions — mécanique newtonienne", "keywords": ["Newton", "dynamique", "trajectoire", "gravitation", "Kepler", "satellite"], "period": "Trimestre 2" },
+            { "theme": "Ondes et signaux — interférences et effet Doppler", "keywords": ["onde", "interférence", "diffraction", "Doppler", "lunette astronomique"], "period": "Trimestre 2" },
+            { "theme": "Énergie — conversions et rendements", "keywords": ["énergie", "rendement", "thermodynamique", "premier principe", "bilan énergétique"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "themes": [
+            { "theme": "Génétique, évolution et biodiversité", "keywords": ["génétique", "mutation", "sélection naturelle", "spéciation", "biodiversité", "coévolution"], "period": "Trimestre 1" },
+            { "theme": "À la recherche du passé géologique de la Terre", "keywords": ["géologie", "climat ancien", "glaciation", "sédiment", "tectonique des plaques", "fossile"], "period": "Trimestre 2" },
+            { "theme": "Comportements, mouvement et système nerveux", "keywords": ["cerveau", "système nerveux", "réflexe", "plasticité", "stress", "addiction"], "period": "Trimestre 2" },
+            { "theme": "La domestication des plantes et l'histoire humaine", "keywords": ["domestication", "agriculture", "blé", "Néolithique", "sélection variétale", "OGM"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SES",
+          "themes": [
+            { "theme": "Quels sont les sources et défis de la croissance économique ?", "keywords": ["croissance", "PIB", "productivité", "innovation", "Schumpeter", "Solow"], "period": "Trimestre 1" },
+            { "theme": "Commerce international et mondialisation", "keywords": ["commerce international", "mondialisation", "libre-échange", "protectionnisme", "OMC", "Ricardo"], "period": "Trimestre 2" },
+            { "theme": "Comment lutter contre le chômage ?", "keywords": ["chômage", "marché du travail", "politique de l'emploi", "Keynes", "précarité"], "period": "Trimestre 2" },
+            { "theme": "Justice sociale et action publique pour l'environnement", "keywords": ["inégalités", "justice sociale", "redistribution", "Rawls", "écologie", "développement durable"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HGGSP",
+          "themes": [
+            { "theme": "De nouveaux espaces de conquête — mers, espace, Arctique", "keywords": ["mers", "océan", "espace", "conquête spatiale", "Arctique", "géopolitique"], "period": "Trimestre 1" },
+            { "theme": "Faire la guerre, faire la paix — formes de conflits", "keywords": ["guerre", "paix", "Clausewitz", "Traité de Westphalie", "ONU", "terrorisme"], "period": "Trimestre 1" },
+            { "theme": "Histoire et mémoires — patrimoine", "keywords": ["mémoire", "patrimoine", "UNESCO", "Shoah", "devoir de mémoire", "restitution"], "period": "Trimestre 2" },
+            { "theme": "L'environnement : entre exploitation et protection, un enjeu planétaire", "keywords": ["environnement", "climat", "COP", "biodiversité", "GIEC", "développement durable"], "period": "Trimestre 3" },
+            { "theme": "Le cyberespace : conflictualité et coopération entre acteurs", "keywords": ["cyberespace", "internet", "cyberattaque", "souveraineté numérique", "GAFAM"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HLP",
+          "themes": [
+            { "theme": "La recherche de soi — romantisme et existence", "keywords": ["moi", "romantisme", "Rousseau", "autobiographie", "Proust", "existence"], "period": "Trimestre 1" },
+            { "theme": "L'humanité en question — humanisme, posthumain", "keywords": ["humanisme", "posthumain", "transhumanisme", "Levi", "Arendt", "dignité"], "period": "Trimestre 2" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "themes": [
+            { "theme": "Territoire et mémoire — monde anglophone", "keywords": ["mémoire", "colonisation", "esclavage", "ségrégation", "apartheid", "Mandela", "Martin Luther King"], "period": "Trimestre 1" },
+            { "theme": "Fictions et réalités — littérature, cinéma, séries", "keywords": ["Shakespeare", "dystopie", "Orwell", "Hollywood", "série télévisée", "roman anglophone"], "period": "Trimestre 2" },
+            { "theme": "Innovations scientifiques et responsabilités", "keywords": ["innovation", "intelligence artificielle", "biotechnologie", "éthique scientifique", "Silicon Valley"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "themes": [
+            { "theme": "Démocratie, citoyenneté et engagement", "keywords": ["démocratie", "citoyenneté", "engagement", "vote", "bioéthique", "citoyen européen"], "period": "Année" }
+          ]
+        }
+      ]
     }
   ]
 }
