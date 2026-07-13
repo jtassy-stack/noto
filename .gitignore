@@ -30,3 +30,4 @@ package-lock.json
 
 # XcodeBuildMCP
 .xcodebuildmcp/
+.claude/asc/.env

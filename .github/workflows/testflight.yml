@@ -3,6 +3,10 @@ name: CI / TestFlight
 on:
   push:
     branches: [master]
+    # Docs/markdown never change the binary (asc-kit rule 7).
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -111,7 +115,17 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 40
     needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    # Opt-in gate (asc-kit rule 4): a plain push to master no longer uploads —
+    # only a commit whose TITLE starts with [testflight]/[tf], or a manual
+    # workflow_dispatch. startsWith, not contains: a commit that merely
+    # MENTIONS the marker in its body can't trigger an upload. Keeps a
+    # multi-merge day from burning Apple's daily upload quota.
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' ||
+       startsWith(github.event.head_commit.message, '[testflight]') ||
+       startsWith(github.event.head_commit.message, '[tf]'))
 
     env:
       ARCHIVE_PATH: build/Noto.xcarchive
@@ -120,6 +134,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history: the build number is the commit count (asc-kit rule 1).
+          fetch-depth: 0
 
       - name: Select latest Xcode
         run: |
@@ -132,6 +149,16 @@ jobs:
         with:
           path: ~/Library/Caches/Homebrew
           key: homebrew-xcodegen-${{ runner.os }}
+
+      # Monotonic build number from the repo alone (asc-kit rule 1). Updates
+      # every CURRENT_PROJECT_VERSION in project.yml (app + extensions must
+      # share the build number). At migration: commit count 207 > last
+      # TestFlight build 35, so the sequence stays increasing with no offset.
+      - name: Set monotonic build number from commit count
+        run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          echo "Build number: $BUILD_NUMBER"
+          sed -i '' "s/CURRENT_PROJECT_VERSION: [0-9]*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" project.yml
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -176,6 +203,13 @@ jobs:
           printf '%s' "$PP_NOTO" | base64 --decode > "$PP_DIR/noto.mobileprovision"
           printf '%s' "$PP_NOTO_DEVICEACTIVITY" | base64 --decode > "$PP_DIR/noto-deviceactivity.mobileprovision"
 
+      # macos-15 runners ship a pre-warmed SPM binary-artifacts cache; when a
+      # cached file is corrupted/zero-byte, resolution fails with "already
+      # exists in file system" instead of re-downloading (asc-kit rule 8,
+      # treve PR #158).
+      - name: Clean stale SPM binary-artifacts cache
+        run: rm -rf ~/Library/Caches/org.swift.swiftpm/artifacts
+
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies \
@@ -192,10 +226,11 @@ jobs:
           printf '%s' "$API_KEY_BASE64" | base64 --decode \
             > ~/.private_keys/AuthKey_${API_KEY_ID}.p8
 
+      # No -allowProvisioningUpdates: signing is fully manual (cert + profiles
+      # installed above, PROVISIONING_PROFILE_SPECIFIER set in project.yml), so
+      # CI must never be able to mint throwaway certificates — that's what hit
+      # the Apple account cert cap on keskonfe (asc-kit rule 2).
       - name: Archive
-        env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild archive \
             -project Noto.xcodeproj \
@@ -207,12 +242,11 @@ jobs:
             -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=ZU448G6529 \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.private_keys/AuthKey_${API_KEY_ID}.p8 \
-            -authenticationKeyID "$API_KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
+            DEVELOPMENT_TEAM=ZU448G6529
 
+      # ExportOptions sets destination=upload: the export IS the upload, no
+      # local IPA is written (asc-kit rule 3). The ASC API key satisfies
+      # Xcode's account-auth requirement without minting anything.
       - name: Export and upload to TestFlight
         env:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
@@ -222,11 +256,12 @@ jobs:
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist ci_scripts/ExportOptions.plist \
             -exportPath "$EXPORT_PATH" \
-            -allowProvisioningUpdates \
             -authenticationKeyPath ~/.private_keys/AuthKey_${API_KEY_ID}.p8 \
             -authenticationKeyID "$API_KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER_ID"
 
-      - name: Cleanup keychain
+      - name: Cleanup signing material
         if: always()
-        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+          rm -rf ~/.private_keys

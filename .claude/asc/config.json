@@ -1,0 +1,26 @@
+{
+  "_comment": "asc-kit per-project config — committed (non-secret). CI secrets still use the legacy APP_STORE_CONNECT_* names; migrate to ASC_* when rotating the key.",
+  "bundleId": "fr.noto.app",
+  "appId": "6761330869",
+  "teamId": "ZU448G6529",
+  "scheme": "Noto",
+  "xcodeproj": "Noto.xcodeproj",
+  "xcodegen": true,
+  "defaultBranch": "master",
+  "buildNumber": {
+    "strategy": "git-count",
+    "offset": 0
+  },
+  "trigger": "opt-in",
+  "distribution": {
+    "_note": "Only the internal 'Team (Expo)' group exists — internal groups auto-receive every build, so CI runs no distribution step. Add external groups here (+ the distribute step from the asc-kit workflow template) when needed.",
+    "groups": [],
+    "betaReview": false,
+    "expireOldBuilds": false
+  },
+  "provisioningProfiles": {
+    "fr.noto.app": { "name": "noto appstore", "secret": "PROVISIONING_PROFILE_NOTO" },
+    "fr.noto.app.deviceactivity": { "name": "noto deviceactivity appstore", "secret": "PROVISIONING_PROFILE_NOTO_DEVICEACTIVITY" }
+  },
+  "secretsXcconfig": null
+}
