@@ -1,0 +1,76 @@
+# asc-kit Fastfile template — the ASC CATALOG side of the pipeline.
+#
+# Role split (asc-kit): GitHub Actions owns the binary (archive/sign/upload);
+# fastlane runs LOCALLY for supervised, point-in-time catalog operations —
+# metadata, screenshots, App Store review submission. Project-specific lanes
+# (IAP, promo codes, pricing) stay in the project's Fastfile; keskonfe's is
+# the reference for those.
+#
+# Auth: same env as every asc-kit script — .claude/asc/.env, with
+# scripts/.env.testflight as the legacy fallback. One source of truth.
+
+require "dotenv"
+
+default_platform(:ios)
+
+before_all do
+  env = [
+    File.expand_path("../.claude/asc/.env", __dir__),
+    File.expand_path("../scripts/.env.testflight", __dir__),
+  ].find { |p| File.exist?(p) }
+  UI.user_error!(
+    "Missing .claude/asc/.env — copy env.asc.example and fill ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_PATH."
+  ) unless env
+  Dotenv.load(env)
+
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: File.expand_path(ENV.fetch("ASC_KEY_PATH")),
+    duration: 1200,
+    in_house: false
+  )
+end
+
+platform :ios do
+  desc "Capture all App Store screenshots via the snapshot UI tests"
+  lane :screenshots do
+    capture_ios_screenshots(
+      scheme: "Noto",
+      reinstall_app: true,
+      clear_previous_screenshots: true,
+      override_status_bar: true
+    )
+  end
+
+  desc "Upload metadata + screenshots to App Store Connect (preview, no submit)"
+  lane :prepare_submission do
+    upload_to_app_store(
+      submit_for_review: false,
+      force: true,
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      skip_metadata: false,
+      # Clear the existing screenshot slot first — otherwise old + new exceed
+      # Apple's 10-per-device cap and the new ones are skipped ("too many").
+      overwrite_screenshots: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "Full submit-for-review (use only when you're ready to ship)"
+  lane :submit do
+    upload_to_app_store(
+      submit_for_review: true,
+      force: true,
+      skip_binary_upload: true,
+      automatic_release: false,
+      phased_release: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false
+      }
+    )
+  end
+end

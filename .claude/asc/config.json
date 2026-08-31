@@ -1,5 +1,5 @@
 {
-  "_comment": "asc-kit per-project config — committed (non-secret). CI secrets still use the legacy APP_STORE_CONNECT_* names; migrate to ASC_* when rotating the key.",
+  "_comment": "asc-kit per-project config — committed (non-secret). CI secrets use the standard ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_BASE64 names (migrated from legacy APP_STORE_CONNECT_* — set the new secrets before the next TestFlight run, then delete the old ones).",
   "bundleId": "fr.noto.app",
   "appId": "6761330869",
   "teamId": "ZU448G6529",

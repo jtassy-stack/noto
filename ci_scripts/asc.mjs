@@ -165,6 +165,12 @@ export function createClient({ keyId, issuerId, keyPath, key }) {
       data: [{ type: "betaGroups", id: groupId }],
     });
     if (r.ok || r.status === 409) return; // 409 = already linked, fine
+    // Internal groups created with "automatic distribution" enabled get every
+    // new build assigned by Apple the moment it finishes processing — this
+    // relationship endpoint then rejects a manual (redundant) attach with a
+    // 422, not a 409. Same "already done" outcome, different status code.
+    // Incident: actu-ios first real release (2026-07-29).
+    if (r.status === 422 && /Cannot add internal group to a build/i.test(r.text)) return;
     throw new Error(`Attach group → ${r.status}\n${r.text}`);
   }
 

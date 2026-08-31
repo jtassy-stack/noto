@@ -155,10 +155,12 @@ jobs:
       # share the build number). At migration: commit count 207 > last
       # TestFlight build 35, so the sequence stays increasing with no offset.
       - name: Set monotonic build number from commit count
+        id: buildnum
         run: |
           BUILD_NUMBER=$(git rev-list --count HEAD)
           echo "Build number: $BUILD_NUMBER"
           sed -i '' "s/CURRENT_PROJECT_VERSION: [0-9]*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" project.yml
+          echo "build=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -219,12 +221,13 @@ jobs:
 
       - name: Prepare App Store Connect API key
         env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
         run: |
           mkdir -p ~/.private_keys
-          printf '%s' "$API_KEY_BASE64" | base64 --decode \
-            > ~/.private_keys/AuthKey_${API_KEY_ID}.p8
+          printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
+            > ~/.private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.private_keys/AuthKey_${ASC_KEY_ID}.p8
 
       # No -allowProvisioningUpdates: signing is fully manual (cert + profiles
       # installed above, PROVISIONING_PROFILE_SPECIFIER set in project.yml), so
@@ -249,16 +252,28 @@ jobs:
       # Xcode's account-auth requirement without minting anything.
       - name: Export and upload to TestFlight
         env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           xcodebuild -exportArchive \
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist ci_scripts/ExportOptions.plist \
             -exportPath "$EXPORT_PATH" \
-            -authenticationKeyPath ~/.private_keys/AuthKey_${API_KEY_ID}.p8 \
-            -authenticationKeyID "$API_KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
+            -authenticationKeyPath ~/.private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      # Post-upload distribution policy lives in .claude/asc/config.json
+      # (groups, beta review, expire-old-builds) — one script for every repo.
+      - name: Distribute build (groups / review / expiry)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUILD_VERSION: ${{ steps.buildnum.outputs.build }}
+        run: |
+          # Node does not expand ~ — resolve the .p8 path here.
+          export ASC_KEY_PATH="$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          node ci_scripts/testflight-release.mjs
 
       - name: Cleanup signing material
         if: always()
