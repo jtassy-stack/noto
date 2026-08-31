@@ -70,21 +70,28 @@ final class BriefingEngine: ObservableObject {
             }
         }
 
-        // 5. Device-level screen-time card (once per briefing, not per child)
-        let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
-        if !screenTimeAlerts.isEmpty {
-            let count = screenTimeAlerts.count
-            let latest = screenTimeAlerts.last!
-            newCards.append(BriefingCard(
-                type: .screenTime,
-                childName: "Appareil",
-                title: "Limite temps d'écran dépassée",
-                subtitle: count > 1
-                    ? "\(count) fois · dernières 24h · limite \(latest.thresholdHours)h"
-                    : "Limite \(latest.thresholdHours)h atteinte · dernières 24h",
-                priority: count >= 2 ? .urgent : .normal,
-                icon: "hourglass.badge.plus"
-            ))
+        // 5. Screen-time card — Screen Time authorization is device-scoped, not
+        // child-scoped (see ScreenTimeEventStore.storeLinkedChildID), so only
+        // surface it here when this device is either unambiguous (the family
+        // has one child) or has been explicitly linked to THIS child — showing
+        // it unconditionally for every child in a multi-child family would
+        // misattribute a sibling's device alert.
+        if screenTimeAppliesTo(child) {
+            let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
+            if !screenTimeAlerts.isEmpty {
+                let count = screenTimeAlerts.count
+                let latest = screenTimeAlerts.last!
+                newCards.append(BriefingCard(
+                    type: .screenTime,
+                    childName: child.firstName,
+                    title: "Limite temps d'écran dépassée",
+                    subtitle: count > 1
+                        ? "\(count) fois · dernières 24h · limite \(latest.thresholdHours)h"
+                        : "Limite \(latest.thresholdHours)h atteinte · dernières 24h",
+                    priority: count >= 2 ? .urgent : .normal,
+                    icon: "hourglass.badge.plus"
+                ))
+            }
         }
 
         // 6. Generate text summary (build items on MainActor, summarize async)
@@ -108,14 +115,16 @@ final class BriefingEngine: ObservableObject {
             allCards.append(contentsOf: buildSchoolCards(for: child))
         }
 
-        // Device-level screen-time card (once per family briefing)
+        // Screen-time card — attribute to the linked child's name when known
+        // (or the sole child), otherwise fall back to the generic "Appareil"
+        // label rather than guessing which sibling's device it was.
         let screenTimeAlerts = ScreenTimeEventStore.recentEvents(withinDays: 1)
         if !screenTimeAlerts.isEmpty {
             let count = screenTimeAlerts.count
             let latest = screenTimeAlerts.last!
             allCards.append(BriefingCard(
                 type: .screenTime,
-                childName: "Appareil",
+                childName: screenTimeDisplayName(children: children),
                 title: "Limite temps d'écran dépassée",
                 subtitle: count > 1
                     ? "\(count) fois · dernières 24h · limite \(latest.thresholdHours)h"
@@ -279,6 +288,31 @@ final class BriefingEngine: ObservableObject {
 
     private func formatTime(_ date: Date) -> String {
         date.formatted(.dateTime.hour().minute().locale(Locale(identifier: "fr_FR")))
+    }
+
+    // MARK: - Screen time attribution
+    //
+    // Screen Time authorization is device-scoped (see ScreenTimeEventStore),
+    // not tied to a specific `Child`. With one child in the family the device
+    // is unambiguous; with several, only show/attribute the card once the
+    // parent has explicitly linked this device via ScreenTimeView.
+
+    private func screenTimeAppliesTo(_ child: Child) -> Bool {
+        guard let linkedID = ScreenTimeEventStore.loadLinkedChildID() else {
+            // No link set — unambiguous only when this child has no
+            // siblings in the family; otherwise don't guess which one.
+            return (child.family?.children.count ?? 1) <= 1
+        }
+        return "\(child.id)" == linkedID
+    }
+
+    private func screenTimeDisplayName(children: [Child]) -> String {
+        if children.count == 1 { return children[0].firstName }
+        if let linkedID = ScreenTimeEventStore.loadLinkedChildID(),
+           let match = children.first(where: { "\($0.id)" == linkedID }) {
+            return match.firstName
+        }
+        return "Appareil"
     }
 }
 

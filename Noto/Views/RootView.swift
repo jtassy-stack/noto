@@ -5,6 +5,7 @@ struct RootView: View {
     @Query private var families: [Family]
     @State private var showAddChild = false
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     /// True once the onboarding flow (welcome → AddChild → email → summary)
     /// has been completed end-to-end. Defaulted to `true` so existing users
@@ -103,6 +104,8 @@ struct RootView: View {
                 .sheet(isPresented: $showAddChild) {
                     AddChildView()
                 }
+            } else if DeviceMode.current == .child {
+                ChildHomeView()
             } else {
                 MainTabView()
             }
@@ -121,5 +124,20 @@ struct RootView: View {
             // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            clearClassLockIfNeeded()
+        }
+    }
+
+    /// Belt-and-suspenders for the class-time lock's known-unreliable
+    /// `intervalDidEnd` callback (see ClassScheduleShieldService) — on
+    /// every foreground, check whether we're actually still inside a
+    /// scheduled block and clear a stuck shield if not.
+    private func clearClassLockIfNeeded() {
+        guard ScreenTimeEventStore.isClassLockEnabled(),
+              let linkedID = ScreenTimeEventStore.loadLinkedChildID(),
+              let child = family?.children.first(where: { "\($0.id)" == linkedID }) else { return }
+        ClassScheduleShieldService.clearIfOutsideClassHours(schedule: child.schedule)
     }
 }

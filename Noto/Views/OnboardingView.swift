@@ -17,12 +17,13 @@ struct OnboardingView: View {
 
     @AppStorage("onboarding_complete") private var onboardingComplete: Bool = true
 
-    @State private var step: Step = .welcome
+    @State private var step: Step = .role
     @State private var parentName = ""
     @State private var showAddChild = false
     @State private var emailConfigured = false
 
     private enum Step {
+        case role
         case welcome
         case email
         case summary
@@ -35,6 +36,8 @@ struct OnboardingView: View {
     var body: some View {
         Group {
             switch step {
+            case .role:
+                roleScreen
             case .welcome:
                 welcomeScreen
             case .email:
@@ -60,11 +63,83 @@ struct OnboardingView: View {
             // Resume mid-flow: if a Family+Child already exist (user
             // force-quit after AddChild dismissed), jump straight to
             // EmailSetupStep instead of redoing the welcome screen.
-            if let family = families.first, !family.children.isEmpty, step == .welcome {
+            if let family = families.first, !family.children.isEmpty, step == .role || step == .welcome {
                 emailConfigured = IMAPService.isConfigured
                 step = emailConfigured ? .summary : .email
             }
         }
+    }
+
+    // MARK: - Role screen (step 0)
+
+    private var roleScreen: some View {
+        NavigationStack {
+            VStack(spacing: NotoTheme.Spacing.xl) {
+                Spacer()
+
+                NotoLogo(size: 48)
+
+                VStack(spacing: NotoTheme.Spacing.sm) {
+                    Text("Qui utilise nōto sur cet appareil ?")
+                        .font(NotoTheme.Typography.title)
+                        .multilineTextAlignment(.center)
+                    Text("Si toute la famille utilise le même téléphone, choisissez « parent ».")
+                        .font(NotoTheme.Typography.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, NotoTheme.Spacing.xl)
+
+                Spacer()
+
+                VStack(spacing: NotoTheme.Spacing.md) {
+                    Button {
+                        DeviceMode.current = .parent
+                        step = .welcome
+                    } label: {
+                        roleCard(icon: "figure.2.and.child.holdinghands", title: "Un parent", subtitle: "Suivi scolaire, réglages, temps d'écran")
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        DeviceMode.current = .child
+                        step = .welcome
+                    } label: {
+                        roleCard(icon: "person.fill", title: "Un enfant", subtitle: "Emploi du temps et temps d'écran")
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, NotoTheme.Spacing.xl)
+                .padding(.bottom, NotoTheme.Spacing.xl)
+            }
+        }
+    }
+
+    private func roleCard(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: NotoTheme.Spacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundStyle(NotoTheme.Colors.brand)
+                .frame(width: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(NotoTheme.Typography.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text(subtitle)
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+        }
+        .padding(NotoTheme.Spacing.md)
+        .background(NotoTheme.Colors.card)
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: NotoTheme.Radius.card)
+                .stroke(NotoTheme.Colors.border, lineWidth: 0.5)
+        )
     }
 
     // MARK: - Welcome screen (step 0)
@@ -133,6 +208,12 @@ struct OnboardingView: View {
     /// Proceeds to the email step only if a child was actually added.
     private func handleAddChildDismiss() {
         guard let family = families.first, !family.children.isEmpty else { return }
+        // Child-mode device: exactly one child uses this phone, so link it
+        // for Screen Time attribution automatically — no need to make a
+        // kid navigate Settings to pick themselves from a list.
+        if DeviceMode.current == .child, let child = family.children.last {
+            ScreenTimeEventStore.storeLinkedChildID("\(child.id)")
+        }
         step = .email
     }
 

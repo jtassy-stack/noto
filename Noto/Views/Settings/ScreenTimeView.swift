@@ -1,18 +1,33 @@
 import SwiftUI
+import SwiftData
 import FamilyControls
 import ManagedSettings
 import DeviceActivity
 
 struct ScreenTimeView: View {
     @ObservedObject private var manager = ScreenTimeManager.shared
+    @Query private var families: [Family]
     @State private var selection = FamilyActivitySelection()
     @State private var showPicker = false
     @State private var restrictionsApplied = false
     @State private var monitoringEnabled = false
     @State private var monitoringError: Error? = nil
     @State private var thresholdHours: Int = ScreenTimeEventStore.loadThreshold()
+    @State private var linkedChildID: String? = ScreenTimeEventStore.loadLinkedChildID()
+    @State private var classLockEnabled = ScreenTimeEventStore.isClassLockEnabled()
+    @State private var classLockError: Error? = nil
+    @State private var classLockLastSync: Date? = ScreenTimeEventStore.loadClassLockLastSync()
+    @State private var isSyncingClassLock = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+
+    private var children: [Child] { families.first?.children ?? [] }
+    /// Unambiguous with a single child even if no link was explicitly set,
+    /// same rule as BriefingEngine's screen-time attribution.
+    private var linkedChild: Child? {
+        if children.count == 1 { return children.first }
+        return children.first(where: { "\($0.id)" == linkedChildID })
+    }
 
     // Self-reported checklist items (parent marks as done manually)
     @AppStorage("st_checklist_passcode") private var passcodeConfigured = false
@@ -64,10 +79,12 @@ struct ScreenTimeView: View {
         .onAppear {
             manager.refresh()
             monitoringEnabled = ScreenTimeMonitorService.shared.isMonitoring
+            selection = ScreenTimeEventStore.loadWatchedSelection()
+            restrictionsApplied = !selection.applications.isEmpty || !selection.categories.isEmpty
         }
 #if !targetEnvironment(simulator)
         .familyActivityPicker(isPresented: $showPicker, selection: $selection)
-        .onChange(of: selection) { applyRestrictions() }
+        .onChange(of: selection) { updateWatchedSelection() }
 #endif
         .alert("Impossible d'activer la surveillance", isPresented: Binding(
             get: { monitoringError != nil },
@@ -148,6 +165,11 @@ struct ScreenTimeView: View {
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
                 .padding(.vertical, 14)
+
+                if children.count > 1 {
+                    SettingsDivider()
+                    childLinkRow
+                }
 
                 SettingsDivider()
 
@@ -235,7 +257,7 @@ struct ScreenTimeView: View {
                             .onChange(of: monitoringEnabled) { _, enabled in
                                 if enabled {
                                     do {
-                                        try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                                        try ScreenTimeMonitorService.shared.startMonitoring(selection: selection, thresholdHours: thresholdHours)
                                     } catch {
                                         monitoringEnabled = false
                                         monitoringError = error
@@ -251,7 +273,7 @@ struct ScreenTimeView: View {
                     if monitoringEnabled {
                         SettingsDivider()
                         HStack {
-                            Text("Limite journalière")
+                            Text("Budget journalier")
                                 .font(NotoTheme.Typography.body)
                                 .foregroundStyle(NotoTheme.Colors.textPrimary)
                             Spacer()
@@ -259,7 +281,7 @@ struct ScreenTimeView: View {
                                 .fixedSize()
                                 .onChange(of: thresholdHours) { oldValue, h in
                                     do {
-                                        try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: h)
+                                        try ScreenTimeMonitorService.shared.startMonitoring(selection: selection, thresholdHours: h)
                                     } catch {
                                         thresholdHours = oldValue
                                         monitoringEnabled = false
@@ -269,15 +291,164 @@ struct ScreenTimeView: View {
                         }
                         .padding(.horizontal, NotoTheme.Spacing.md)
                         .padding(.vertical, 14)
+
+                        Text("Les apps sélectionnées restent utilisables jusqu'à ce budget cumulé — la restriction s'applique alors automatiquement, sans que vous ayez à intervenir.")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .padding(.horizontal, NotoTheme.Spacing.md)
+                            .padding(.bottom, 12)
                     }
                 }
                 .notoCard()
             }
+
+            classLockSection
         }
-        .onAppear {
-            let store = ManagedSettingsStore()
-            restrictionsApplied = store.shield.applications != nil || store.shield.applicationCategories != nil
+    }
+
+    /// Opt-in near-total lockdown during class hours, driven by the synced
+    /// timetable — separate from the graduated app-limit shield above (own
+    /// named ManagedSettingsStore, see ClassScheduleShieldService).
+    private var classLockSection: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Verrouillage pendant les cours")
+                .sectionLabelStyle()
+                .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bloquer le téléphone pendant les cours")
+                            .font(NotoTheme.Typography.body)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text("Basé sur l'emploi du temps synchronisé — bloque quasiment tout, sauf appels et messages.")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $classLockEnabled)
+                        .labelsHidden()
+                        .tint(NotoTheme.Colors.brand)
+                        .disabled(linkedChild == nil)
+                        .onChange(of: classLockEnabled) { _, enabled in
+                            ScreenTimeEventStore.setClassLockEnabled(enabled)
+                            if enabled {
+                                syncClassLock()
+                            } else {
+                                ClassScheduleShieldService.disable()
+                                classLockLastSync = nil
+                            }
+                        }
+                }
+                .padding(.horizontal, NotoTheme.Spacing.md)
+                .padding(.vertical, 14)
+
+                if linkedChild == nil {
+                    SettingsDivider()
+                    Text("Indiquez d'abord à quel enfant appartient cet appareil ci-dessus.")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, 10)
+                }
+
+                if classLockEnabled {
+                    SettingsDivider()
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Emploi du temps")
+                                .font(NotoTheme.Typography.body)
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            Text(classLockSyncLabel)
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        if isSyncingClassLock {
+                            ProgressView()
+                        } else {
+                            Button("Actualiser") { syncClassLock() }
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(NotoTheme.Colors.brand)
+                        }
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .padding(.vertical, 14)
+
+                    SettingsDivider()
+                    Text("Limites connues : l'emploi du temps n'est actualisé que lorsque l'app est ouverte — pensez à l'ouvrir régulièrement. La levée du blocage en fin de cours peut être retardée de quelques minutes.")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, 10)
+                }
+
+                if let classLockError {
+                    SettingsDivider()
+                    Label(classLockError.localizedDescription, systemImage: "exclamationmark.triangle")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.danger)
+                        .padding(.horizontal, NotoTheme.Spacing.md)
+                        .padding(.vertical, 10)
+                }
+            }
+            .notoCard()
         }
+    }
+
+    private var classLockSyncLabel: String {
+        guard let classLockLastSync else { return "Jamais synchronisé" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.unitsStyle = .full
+        return "Synchronisé \(formatter.localizedString(for: classLockLastSync, relativeTo: .now))"
+    }
+
+    private func syncClassLock() {
+        guard let child = linkedChild else { return }
+        isSyncingClassLock = true
+        classLockError = nil
+        do {
+            try ClassScheduleShieldService.sync(schedule: child.schedule)
+            classLockLastSync = ScreenTimeEventStore.loadClassLockLastSync()
+        } catch {
+            classLockError = error
+            classLockEnabled = false
+            ScreenTimeEventStore.setClassLockEnabled(false)
+        }
+        isSyncingClassLock = false
+    }
+
+    /// Which `Child` this physical device belongs to — needed once a family
+    /// has more than one child, since Screen Time authorization is inherently
+    /// per-device, not per-child (see `ScreenTimeEventStore.storeLinkedChildID`).
+    private var childLinkRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Cet appareil appartient à")
+                    .font(NotoTheme.Typography.body)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text("Pour attribuer les alertes au bon enfant")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            Spacer()
+            Picker("", selection: Binding(
+                get: { linkedChildID },
+                set: { newValue in
+                    linkedChildID = newValue
+                    ScreenTimeEventStore.storeLinkedChildID(newValue)
+                }
+            )) {
+                Text("Non défini").tag(String?.none)
+                ForEach(children) { child in
+                    Text(child.firstName).tag(String?.some("\(child.id)"))
+                }
+            }
+            .labelsHidden()
+        }
+        .padding(.horizontal, NotoTheme.Spacing.md)
+        .padding(.vertical, 14)
     }
 
     private var deniedSection: some View {
@@ -418,7 +589,7 @@ struct ScreenTimeView: View {
                     auto: true,
                     action: monitoringEnabled ? nil : {
                         do {
-                            try ScreenTimeMonitorService.shared.startMonitoring(thresholdHours: thresholdHours)
+                            try ScreenTimeMonitorService.shared.startMonitoring(selection: selection, thresholdHours: thresholdHours)
                             monitoringEnabled = true
                         } catch {
                             monitoringError = error
@@ -456,27 +627,35 @@ struct ScreenTimeView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func applyRestrictions() {
-        let appTokens = Set(selection.applications.compactMap(\.token))
-        if appTokens.isEmpty {
-            store.shield.applications = nil
-        } else {
-            store.shield.applications = appTokens
-        }
-        let catTokens = Set(selection.categories.compactMap(\.token))
-        if catTokens.isEmpty {
-            store.shield.applicationCategories = nil
-        } else {
-            let policy: ShieldSettings.ActivityCategoryPolicy = .specific(catTokens, except: Set<ApplicationToken>())
-            store.shield.applicationCategories = policy
-        }
+    /// Persists the newly picked apps/categories and, if monitoring is
+    /// already on, restarts it against the new selection. Does NOT shield
+    /// anything directly — selecting an app only starts the clock on its
+    /// daily budget; the `NotoDeviceActivity` extension applies the actual
+    /// shield once that budget is spent (see `DeviceActivityMonitorExtension`).
+    private func updateWatchedSelection() {
         restrictionsApplied = !selection.applications.isEmpty || !selection.categories.isEmpty
+        if monitoringEnabled {
+            do {
+                try ScreenTimeMonitorService.shared.startMonitoring(selection: selection, thresholdHours: thresholdHours)
+            } catch {
+                monitoringError = error
+            }
+        } else {
+            ScreenTimeEventStore.storeWatchedSelection(selection)
+        }
     }
 
+    /// Clears the watched selection AND any shield already in effect (the
+    /// budget may have already been spent today) — otherwise a parent
+    /// removing a restriction mid-day would see it silently stay applied
+    /// until the next 00:00 reset.
     private func clearRestrictions() {
         store.shield.applications = nil
         store.shield.applicationCategories = nil
+        ScreenTimeMonitorService.shared.stopMonitoring()
+        ScreenTimeEventStore.storeWatchedSelection(FamilyActivitySelection())
         selection = FamilyActivitySelection()
+        monitoringEnabled = false
         restrictionsApplied = false
     }
 }

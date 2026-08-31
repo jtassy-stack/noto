@@ -31,3 +31,6 @@ package-lock.json
 # XcodeBuildMCP
 .xcodebuildmcp/
 .claude/asc/.env
+
+# Local xcodebuild output (not DerivedData — direct -target builds write here)
+/build/
