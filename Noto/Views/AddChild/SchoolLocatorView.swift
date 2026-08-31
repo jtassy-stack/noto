@@ -24,6 +24,14 @@ struct SchoolLocatorView: View {
     @State private var isResolvingSelection = false
     @State private var selectionError: String?
 
+    // Manual search — always available, not just a fallback for when geo
+    // fails: a parent may simply know the school's name, or the geo result
+    // may miss it (directory coverage gaps, imprecise location).
+    @State private var searchText = ""
+    @State private var searchResults: [DirectorySchoolSummary]?
+    @State private var isSearching = false
+    @State private var searchTask: Task<Void, Never>?
+
     private let directoryClient = DirectoryAPIClient()
 
     enum SchoolKindFilter: String, CaseIterable {
@@ -65,7 +73,10 @@ struct SchoolLocatorView: View {
                 .padding(.top, NotoTheme.Spacing.sm)
                 .onChange(of: selectedKind) { _, _ in
                     Task { await loadSchoolsForCurrentCommune() }
+                    onSearchTextChanged()
                 }
+
+                searchField
 
                 content
 
@@ -115,10 +126,93 @@ struct SchoolLocatorView: View {
         }
     }
 
+    // MARK: - Search field
+
+    private var searchField: some View {
+        HStack(spacing: NotoTheme.Spacing.sm) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            TextField("Rechercher par nom d'établissement…", text: $searchText)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .onChange(of: searchText) { _, _ in onSearchTextChanged() }
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    onSearchTextChanged()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
+        }
+        .padding(NotoTheme.Spacing.md)
+        .background(NotoTheme.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+        .padding(.horizontal, NotoTheme.Spacing.md)
+        .padding(.top, NotoTheme.Spacing.sm)
+    }
+
+    private var isSearchActive: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+    }
+
+    private func onSearchTextChanged() {
+        searchTask?.cancel()
+        guard isSearchActive else {
+            searchResults = nil
+            isSearching = false
+            return
+        }
+        let query = searchText
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            isSearching = true
+            defer { isSearching = false }
+            do {
+                let results = try await directoryClient.searchSchools(q: query, limit: 30)
+                guard !Task.isCancelled else { return }
+                searchResults = results.filter { selectedKind.matches($0.kind) }
+            } catch {
+                guard !Task.isCancelled else { return }
+                searchResults = []
+            }
+        }
+    }
+
     // MARK: - Content
 
     @ViewBuilder
     private var content: some View {
+        if isSearchActive {
+            searchContent
+        } else {
+            geoContent
+        }
+    }
+
+    @ViewBuilder
+    private var searchContent: some View {
+        VStack(spacing: 0) {
+            if isSearching {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let searchResults, searchResults.isEmpty {
+                emptyHint
+            } else if let searchResults {
+                resultsList(searchResults)
+            }
+            if let selectionError {
+                Label(selectionError, systemImage: "exclamationmark.triangle")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.danger)
+                    .padding(NotoTheme.Spacing.md)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var geoContent: some View {
         switch communeState {
         case .idle, .resolving:
             VStack(spacing: NotoTheme.Spacing.sm) {
@@ -144,7 +238,7 @@ struct SchoolLocatorView: View {
                 } else if schools.isEmpty {
                     emptyHint
                 } else {
-                    resultsList
+                    resultsList(schools)
                 }
                 if let selectionError {
                     Label(selectionError, systemImage: "exclamationmark.triangle")
@@ -165,7 +259,7 @@ struct SchoolLocatorView: View {
             Text("Localisation désactivée")
                 .font(NotoTheme.Typography.headline)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
-            Text("Activez la localisation dans Réglages, ou utilisez la recherche par nom ci-dessous.")
+            Text("Activez la localisation dans Réglages, ou utilisez la recherche par nom ci-dessus.")
                 .font(NotoTheme.Typography.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -192,16 +286,23 @@ struct SchoolLocatorView: View {
     private var emptyHint: some View {
         VStack(spacing: NotoTheme.Spacing.sm) {
             Spacer()
-            Text("Aucun \(selectedKind.rawValue.lowercased()) trouvé à proximité.")
+            Text(isSearchActive
+                ? "Aucun \(selectedKind.rawValue.lowercased()) trouvé pour « \(searchText) »."
+                : "Aucun \(selectedKind.rawValue.lowercased()) trouvé à proximité.")
                 .font(NotoTheme.Typography.body)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, NotoTheme.Spacing.lg)
+            if !isSearchActive {
+                Text("Essayez la recherche par nom ci-dessus.")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.8))
+            }
             Spacer()
         }
     }
 
-    private var resultsList: some View {
+    private func resultsList(_ schools: [DirectorySchoolSummary]) -> some View {
         ScrollView {
             VStack(spacing: 0) {
                 ForEach(Array(schools.enumerated()), id: \.element.id) { index, school in
@@ -260,7 +361,7 @@ struct SchoolLocatorView: View {
             communeState = .resolved(commune)
             await loadSchoolsForCurrentCommune()
         } catch {
-            communeState = .error("Localisation indisponible. Utilisez la recherche par nom ci-dessous.")
+            communeState = .error("Localisation indisponible. Utilisez la recherche par nom ci-dessus.")
         }
     }
 

@@ -69,6 +69,15 @@ struct OnboardingView: View {
             if let family = families.first, !family.children.isEmpty, step == .role || step == .welcome {
                 emailConfigured = IMAPService.isConfigured
                 step = emailConfigured ? .summary : .email
+            } else if let family = families.first, family.children.isEmpty, step == .role || step == .welcome {
+                // A Family record already exists (parent typed their name and
+                // tapped "Commencer") but AddChildView was cancelled before a
+                // child got added — without this, the welcome screen shows an
+                // EMPTY name field and a disabled "Commencer" button, which
+                // reads as "my progress was lost" even though the Family
+                // still exists. Prefill so it's obviously just resuming.
+                parentName = family.parentName
+                step = .welcome
             }
         }
     }

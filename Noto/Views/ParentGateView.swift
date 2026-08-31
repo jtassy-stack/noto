@@ -168,7 +168,12 @@ struct ParentGateView: View {
                     onComplete(true)
                     dismiss()
                 } catch {
-                    errorMessage = "Impossible d'enregistrer le code. Réessayez."
+                    // Surface the real KeychainError description (includes the
+                    // OSStatus code and an actionable hint, e.g. "device
+                    // locked") instead of a generic message that hides why
+                    // the save actually failed.
+                    NSLog("[noto][error] ParentGateView: setPIN failed — %@", error.localizedDescription)
+                    errorMessage = error.localizedDescription
                     confirmPin = ""
                 }
             } else {

@@ -27,13 +27,31 @@ enum GeoCommuneResolver {
     }
 
     static func resolve(coordinate: CLLocationCoordinate2D) async throws -> Commune {
+        // Paris, Lyon, and Marseille are split into arrondissements for
+        // school-directory purposes — celyn's `communeInsee` field uses the
+        // arrondissement code (e.g. 75101-75120), not the umbrella city code
+        // (75056) that a plain commune lookup returns. Try the
+        // arrondissement-level type first (empty result for every other
+        // commune, which doesn't have arrondissements) and fall back to the
+        // regular commune lookup.
+        if let arrondissement = try? await fetchCommune(coordinate: coordinate, type: "arrondissement-municipal") {
+            return arrondissement
+        }
+        return try await fetchCommune(coordinate: coordinate, type: nil)
+    }
+
+    private static func fetchCommune(coordinate: CLLocationCoordinate2D, type: String?) async throws -> Commune {
         var components = URLComponents(string: "https://geo.api.gouv.fr/communes")!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "lat", value: "\(coordinate.latitude)"),
             URLQueryItem(name: "lon", value: "\(coordinate.longitude)"),
             URLQueryItem(name: "fields", value: "nom,code"),
             URLQueryItem(name: "format", value: "json"),
         ]
+        if let type {
+            queryItems.append(URLQueryItem(name: "type", value: type))
+        }
+        components.queryItems = queryItems
         var request = URLRequest(url: components.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
