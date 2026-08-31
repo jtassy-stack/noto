@@ -177,7 +177,9 @@ actor PronoteSession {
             throw PronoteError.invalidResponse("Invalid JSON response")
         }
 
+        #if DEBUG
         NSLog("[noto] RAW RESPONSE \(function): keys=\(responseJSON.keys.sorted())")
+        #endif
 
         // Decrypt response data
         guard let secureData = responseJSON[fieldNames.secureData] as? String else {
@@ -210,7 +212,9 @@ actor PronoteSession {
             throw PronoteError.invalidResponse("Cannot parse decrypted response for \(function)")
         }
 
+        #if DEBUG
         NSLog("[noto] RESPONSE \(function): \(result.keys.sorted())")
+        #endif
         return result
     }
 

@@ -12,7 +12,9 @@ final class CultureAPIClient: Sendable {
     init(baseURL: URL = URL(string: "https://celyn.io/api")!, apiKey: String = CultureAPIClient.defaultAPIKey) {
         self.baseURL = baseURL
         self.apiKey = apiKey
-        self.session = URLSession(configuration: .ephemeral)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        self.session = URLSession(configuration: configuration)
     }
 
     // MARK: - Thematic Search

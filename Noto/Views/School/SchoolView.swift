@@ -307,16 +307,16 @@ private struct ChildSchoolView: View {
                         Text("Synchro")
                             .font(NotoTheme.Typography.functional(12, weight: .medium))
                             .foregroundStyle(NotoTheme.Colors.brand)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, NotoTheme.Spacing.sm)
+                            .padding(.vertical, NotoTheme.Spacing.xs)
                             .background(NotoTheme.Colors.brand.opacity(0.1))
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(NotoTheme.Colors.brand.opacity(0.3), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                .padding(.vertical, NotoTheme.Spacing.cardGap)
                 .notoCard()
 
                 // MARK: Adaptive content
@@ -440,8 +440,8 @@ private struct ChildSchoolView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+            .padding(.vertical, NotoTheme.Spacing.cardGap)
             .signalCard(.positive)
         } else {
             ForEach(upcomingHomework.prefix(5), id: \.id) { hw in
@@ -475,8 +475,8 @@ private struct ChildSchoolView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                    .padding(.vertical, NotoTheme.Spacing.sm)
                     .signalCard(isUrgentHW(hw) ? .urgent : .info)
                     .contentShape(Rectangle())
                 }
@@ -501,8 +501,8 @@ private struct ChildSchoolView: View {
                 .font(NotoTheme.Typography.body)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                .padding(.vertical, NotoTheme.Spacing.sm)
                 .notoCard()
         } else {
             ForEach(recentGrades, id: \.id) { grade in
@@ -533,8 +533,8 @@ private struct ChildSchoolView: View {
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
                             .opacity(0.5)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                    .padding(.vertical, NotoTheme.Spacing.cardGap)
                     .signalCard(isNeg ? .urgent : .info)
                     .contentShape(Rectangle())
                 }
@@ -560,8 +560,8 @@ private struct ChildSchoolView: View {
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
                             .opacity(0.5)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, NotoTheme.Spacing.cardGap)
+                    .padding(.vertical, NotoTheme.Spacing.sm)
                     .notoCard()
                     .contentShape(Rectangle())
                 }
@@ -584,8 +584,8 @@ private struct ChildSchoolView: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .opacity(0.5)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+            .padding(.vertical, NotoTheme.Spacing.cardGap)
             .notoCard()
         }
         .buttonStyle(.plain)
@@ -607,8 +607,8 @@ private struct ChildSchoolView: View {
                         .foregroundStyle(NotoTheme.Colors.cobalt)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+            .padding(.vertical, NotoTheme.Spacing.cardGap)
             .signalCard(.info)
             .contentShape(Rectangle())
         }
@@ -653,8 +653,8 @@ private struct ChildSchoolView: View {
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .opacity(0.65)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                .padding(.vertical, NotoTheme.Spacing.cardGap)
                 .notoCard()
             }
         }
@@ -923,7 +923,7 @@ private struct GradeDetailView: View {
                         metaRow(label: "Date",
                                 value: grade.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "fr_FR"))))
                         if let comment = grade.comment, !comment.isEmpty {
-                            Divider().padding(.leading, 14)
+                            Divider().padding(.leading, NotoTheme.Spacing.cardPaddingH)
                             HStack(alignment: .top) {
                                 Text("Commentaire")
                                     .font(NotoTheme.Typography.metadata)
@@ -934,8 +934,8 @@ private struct GradeDetailView: View {
                                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                                     .multilineTextAlignment(.trailing)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+                            .padding(.vertical, NotoTheme.Spacing.cardGap)
                         }
                     }
                     .notoCard()
@@ -980,8 +980,8 @@ private struct GradeDetailView: View {
                 .font(NotoTheme.Typography.metadata)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, NotoTheme.Spacing.cardPaddingH)
+        .padding(.vertical, NotoTheme.Spacing.cardGap)
     }
 }
 
@@ -1228,7 +1228,7 @@ private struct SchoolbookRow: View {
             Circle()
                 .fill(msg.read ? NotoTheme.Colors.brand : NotoTheme.Colors.amber)
                 .frame(width: 8, height: 8)
-                .padding(.top, 6)
+                .padding(.top, NotoTheme.Spacing.xs)
 
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                 HStack {
@@ -1560,7 +1560,7 @@ private struct MessageRow: View {
             Circle()
                 .fill(msg.read ? Color.clear : NotoTheme.Colors.brand)
                 .frame(width: 8, height: 8)
-                .padding(.top, 6)
+                .padding(.top, NotoTheme.Spacing.xs)
 
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                 HStack {
@@ -1679,8 +1679,8 @@ struct ChildTag: View {
         Text(name)
             .font(NotoTheme.Typography.dataSmall)
             .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, NotoTheme.Spacing.xs)
+            .padding(.vertical, NotoTheme.Spacing.xs)
             .background(color.opacity(0.15))
             .clipShape(Capsule())
     }

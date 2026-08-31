@@ -154,6 +154,7 @@ struct PronoteQRLoginView: View {
                 }
             }
             .padding(.vertical, NotoTheme.Spacing.md)
+            .accessibilityHidden(true)
 
             // Hidden text field for PIN input
             TextField("", text: $pin)
@@ -161,6 +162,8 @@ struct PronoteQRLoginView: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
                 .focused($pinFieldFocused)
+                .accessibilityLabel("Code PIN")
+                .accessibilityValue("\(pin.count) chiffres sur 4 saisis")
                 .onChange(of: pin) { _, newValue in
                     let filtered = String(newValue.filter(\.isNumber).prefix(4))
                     if filtered != newValue { pin = filtered }

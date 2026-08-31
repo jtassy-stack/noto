@@ -33,6 +33,7 @@ struct SettingsView: View {
     @State private var imapConfigs: [IMAPServerConfig] = []
     @State private var disconnectError: String?
     @State private var showScreenTime = false
+    @State private var showConnectionHealthcheck = false
     @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
@@ -135,6 +136,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showMailDomains) {
                 MailDomainsView()
+            }
+            .sheet(isPresented: $showConnectionHealthcheck) {
+                ConnectionHealthcheckView()
             }
             .sheet(isPresented: $showScreenTime, onDismiss: { screenTimeManager.refresh() }) {
                 ScreenTimeView()
@@ -397,6 +401,8 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 InfoRow(label: "Version", value: appVersion)
                 SettingsDivider()
+                InfoRow(label: "Diagnostic de connexion", value: "", chevron: true, action: { showConnectionHealthcheck = true })
+                SettingsDivider()
                 InfoRow(label: "Politique de confidentialité", value: "", chevron: true, action: nil)
                 SettingsDivider()
                 InfoRow(label: "Conditions d'utilisation", value: "", chevron: true, action: nil)
@@ -461,6 +467,13 @@ struct SettingsView: View {
                 NSLog("[noto][warn] disconnect(child:) ED Keychain delete failed: \(error.localizedDescription)")
             }
         }
+        if child.schoolType == .skolengo, let schoolId = child.skolengoSchoolId {
+            do {
+                try KeychainService.delete(key: "skolengo_credentials_\(schoolId)")
+            } catch {
+                NSLog("[noto][warn] disconnect(child:) Skolengo Keychain delete failed: \(error.localizedDescription)")
+            }
+        }
         modelContext.delete(child)
         try? modelContext.save()
     }
@@ -482,6 +495,9 @@ struct SettingsView: View {
                 try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
                 if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
                     try? KeychainService.delete(key: "ed_credentials_\(accountId)")
+                }
+                if child.schoolType == .skolengo, let schoolId = child.skolengoSchoolId {
+                    try? KeychainService.delete(key: "skolengo_credentials_\(schoolId)")
                 }
             }
         }
@@ -588,6 +604,7 @@ private struct ChildSettingsRow: View {
         case .pronote: "Pronote"
         case .ent: child.entProvider?.name ?? "ENT"
         case .ecoledirecte: "École Directe"
+        case .skolengo: "Skolengo"
         }
     }
 

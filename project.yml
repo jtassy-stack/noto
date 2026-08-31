@@ -24,6 +24,7 @@ targets:
     sources:
       - path: Noto
       - path: Noto/Resources/Assets.xcassets
+      - path: Noto/Resources/PrivacyInfo.xcprivacy
       - path: Shared
     dependencies:
       - package: SwiftMail
@@ -44,6 +45,10 @@ targets:
         DEVELOPMENT_ASSET_PATHS: "\"Noto/Preview Content\""
     entitlements:
       path: Noto/App/Noto.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.fr.noto.app.shared
+        com.apple.developer.family-controls: true
     postBuildScripts:
       - name: Embed DeviceActivity extension (device only)
         script: |
@@ -85,6 +90,10 @@ targets:
         SUPPORTED_PLATFORMS: iphoneos
     entitlements:
       path: NotoDeviceActivity/NotoDeviceActivity.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.fr.noto.app.shared
+        com.apple.developer.family-controls: true
 
   NotoTests:
     type: bundle.unit-test

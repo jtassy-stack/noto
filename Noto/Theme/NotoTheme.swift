@@ -118,6 +118,7 @@ enum NotoTheme {
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8
         static let cardGap: CGFloat = 12   // between cards in same section
+        static let cardPaddingH: CGFloat = 14   // horizontal padding inside cards (SchoolView)
         static let md: CGFloat = 16
         static let lg: CGFloat = 24
         static let xl: CGFloat = 32

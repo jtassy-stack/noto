@@ -107,6 +107,7 @@ struct HomeView: View {
                                         .font(.system(size: 18))
                                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 }
+                                .accessibilityLabel("Réglages")
                             }
                         }
                         .padding(.bottom, NotoTheme.Spacing.sm)
@@ -132,6 +133,17 @@ struct HomeView: View {
                         if engine.isLoading {
                             ProgressView()
                                 .padding(.vertical, NotoTheme.Spacing.xl)
+                        } else if syncCoordinator.lastSyncDate == nil {
+                            // First sync never completed — don't claim "all clear" yet
+                            HStack(spacing: NotoTheme.Spacing.sm) {
+                                ProgressView()
+                                Text("Première synchronisation en cours…")
+                                    .font(NotoTheme.Typography.signalTitle)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(NotoTheme.Spacing.md)
+                            .notoCard()
                         } else if !engine.cards.isEmpty {
                             Text("À TRAITER")
                                 .sectionLabelStyle()
@@ -342,6 +354,8 @@ struct HomeView: View {
         let entChildren = targetChildren.filter { $0.schoolType == .ent && $0.entProvider != .monlycee }
         // École Directe children
         let edChildren = targetChildren.filter { $0.schoolType == .ecoledirecte }
+        // Skolengo children
+        let skolengoChildren = targetChildren.filter { $0.schoolType == .skolengo }
 
         // Direct Pronote sync (QR code login)
         if !directPronoteChildren.isEmpty {
@@ -423,6 +437,12 @@ struct HomeView: View {
             errors.append(contentsOf: edErrors)
         }
 
+        // Skolengo sync
+        if !skolengoChildren.isEmpty {
+            let skolengoErrors = await syncSkolengoChildren(skolengoChildren)
+            errors.append(contentsOf: skolengoErrors)
+        }
+
         syncCoordinator.finishedSync(errors: errors.isEmpty ? nil : errors.joined(separator: "\n"))
         await refreshBriefing()
     }
@@ -468,7 +488,7 @@ struct HomeView: View {
                 // is now valid and cookies are in URLSession.shared's cookie storage.
                 NotificationCenter.default.post(name: .entSessionReady, object: nil)
             } catch {
-                errors.append("\(provider.name) : reconnexion échouée")
+                errors.append("\(provider.name) : reconnexion échouée — \(error.localizedDescription)")
                 continue
             }
 
@@ -480,7 +500,7 @@ struct HomeView: View {
                         entChildId: child.entChildId ?? child.firstName
                     )
                 } catch {
-                    errors.append("\(child.firstName) : sync échouée")
+                    errors.append("\(child.firstName) : sync échouée — \(error.localizedDescription)")
                 }
             }
 
@@ -537,6 +557,55 @@ struct HomeView: View {
                 } catch {
                     NSLog("[noto][error] ED sync failed for %@: %@", child.firstName, error.localizedDescription)
                     errors.append("\(child.firstName) (ED) : sync échouée — \(error.localizedDescription)")
+                }
+            }
+        }
+
+        return errors
+    }
+
+    @discardableResult
+    private func syncSkolengoChildren(_ skolengoChildren: [Child]) async -> [String] {
+        var errors: [String] = []
+        let syncService = SkolengoSyncService(modelContext: modelContext)
+
+        // Group by schoolId — one session per school, matching how the
+        // API scopes auth (X-Skolengo-School-Id header on every call).
+        var bySchool: [String: [Child]] = [:]
+        for child in skolengoChildren {
+            guard let schoolId = child.skolengoSchoolId else {
+                errors.append("\(child.firstName) (Skolengo) : établissement manquant — reconnectez-vous")
+                continue
+            }
+            bySchool[schoolId, default: []].append(child)
+        }
+
+        for (schoolId, children) in bySchool {
+            // Minimal school stub — sufficient for header construction and
+            // token refresh (which reuses the cached token_endpoint, not a
+            // fresh OIDC discovery), so no live school re-search is needed
+            // for background sync.
+            let school = SkolengoSchool(
+                id: schoolId,
+                name: children.first?.establishment ?? "",
+                city: nil,
+                emsCode: children.first?.skolengoEmsCode,
+                emsOIDCWellKnownUrl: ""
+            )
+            let client = SkolengoClient(school: school)
+            do {
+                try await client.ensureValidToken()
+            } catch {
+                errors.append("Skolengo : reconnexion échouée — \(error.localizedDescription)")
+                continue
+            }
+
+            for child in children {
+                do {
+                    try await syncService.sync(child: child, client: client)
+                } catch {
+                    NSLog("[noto][error] Skolengo sync failed for %@: %@", child.firstName, error.localizedDescription)
+                    errors.append("\(child.firstName) (Skolengo) : sync échouée — \(error.localizedDescription)")
                 }
             }
         }
@@ -777,6 +846,7 @@ private struct ChildStoryRing: View {
         case .ent: return NotoTheme.Colors.cobalt
         case .pronote: return NotoTheme.Colors.pronote
         case .ecoledirecte: return Color(hex: 0x0063A0)
+        case .skolengo: return Color(hex: 0x6B4FBB)
         }
     }
 
@@ -785,6 +855,7 @@ private struct ChildStoryRing: View {
         case .ent: return child.entProvider?.rawValue.uppercased() ?? "ENT"
         case .pronote: return "PRO"
         case .ecoledirecte: return "ED"
+        case .skolengo: return "SKO"
         }
     }
 
@@ -859,6 +930,8 @@ private struct ChildStoryRing: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(child.firstName), voir les détails")
+        .accessibilityHint("Ouvre la fiche de l'enfant")
         .scaleEffect(isPressed ? 0.92 : 1.0)
         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isPressed)
         .simultaneousGesture(

@@ -108,9 +108,11 @@ final class PawnoteBridge {
         session = context.objectForKeyedSubscript("_pawnoteSession")
 
         // Call loginQrCode
-        NSLog("[noto] loginWithQRCode qrData: url=%@ login=%@", qrData["url"] ?? "nil", qrData["login"] ?? "nil")
+        NSLog("[noto] loginWithQRCode qrData: url=%@", qrData["url"] ?? "nil")
         let qrJSON = try JSONSerialization.data(withJSONObject: qrData)
-        let qrJSONString = String(data: qrJSON, encoding: .utf8)!
+        guard let qrJSONString = String(data: qrJSON, encoding: .utf8) else {
+            throw PronoteError.invalidResponse("Failed to encode QR data")
+        }
 
         let result = try await callAsync("""
             PawnoteBridge.loginQrCode(
@@ -344,6 +346,7 @@ final class PawnoteBridge {
         // Poll for completion (JS promises resolve on the same thread in JSContext)
         // Give it up to 30 seconds
         for _ in 0..<300 {
+            try Task.checkCancellation()
             try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
             if let errorVal = context.objectForKeyedSubscript(errorKey),
@@ -433,7 +436,9 @@ final class PawnoteBridge {
                     // Extract set-cookie headers
                     let headers = (response as? HTTPURLResponse)?.allHeaderFields as? [String: String] ?? [:]
 
+                    #if DEBUG
                     NSLog("[noto] pawnote response: %d %@ (%.200@)", statusCode, urlString, content)
+                    #endif
                     DispatchQueue.main.async {
                         let result: [String: Any] = [
                             "content": content,

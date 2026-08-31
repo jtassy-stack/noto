@@ -13,6 +13,7 @@ struct OnboardingSummaryStep: View {
         case .pronote: return "Pronote"
         case .ent: return child.entProvider?.name ?? "ENT"
         case .ecoledirecte: return "École Directe"
+        case .skolengo: return "Skolengo"
         }
     }
 

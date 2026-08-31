@@ -608,15 +608,15 @@ private struct SourceBadge: View {
     }
 
     private static let sourceStyles: [(pattern: String, monogram: String, color: Color)] = [
-        ("arte", "A", Color(red: 0.94, green: 0.45, blue: 0.08)),
-        ("france culture", "FC", Color(red: 0.0, green: 0.35, blue: 0.65)),
-        ("france inter", "FI", Color(red: 0.0, green: 0.35, blue: 0.65)),
-        ("france musique", "FM", Color(red: 0.0, green: 0.35, blue: 0.65)),
-        ("radio france", "RF", Color(red: 0.0, green: 0.35, blue: 0.65)),
-        ("lumni", "L", Color(red: 0.2, green: 0.6, blue: 0.2)),
-        ("bnf", "B", Color(red: 0.55, green: 0.15, blue: 0.15)),
+        ("arte", "A", Color(hex: 0xF07314)),
+        ("france culture", "FC", Color(hex: 0x0059A6)),
+        ("france inter", "FI", Color(hex: 0x0059A6)),
+        ("france musique", "FM", Color(hex: 0x0059A6)),
+        ("radio france", "RF", Color(hex: 0x0059A6)),
+        ("lumni", "L", Color(hex: 0x339933)),
+        ("bnf", "B", Color(hex: 0x8C2626)),
         ("rmn", "R", NotoTheme.Colors.textSecondary),
-        ("philharmonie", "P", Color(red: 0.3, green: 0.3, blue: 0.3)),
+        ("philharmonie", "P", Color(hex: 0x4D4D4D)),
         ("universcience", "U", NotoTheme.Colors.textSecondary),
     ]
 

@@ -5,6 +5,7 @@ enum SchoolType: String, Codable {
     case pronote
     case ent
     case ecoledirecte
+    case skolengo
 }
 
 enum SchoolLevel: String, Codable, CaseIterable {
@@ -29,6 +30,9 @@ final class Child {
     var entChildId: String?        // ENT user ID (PCN/MonLycée) or élève ID (École Directe)
     var entProvider: ENTProvider?   // pcn or monlycee
     var edAccountId: String?       // École Directe famille account ID (from login response)
+    var skolengoSchoolId: String?  // Skolengo school id — reconstructs SkolengoClient for background sync
+    var skolengoEmsCode: String?   // Skolengo school emsCode — required API header, cached to avoid a re-search
+    var skolengoUserId: String?    // Skolengo EMS user id for this élève (from the OIDC id_token's `sub` claim)
     var entClassName: String?      // Full class name from ENT (e.g. "CM1 - CM2 A - M. Lucas") for message filtering
     /// Répertoire National des Établissements code. Populated during
     /// onboarding from the directory API school picker (Phase 8.6).
@@ -86,6 +90,7 @@ extension Child {
         switch schoolType {
         case .ent: return entProvider?.name ?? "ENT"
         case .ecoledirecte: return "École Directe"
+        case .skolengo: return "Skolengo"
         default: return "École"
         }
     }

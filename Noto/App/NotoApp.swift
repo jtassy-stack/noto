@@ -6,6 +6,20 @@ import TipKit
 struct NotoApp: App {
     private let appearance = AppearanceManager.shared
 
+    private let modelContainer: ModelContainer = {
+        let schema = Schema(versionedSchema: NotoSchemaV1.self)
+        let configuration = ModelConfiguration(schema: schema)
+        do {
+            return try ModelContainer(
+                for: schema,
+                migrationPlan: NotoMigrationPlan.self,
+                configurations: [configuration]
+            )
+        } catch {
+            fatalError("Failed to create ModelContainer: \(error)")
+        }
+    }()
+
     init() {
         try? Tips.configure()
         configureAppearance()
@@ -17,17 +31,7 @@ struct NotoApp: App {
                 .preferredColorScheme(appearance.preference.colorScheme)
                 .environment(appearance)
         }
-        .modelContainer(for: [
-            Family.self,
-            Child.self,
-            Grade.self,
-            ScheduleEntry.self,
-            Homework.self,
-            Message.self,
-            Curriculum.self,
-            CultureReco.self,
-            Insight.self,
-        ])
+        .modelContainer(modelContainer)
     }
 
     // MARK: - Global UIKit appearance

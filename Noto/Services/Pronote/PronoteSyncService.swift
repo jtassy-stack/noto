@@ -21,13 +21,21 @@ final class PronoteSyncService {
 
         bridge.setActiveChild(index: childIndex)
 
-        let grades = await fetchSafe("Grades") { try await bridge.fetchGrades() }
         let today = Date.now
         let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: today)!
         let twoWeeks = Calendar.current.date(byAdding: .day, value: 14, to: today)!
-        let lessons = await fetchSafe("Timetable") { try await bridge.fetchTimetable(from: today, to: nextWeek) }
-        let homework = await fetchSafe("Homework") { try await bridge.fetchHomework(from: today, to: twoWeeks) }
-        let discussions = await fetchSafe("Messages") { try await bridge.fetchDiscussions() }
+
+        // Fetch all four categories concurrently — they are independent network
+        // calls with no shared mutable state. Results are collected into local
+        // arrays here; SwiftData writes happen afterward, sequentially, on the
+        // MainActor (ModelContext is not Sendable, so it must not be touched
+        // from these concurrent tasks).
+        async let gradesTask = fetchSafe("Grades") { try await bridge.fetchGrades() }
+        async let lessonsTask = fetchSafe("Timetable") { try await bridge.fetchTimetable(from: today, to: nextWeek) }
+        async let homeworkTask = fetchSafe("Homework") { try await bridge.fetchHomework(from: today, to: twoWeeks) }
+        async let discussionsTask = fetchSafe("Messages") { try await bridge.fetchDiscussions() }
+
+        let (grades, lessons, homework, discussions) = await (gradesTask, lessonsTask, homeworkTask, discussionsTask)
 
         NSLog("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
 

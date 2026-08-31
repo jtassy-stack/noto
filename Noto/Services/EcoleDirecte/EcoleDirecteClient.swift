@@ -52,9 +52,9 @@ actor EcoleDirecteClient {
             try KeychainService.save(key: "ed_credentials_\(accountId)", data: Data("\(username):\(password)".utf8))
         } catch {
             // Non-fatal but silent re-auth will be broken — log prominently
-            NSLog("[noto][error] ED Keychain save failed for account %@: %@ — silent re-auth disabled", accountId, error.localizedDescription)
+            edLog("[noto][error] ED Keychain save failed for account \(accountId): \(error.localizedDescription) — silent re-auth disabled")
         }
-        NSLog("[noto] ED login OK for account %@", accountId)
+        edLog("[noto] ED login OK for account \(accountId)")
         return response
     }
 
