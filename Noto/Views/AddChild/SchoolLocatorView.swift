@@ -385,7 +385,10 @@ struct SchoolLocatorView: View {
         defer { isResolvingSelection = false }
         do {
             let school = try await directoryClient.fetchSchool(rne: summary.rne)
-            route = SuggestedConnectionRoute(kind: SuggestedConnectionRoute.suggest(for: school.ent?.id), schoolName: school.name)
+            route = SuggestedConnectionRoute(
+                kind: SuggestedConnectionRoute.suggest(for: school, levelFilter: selectedKind),
+                schoolName: school.name
+            )
         } catch {
             // Directory lookup failed — fall back to the generic provider
             // list rather than blocking the parent on a network hiccup.
@@ -410,11 +413,17 @@ struct SchoolLocatorView: View {
 
 // MARK: - Routing
 
-/// Which login screen a celyn `DirectoryENTRef.id` maps to. Best-effort:
-/// a school having a known ENT doesn't guarantee it's the family's only
-/// or preferred connection (many schools run Pronote alongside a
-/// regional ENT) — this picks the most likely single starting point,
-/// and the parent can always back out to `ManualProviderListView`.
+/// Which login screen a celyn establishment maps to. Best-effort in two
+/// senses: (1) a school having a known ENT doesn't guarantee it's the
+/// family's only or preferred connection (many schools run Pronote
+/// alongside a regional ENT) — this picks the most likely single starting
+/// point, and the parent can always back out to `ManualProviderListView`;
+/// (2) celyn's per-school `ent` link is populated for only a small
+/// fraction of establishments (confirmed empirically — e.g. Collège
+/// Camille Sée, Paris 15e, has `ent: null` despite Paris collèges
+/// universally running PCN) — so this falls back to an académie/région
+/// heuristic when the direct link is missing, rather than defaulting
+/// every unlinked school to the same guess.
 struct SuggestedConnectionRoute: Identifiable, Hashable {
     enum Kind {
         case pronote
@@ -442,15 +451,50 @@ struct SuggestedConnectionRoute: Identifiable, Hashable {
         "ent-corse", "ent-savoie", "ent-hautesavoie", "ent-loire", "ent-isere",
     ]
 
-    static func suggest(for entId: String?) -> Kind {
-        guard let entId else { return .unknown }
-        switch entId {
-        case "pcn": return .ent(.pcn)
-        case "monlycee": return .ent(.monlycee)
-        case "ecoledirecte": return .ecoleDirecte
-        case "pronote": return .pronote
-        default:
-            return skolengoRegistryIds.contains(entId) ? .skolengo : .unknown
+    /// Région names (as celyn returns them — accenting is inconsistent,
+    /// e.g. "Ile-de-France" unaccented vs "Auvergne-Rhône-Alpes" accented,
+    /// hence the diacritic-folded comparison) covered by Skolengo.
+    private static let skolengoRegionNames: Set<String> = [
+        "occitanie", "auvergne-rhone-alpes", "bourgogne-franche-comte", "grand est", "corse",
+    ]
+
+    static func suggest(for school: DirectorySchool, levelFilter: SchoolLocatorView.SchoolKindFilter) -> Kind {
+        if let entId = school.ent?.id {
+            switch entId {
+            case "pcn": return .ent(.pcn)
+            case "monlycee": return .ent(.monlycee)
+            case "ecoledirecte": return .ecoleDirecte
+            case "pronote": return .pronote
+            default:
+                return skolengoRegistryIds.contains(entId) ? .skolengo : .unknown
+            }
         }
+
+        // No direct ENT link — infer from académie/région, since that's
+        // the common case, not the exception.
+        let region = (school.commune?.region ?? "").folding(options: .diacriticInsensitive, locale: .current).lowercased()
+        let academy = school.academy ?? ""
+
+        if levelFilter == .lycee, region.contains("ile-de-france") {
+            return .ent(.monlycee)
+        }
+        if levelFilter != .lycee, academy == "Paris" {
+            // Paris Classe Numérique covers écoles/collèges within the
+            // city proper — Paris lycées are handled by the IdF-wide
+            // MonLycée case above.
+            return .ent(.pcn)
+        }
+        if skolengoRegionNames.contains(where: { region.contains($0) }) {
+            return .skolengo
+        }
+        // Pronote is near-universal for collège/lycée regardless of which
+        // ENT sits alongside it — a defensible default at those levels.
+        // Not for écoles: primary schools typically don't run Pronote, so
+        // guessing it there is more likely wrong than useful; route to the
+        // manual list instead.
+        if levelFilter != .ecole {
+            return .pronote
+        }
+        return .unknown
     }
 }
