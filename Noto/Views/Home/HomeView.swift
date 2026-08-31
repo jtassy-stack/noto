@@ -133,11 +133,31 @@ struct HomeView: View {
                         if engine.isLoading {
                             ProgressView()
                                 .padding(.vertical, NotoTheme.Spacing.xl)
-                        } else if syncCoordinator.lastSyncDate == nil {
-                            // First sync never completed — don't claim "all clear" yet
+                        } else if syncCoordinator.lastSyncDate == nil, syncCoordinator.syncError == nil {
+                            // First sync never completed and hasn't failed —
+                            // don't claim "all clear" yet. Once syncError is
+                            // set, the SyncStatusRow above already shows the
+                            // failure with a retry action — repeating "en
+                            // cours…" here too would contradict it (nothing
+                            // is actually in progress once isSyncing is false).
                             HStack(spacing: NotoTheme.Spacing.sm) {
                                 ProgressView()
                                 Text("Première synchronisation en cours…")
+                                    .font(NotoTheme.Typography.signalTitle)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(NotoTheme.Spacing.md)
+                            .notoCard()
+                        } else if syncCoordinator.lastSyncDate == nil {
+                            // First sync attempted and failed — SyncStatusRow
+                            // above already carries the error text; retry is
+                            // pull-to-refresh (bypasses the cooldown). This
+                            // branch just avoids falling through to "tout va bien".
+                            HStack(spacing: NotoTheme.Spacing.sm) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundStyle(NotoTheme.Colors.amber)
+                                Text("Première synchronisation impossible pour le moment.")
                                     .font(NotoTheme.Typography.signalTitle)
                                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                             }
@@ -256,6 +276,24 @@ struct HomeView: View {
                 }
                 guard hasEmpty else { return }
                 Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
+            }
+            // Cold-launch initial sync for every OTHER connection type (ENT,
+            // École Directe, Skolengo) — the onChange above only covers
+            // direct-Pronote children, since it's gated on the Pronote
+            // bridge specifically. Without this, a child added via PCN/ENT/
+            // École Directe/Skolengo never gets its first sync triggered
+            // automatically at all: nothing but a manual pull-to-refresh
+            // would ever start it, while the UI shows an indefinite
+            // "Première synchronisation en cours…" spinner implying a sync
+            // IS already underway. Runs once per HomeView appearance.
+            .task {
+                let needsInitialSync = children.contains { child in
+                    let isDirectPronote = child.schoolType == .pronote && child.entProvider == nil
+                    guard !isDirectPronote else { return false }
+                    return child.grades.isEmpty && child.homework.isEmpty && child.schedule.isEmpty
+                }
+                guard needsInitialSync else { return }
+                await syncCoordinator.requestSync { await self.performFullRefresh() }
             }
             .sheet(isPresented: $showPronoteReconnect, onDismiss: {
                 // If reconnect succeeded, trigger a full refresh automatically
