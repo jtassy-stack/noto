@@ -10,6 +10,8 @@ import SwiftData
 struct ChildHomeView: View {
     @Query private var families: [Family]
     @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
+    @State private var showParentGate = false
+    @State private var gateApproved = false
     @State private var showSettings = false
 
     private var child: Child? {
@@ -45,12 +47,30 @@ struct ChildHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showSettings = true
+                        // No PIN configured yet (e.g. upgraded from before
+                        // this feature existed) — fail open rather than
+                        // permanently locking Settings out of reach.
+                        if ParentGateService.isConfigured {
+                            showParentGate = true
+                        } else {
+                            showSettings = true
+                        }
                     } label: {
                         Image(systemName: "gearshape")
                     }
-                    .accessibilityLabel("Réglages")
+                    .accessibilityLabel("Réglages — protégé par code parent")
                 }
+            }
+            // Réglages (restrictions, déconnexion des comptes, etc.) est un
+            // écran parent — un enfant qui tient ce téléphone ne doit pas
+            // pouvoir désactiver son propre contrôle parental d'un tap.
+            .sheet(isPresented: $showParentGate, onDismiss: {
+                if gateApproved {
+                    gateApproved = false
+                    showSettings = true
+                }
+            }) {
+                ParentGateView(mode: .verify) { success in gateApproved = success }
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()

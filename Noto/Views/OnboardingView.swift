@@ -24,6 +24,7 @@ struct OnboardingView: View {
 
     private enum Step {
         case role
+        case parentGateSetup
         case welcome
         case email
         case summary
@@ -38,6 +39,8 @@ struct OnboardingView: View {
             switch step {
             case .role:
                 roleScreen
+            case .parentGateSetup:
+                ParentGateView(mode: .setUp, onComplete: { _ in step = .welcome }, onCancel: { step = .role })
             case .welcome:
                 welcomeScreen
             case .email:
@@ -103,7 +106,7 @@ struct OnboardingView: View {
 
                     Button {
                         DeviceMode.current = .child
-                        step = .welcome
+                        step = .parentGateSetup
                     } label: {
                         roleCard(icon: "person.fill", title: "Un enfant", subtitle: "Emploi du temps et temps d'écran")
                     }
