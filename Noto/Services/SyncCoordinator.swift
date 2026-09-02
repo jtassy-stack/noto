@@ -9,8 +9,11 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "SyncCoordinato
 /// Pronote reconnect, AddChild onboarding syncs).
 ///
 /// Responsibilities:
-/// - **De-duplicate concurrent callers**: if a sync is already running,
-///   new callers await the in-flight task and share its result.
+/// - **Serialise runs**: if a sync is already running, automatic callers
+///   await it and share its result; forced callers await it and then run
+///   their own action, since the in-flight run may not cover their
+///   children (an AddChild flow whose children were inserted after a
+///   launch sync started).
 /// - **Cooldown for automatic triggers**: an automatic request made less
 ///   than 60 s after the previous *attempt* (successful or not) is dropped.
 ///   Counting attempts rather than successes is what gives failed logins
@@ -74,11 +77,15 @@ final class SyncCoordinator: ObservableObject {
     /// - Parameter action: The actual sync work. The coordinator doesn't
     ///   own the modelContext or child list, so callers supply it.
     func requestSync(force: Bool = false, action: @escaping () async -> Void) async {
-        // If already running, wait for the current task and return.
-        if let existing = inFlightTask {
+        // Never run two syncs at once: wait for whatever is in flight.
+        while let existing = inFlightTask {
             logger.debug("Sync already in-flight — awaiting existing task")
             await existing.value
-            return
+            // Automatic callers only want "a sync to have happened" and share
+            // the finished run. Forced callers (pull-to-refresh, an AddChild
+            // flow syncing children the running task never saw) have work of
+            // their own, so they run once the queue is clear.
+            guard force else { return }
         }
 
         if SyncCooldownPolicy.shouldSkip(force: force,

@@ -460,7 +460,11 @@ struct PronoteQRLoginView: View {
                     await syncService.sync(child: child, bridge: bridge, childIndex: index)
                     if !syncService.failedCategories.isEmpty {
                         hadPartialFailure = true
-                        logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
+                        // Plain Strings: OSLog's interpolation captures its arguments in an
+                        // escaping closure, which Swift 6 rejects for the non-Sendable model.
+                        let childName = child.firstName
+                        let missing = syncService.failedCategories.joined(separator: ", ")
+                        logger.warning("Partial sync during onboarding for \(childName, privacy: .private): missing \(missing, privacy: .public)")
                     }
                 }
             }
