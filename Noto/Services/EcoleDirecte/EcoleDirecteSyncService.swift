@@ -50,6 +50,8 @@ final class EcoleDirecteSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] ED sync for %@ returned empty payload — preserving local data", child.firstName)
+            child.markSynced()
+            try modelContext.save()
             return
         case .fail(let detail):
             throw EcoleDirecteError.invalidResponse("Aucune donnée récupérée (\(detail))")
@@ -65,6 +67,7 @@ final class EcoleDirecteSyncService {
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(messages, for: child)
+        child.markSynced()
 
         try modelContext.save()
         NSLog("[noto] ED sync OK for %@ — %d notes, %d cours, %d devoirs, %d messages",

@@ -40,6 +40,11 @@ final class Child {
     /// to fetch authoritative `mailDomains` (ENT + académie + commune
     /// services) instead of inferring from `establishment`.
     var rneCode: String?
+    /// Timestamp of the last sync that ran to completion for this child
+    /// (including a legitimately empty result). Nil until the first
+    /// successful sync — the single source of truth for "first sync
+    /// pending", regardless of which connector or view ran it.
+    var lastSyncedAt: Date?
     var family: Family?
     var createdAt: Date
 
@@ -84,6 +89,25 @@ final class Child {
 }
 
 extension Child {
+    /// QR-code Pronote login (pawnote bridge), as opposed to Pronote reached
+    /// through an ENT SSO (MonLycée), which carries an `entProvider`.
+    var isDirectPronote: Bool {
+        schoolType == .pronote && entProvider == nil
+    }
+
+    /// True until a sync has completed once for this child. Drives the
+    /// launch-time initial sync and the "première synchronisation" cards.
+    var needsInitialSync: Bool {
+        lastSyncedAt == nil
+    }
+
+    /// Record a completed sync. Called by every sync service on its
+    /// success path (including the "empty payload, preserve" branch) so the
+    /// stamp is set no matter which view triggered the sync.
+    func markSynced(at date: Date = .now) {
+        lastSyncedAt = date
+    }
+
     /// Generic fallback label when the stored establishment is URL-shaped.
     /// Prefers the ENT provider name when available, then a schoolType-derived label.
     private var genericSchoolLabel: String {

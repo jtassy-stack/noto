@@ -120,14 +120,20 @@ struct EcoleDirecteLoginView: View {
             }
             try modelContext.save()
 
-            // Step 4 — immediate sync (non-fatal: child is saved even if sync fails)
+            // Step 4 — immediate sync (non-fatal: child is saved even if sync fails).
+            // Routed through SyncCoordinator so RootView's child-added trigger
+            // joins this run instead of logging in a second time.
             let syncService = EcoleDirecteSyncService(modelContext: modelContext)
-            for child in family.children where child.schoolType == .ecoledirecte {
-                do {
-                    try await syncService.sync(child: child, client: client)
-                } catch {
-                    NSLog("[noto][warn] ED initial sync for %@: %@", child.firstName, error.localizedDescription)
-                    // Non-fatal — HomeView will retry and surface errors via the sync banner
+            let edChildren = family.children.filter { $0.schoolType == .ecoledirecte }
+            await SyncCoordinator.shared.requestSync(force: true) {
+                for child in edChildren {
+                    do {
+                        try await syncService.sync(child: child, client: client)
+                    } catch {
+                        NSLog("[noto][warn] ED initial sync for %@: %@", child.firstName, error.localizedDescription)
+                        // Non-fatal — the child stays "à synchroniser"; HomeView
+                        // shows the first-sync card with a retry button.
+                    }
                 }
             }
 

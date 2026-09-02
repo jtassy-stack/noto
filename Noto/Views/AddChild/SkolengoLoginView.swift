@@ -168,13 +168,18 @@ struct SkolengoLoginView: View {
         guard createdAny else { return }
         try modelContext.save()
 
-        // Immediate sync (non-fatal: children are saved even if sync fails)
+        // Immediate sync (non-fatal: children are saved even if sync fails).
+        // Routed through SyncCoordinator so RootView's child-added trigger
+        // joins this run instead of logging in a second time.
         let syncService = SkolengoSyncService(modelContext: modelContext)
-        for child in family.children where child.schoolType == .skolengo && child.skolengoSchoolId == school.id {
-            do {
-                try await syncService.sync(child: child, client: client)
-            } catch {
-                NSLog("[noto][warn] Skolengo initial sync for %@: %@", child.firstName, error.localizedDescription)
+        let schoolChildren = family.children.filter { $0.schoolType == .skolengo && $0.skolengoSchoolId == school.id }
+        await SyncCoordinator.shared.requestSync(force: true) {
+            for child in schoolChildren {
+                do {
+                    try await syncService.sync(child: child, client: client)
+                } catch {
+                    NSLog("[noto][warn] Skolengo initial sync for %@: %@", child.firstName, error.localizedDescription)
+                }
             }
         }
     }

@@ -96,9 +96,10 @@ extension Notification.Name {
     static let navigateToMessages = Notification.Name("noto.navigateToMessages")
     static let navigateToSchool   = Notification.Name("noto.navigateToSchool")
     static let navigateToDiscover = Notification.Name("noto.navigateToDiscover")
-    /// Request a full sync from any surface. HomeView observes it and runs
-    /// `performFullRefresh()`. Pair with `navigateToHome` when the caller
-    /// also wants the user to see the result.
+    /// Request a user-initiated full sync from any surface. HomeView observes
+    /// it and runs `FullSyncService` through `SyncCoordinator` (bypassing the
+    /// automatic cooldown). Pair with `navigateToHome` when the caller also
+    /// wants the user to see the result.
     static let triggerFullSync    = Notification.Name("noto.triggerFullSync")
     static let navigateToSettings = Notification.Name("noto.navigateToSettings")
     /// Posted after ENT cookies are imported and the session is valid.

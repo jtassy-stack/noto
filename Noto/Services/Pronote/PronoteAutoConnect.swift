@@ -6,10 +6,27 @@ import SwiftData
 @MainActor
 enum PronoteAutoConnect {
 
+    /// The auto-connect currently running, if any. Concurrent callers
+    /// (RootView's launch task, a sync that finds the bridge missing) await
+    /// this one instead of starting a second login with the same single-use
+    /// refresh token.
+    private static var inFlight: Task<Bool, Never>?
+
     /// Try to reconnect using all stored refresh tokens.
     /// Returns `true` if at least one account reconnected successfully.
+    /// Re-entrant: a call made while another is in progress shares its result.
     @discardableResult
     static func autoConnect(modelContext: ModelContext) async -> Bool {
+        if PronoteService.shared.bridge != nil { return true }
+        if let inFlight { return await inFlight.value }
+
+        let task = Task<Bool, Never> { await performAutoConnect() }
+        inFlight = task
+        defer { inFlight = nil }
+        return await task.value
+    }
+
+    private static func performAutoConnect() async -> Bool {
         let usernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
         guard !usernames.isEmpty else { return false }
 

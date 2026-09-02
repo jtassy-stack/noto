@@ -11,14 +11,17 @@ final class MonLyceeSyncService {
         self.modelContext = modelContext
     }
 
-    /// Sync from stored logbook JSON (captured during web login)
-    func syncFromStoredLogbook(for child: Child) {
+    /// Sync from stored logbook JSON (captured during web login).
+    /// Returns `false` when no logbook is stored or it does not contain this
+    /// child — callers must not treat that as a completed sync.
+    @discardableResult
+    func syncFromStoredLogbook(for child: Child) -> Bool {
         guard let jsonStr = UserDefaults.standard.string(forKey: "monlycee_logbook"),
               let data = jsonStr.data(using: .utf8),
               let logbook = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return
+            return false
         }
-        syncLogbook(logbook, for: child)
+        guard syncLogbook(logbook, for: child) else { return false }
 
         // Sync news
         if let newsStr = UserDefaults.standard.string(forKey: "monlycee_news"),
@@ -27,12 +30,16 @@ final class MonLyceeSyncService {
             syncNews(news, for: child)
         }
 
+        child.markSynced()
         try? modelContext.save()
+        return true
     }
 
-    /// Sync logbook data for a specific child
-    func syncLogbook(_ logbook: [String: Any], for child: Child) {
-        guard let structures = logbook["structures"] as? [[String: Any]] else { return }
+    /// Sync logbook data for a specific child.
+    /// Returns `true` when the child was found in the logbook and its data applied.
+    @discardableResult
+    func syncLogbook(_ logbook: [String: Any], for child: Child) -> Bool {
+        guard let structures = logbook["structures"] as? [[String: Any]] else { return false }
 
         // Find this child's data in the logbook
         for structure in structures {
@@ -60,9 +67,10 @@ final class MonLyceeSyncService {
                     syncGrades(grades, for: child)
                 }
 
-                return
+                return true
             }
         }
+        return false
     }
 
     // MARK: - Homework
