@@ -55,6 +55,8 @@ final class ENTSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] ENT sync for %@ returned empty payload — preserving existing local data", child.firstName)
+            child.markSynced()
+            try modelContext.save()
             return
         case .fail(let detail):
             throw ENTError.invalidResponse("Aucune donnée récupérée (\(detail))")
@@ -81,6 +83,7 @@ final class ENTSyncService {
         await syncSchoolbook(words, for: child)
         syncHomework(homework, for: child)
         syncPhotos(newPhotos, for: child)
+        child.markSynced()
 
         try modelContext.save()
     }

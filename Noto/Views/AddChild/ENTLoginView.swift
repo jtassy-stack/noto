@@ -272,13 +272,20 @@ struct ENTLoginView: View {
 
         createChildren(entChildren)
 
-        // Immediately sync data using the session cookies already transferred from WebView
+        // Immediately sync data using the session cookies already transferred from WebView.
+        // Goes through SyncCoordinator like every other sync (isSyncing, de-dup,
+        // attempt timestamp). createChildren already saved.
         let client = ENTClient(provider: .pcn)
         let syncService = ENTSyncService(modelContext: modelContext)
-        // createChildren already saves; family.children is up to date
-        for child in (family?.children ?? []) where child.entProvider == .pcn {
-            if let entChildId = child.entChildId {
-                try? await syncService.sync(child: child, client: client, entChildId: entChildId)
+        let pcnChildren = (family?.children ?? []).filter { $0.entProvider == .pcn }
+        await SyncCoordinator.shared.requestSync(force: true) {
+            for child in pcnChildren {
+                guard let entChildId = child.entChildId else { continue }
+                do {
+                    try await syncService.sync(child: child, client: client, entChildId: entChildId)
+                } catch {
+                    NSLog("[noto][warn] PCN initial sync for %@: %@", child.firstName, error.localizedDescription)
+                }
             }
         }
 
@@ -323,13 +330,16 @@ struct ENTLoginView: View {
             // Set bridge for immediate data sync
             PronoteService.shared.setBridge(bridge)
 
-            // Sync school data for all Pronote children
+            // Sync school data for all Pronote children (through the coordinator)
             guard let family else { return }
             let syncService = PronoteSyncService(modelContext: modelContext)
             let pronoteChildren = bridge.getChildren()
-            for (index, child) in family.children.enumerated() where child.schoolType == .pronote {
-                bridge.setActiveChild(index: min(index, pronoteChildren.count - 1))
-                await syncService.sync(child: child, bridge: bridge, childIndex: index)
+            let familyChildren = family.children
+            await SyncCoordinator.shared.requestSync(force: true) {
+                for (index, child) in familyChildren.enumerated() where child.schoolType == .pronote {
+                    bridge.setActiveChild(index: min(index, pronoteChildren.count - 1))
+                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                }
             }
 
             NSLog("[noto] ENT→Pronote session established, username=%@", refreshToken.username)
@@ -374,11 +384,17 @@ struct ENTLoginView: View {
             NSLog("[noto] %@ found %d children", provider.name, entChildren.count)
             createChildren(entChildren)
 
-            // Immediate sync
+            // Immediate sync (through the coordinator)
             let syncService = ENTSyncService(modelContext: modelContext)
-            for child in (family?.children ?? []) where child.entProvider == provider {
-                if let id = child.entChildId {
-                    try? await syncService.sync(child: child, client: client, entChildId: id)
+            let providerChildren = (family?.children ?? []).filter { $0.entProvider == provider }
+            await SyncCoordinator.shared.requestSync(force: true) {
+                for child in providerChildren {
+                    guard let id = child.entChildId else { continue }
+                    do {
+                        try await syncService.sync(child: child, client: client, entChildId: id)
+                    } catch {
+                        NSLog("[noto][warn] %@ initial sync for %@: %@", provider.name, child.firstName, error.localizedDescription)
+                    }
                 }
             }
 

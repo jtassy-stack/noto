@@ -47,6 +47,8 @@ final class SkolengoSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] Skolengo sync for %@ returned empty payload — preserving local data", child.firstName)
+            child.markSynced()
+            try modelContext.save()
             return
         case .fail(let detail):
             throw SkolengoError.invalidResponse("Aucune donnée récupérée (\(detail))")
@@ -62,6 +64,7 @@ final class SkolengoSyncService {
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(messages, for: child)
+        child.markSynced()
 
         try modelContext.save()
         NSLog("[noto] Skolengo sync OK for %@ — %d notes, %d cours, %d devoirs, %d messages",

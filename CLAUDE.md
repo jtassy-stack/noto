@@ -49,6 +49,7 @@
 ### Services (`Noto/Services/`)
 - `PawnoteBridge` — JavaScriptCore wrapper around `pawnote-bundle.js`; exposes async Swift API
 - `PronoteSyncService` — orchestrates sync via PawnoteBridge, writes to SwiftData
+- `FullSyncService` — runs a full sync for a set of children across every connector; always called through `SyncCoordinator.requestSync` (de-dup + 60 s cooldown on automatic attempts). Launch/foreground initial syncs are triggered from `RootView` (AddChild flows run their own first sync in-sheet); each sync service stamps `Child.lastSyncedAt` on success
 - `BriefingEngine` — priority-scored briefing items + LLM context string
 - `TrendAnalyzer` — Core ML linear regression on grade history
 - `CultureAPIClient` — REST client for `https://celyn.io` with grade-filtered thematic search

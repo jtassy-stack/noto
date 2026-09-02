@@ -452,13 +452,20 @@ struct PronoteQRLoginView: View {
             // Partial fetch failures (e.g. school blocks one endpoint) are non-fatal:
             // the child row and refresh token are already persisted; missing sections
             // will retry on the next sync cycle.
+            // Goes through SyncCoordinator like every other sync.
             let syncService = PronoteSyncService(modelContext: modelContext)
             var hadPartialFailure = false
-            for (index, child) in resolved.enumerated() {
-                await syncService.sync(child: child, bridge: bridge, childIndex: index)
-                if !syncService.failedCategories.isEmpty {
-                    hadPartialFailure = true
-                    logger.warning("Partial sync during onboarding for \(child.firstName, privacy: .private): missing \(syncService.failedCategories.joined(separator: ", "), privacy: .public)")
+            await SyncCoordinator.shared.requestSync(force: true) {
+                for (index, child) in resolved.enumerated() {
+                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
+                    if !syncService.failedCategories.isEmpty {
+                        hadPartialFailure = true
+                        // Plain Strings: OSLog's interpolation captures its arguments in an
+                        // escaping closure, which Swift 6 rejects for the non-Sendable model.
+                        let childName = child.firstName
+                        let missing = syncService.failedCategories.joined(separator: ", ")
+                        logger.warning("Partial sync during onboarding for \(childName, privacy: .private): missing \(missing, privacy: .public)")
+                    }
                 }
             }
 

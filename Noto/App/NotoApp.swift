@@ -10,11 +10,12 @@ struct NotoApp: App {
         let schema = Schema(versionedSchema: NotoSchemaV1.self)
         let configuration = ModelConfiguration(schema: schema)
         do {
-            return try ModelContainer(
-                for: schema,
-                migrationPlan: NotoMigrationPlan.self,
-                configurations: [configuration]
-            )
+            // No migration plan: the models are edited in place (see
+            // NotoSchemaV1.swift), so additive changes such as a new optional
+            // attribute rely on SwiftData's automatic lightweight migration.
+            // A staged plan would reject the store of every existing install
+            // as an "unknown model version" and hit the fatalError below.
+            return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

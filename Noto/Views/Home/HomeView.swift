@@ -43,11 +43,19 @@ struct HomeView: View {
         children.contains { $0.schoolType == .ent }
     }
 
+    /// Children the dashboard (and a user-initiated refresh) currently covers.
+    private var scopedChildren: [Child] { selectedChild.map { [$0] } ?? children }
+
+    /// True while any child in scope has never completed a sync. Drives the
+    /// "première synchronisation" cards; RootView owns the launch trigger.
+    private var hasPendingInitialSync: Bool {
+        scopedChildren.contains(where: \.needsInitialSync)
+    }
+
     /// Direct Pronote QR-login children whose bridge is lost and need manual reconnect.
     private var pronoteChildrenNeedingReconnect: [Child] {
         guard pronoteService.bridge == nil && !pronoteService.isReconnecting else { return [] }
-        let scope = selectedChild.map { [$0] } ?? children
-        return scope.filter { $0.schoolType == .pronote && $0.entProvider == nil }
+        return scopedChildren.filter(\.isDirectPronote)
     }
 
     private var unreadMessageCount: Int {
@@ -133,37 +141,25 @@ struct HomeView: View {
                         if engine.isLoading {
                             ProgressView()
                                 .padding(.vertical, NotoTheme.Spacing.xl)
-                        } else if syncCoordinator.lastSyncDate == nil, syncCoordinator.syncError == nil {
-                            // First sync never completed and hasn't failed —
-                            // don't claim "all clear" yet. Once syncError is
-                            // set, the SyncStatusRow above already shows the
-                            // failure with a retry action — repeating "en
-                            // cours…" here too would contradict it (nothing
-                            // is actually in progress once isSyncing is false).
-                            HStack(spacing: NotoTheme.Spacing.sm) {
-                                ProgressView()
-                                Text("Première synchronisation en cours…")
-                                    .font(NotoTheme.Typography.signalTitle)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        } else if hasPendingInitialSync {
+                            // A child in scope has never synced: spinner while a
+                            // sync runs (or is about to — the launch trigger has
+                            // not fired yet), otherwise the attempt failed and
+                            // the parent needs a way to retry.
+                            if syncCoordinator.isSyncing || !syncCoordinator.hasAttemptedSync {
+                                StatusNoticeCard(text: "Première synchronisation en cours…") {
+                                    ProgressView()
+                                }
+                            } else {
+                                StatusNoticeCard(
+                                    text: "Première synchronisation impossible pour le moment",
+                                    actionTitle: "Réessayer",
+                                    action: { Task { await syncNow(userInitiated: true) } }
+                                ) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundStyle(NotoTheme.Colors.warning)
+                                }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(NotoTheme.Spacing.md)
-                            .notoCard()
-                        } else if syncCoordinator.lastSyncDate == nil {
-                            // First sync attempted and failed — SyncStatusRow
-                            // above already carries the error text; retry is
-                            // pull-to-refresh (bypasses the cooldown). This
-                            // branch just avoids falling through to "tout va bien".
-                            HStack(spacing: NotoTheme.Spacing.sm) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .foregroundStyle(NotoTheme.Colors.amber)
-                                Text("Première synchronisation impossible pour le moment.")
-                                    .font(NotoTheme.Typography.signalTitle)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(NotoTheme.Spacing.md)
-                            .notoCard()
                         } else if !engine.cards.isEmpty {
                             Text("À TRAITER")
                                 .sectionLabelStyle()
@@ -178,26 +174,19 @@ struct HomeView: View {
                             }
                         } else {
                             // All clear — no signals
-                            HStack(spacing: NotoTheme.Spacing.sm) {
+                            StatusNoticeCard(text: "Tout va bien") {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(NotoTheme.Colors.success)
                                     .font(.system(size: 14))
-                                Text("Tout va bien")
-                                    .font(NotoTheme.Typography.signalTitle)
-                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(NotoTheme.Spacing.md)
-                            .notoCard()
                         }
 
                         // MARK: Timeline — Prochaines 48h
-                        let targetChildren = selectedChild.map { [$0] } ?? children
-                        if !targetChildren.isEmpty {
+                        if !scopedChildren.isEmpty {
                             Text("PROCHAINES 48H")
                                 .sectionLabelStyle()
 
-                            TimelineView(children: targetChildren)
+                            TimelineView(children: scopedChildren)
                         }
 
                         // MARK: Discover teaser
@@ -243,9 +232,7 @@ struct HomeView: View {
                 WellbeingResourcesView(signal: wellbeingSignal)
             }
             .refreshable {
-                // Pull-to-refresh bypasses the cooldown (user-initiated) but
-                // still deduplicates against any in-flight task by awaiting it.
-                await syncCoordinator.requestSync(force: true) { await self.performFullRefresh() }
+                await syncNow(userInitiated: true)
             }
             .task(id: selectedChild?.id) {
                 engine.configure(modelContext: modelContext)
@@ -260,45 +247,16 @@ struct HomeView: View {
                 showSettings = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .triggerFullSync)) { _ in
-                // Route through coordinator — deduplicates concurrent fires and
-                // enforces the 60 s cooldown even if HomeView was re-created.
-                Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
+                // Posted by SchoolView's "Synchroniser maintenant" buttons —
+                // a user action, so it bypasses the automatic cooldown.
+                Task { await syncNow(userInitiated: true) }
             }
-            // Cold-launch initial sync: when PronoteAutoConnect re-establishes
-            // the bridge, fire a refresh if direct-Pronote children have no
-            // data yet. Race-free alternative to posting a notification from
-            // RootView (which could be dropped if HomeView hasn't subscribed).
-            .onChange(of: pronoteService.isConnected) { _, connected in
-                guard connected else { return }
-                let directPronote = children.filter { $0.schoolType == .pronote && $0.entProvider == nil }
-                let hasEmpty = directPronote.contains {
-                    $0.grades.isEmpty && $0.homework.isEmpty && $0.schedule.isEmpty
-                }
-                guard hasEmpty else { return }
-                Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
-            }
-            // Cold-launch initial sync for every OTHER connection type (ENT,
-            // École Directe, Skolengo) — the onChange above only covers
-            // direct-Pronote children, since it's gated on the Pronote
-            // bridge specifically. Without this, a child added via PCN/ENT/
-            // École Directe/Skolengo never gets its first sync triggered
-            // automatically at all: nothing but a manual pull-to-refresh
-            // would ever start it, while the UI shows an indefinite
-            // "Première synchronisation en cours…" spinner implying a sync
-            // IS already underway. Runs once per HomeView appearance.
-            .task {
-                let needsInitialSync = children.contains { child in
-                    let isDirectPronote = child.schoolType == .pronote && child.entProvider == nil
-                    guard !isDirectPronote else { return false }
-                    return child.grades.isEmpty && child.homework.isEmpty && child.schedule.isEmpty
-                }
-                guard needsInitialSync else { return }
-                await syncCoordinator.requestSync { await self.performFullRefresh() }
-            }
+            // Launch-time and child-added initial syncs are owned by RootView,
+            // which runs them after the Pronote/ENT sessions are re-established.
             .sheet(isPresented: $showPronoteReconnect, onDismiss: {
-                // If reconnect succeeded, trigger a full refresh automatically
+                // If reconnect succeeded, refresh right away
                 if pronoteService.bridge != nil {
-                    Task { await syncCoordinator.requestSync { await self.performFullRefresh() } }
+                    Task { await syncNow(userInitiated: true) }
                 }
             }) {
                 NavigationStack { PronoteQRLoginView() }
@@ -379,276 +337,22 @@ struct HomeView: View {
 
     // MARK: - Refresh Logic
 
-    // NOTE: `performFullRefresh` is always invoked through `SyncCoordinator.requestSync`
-    // which owns isSyncing state, cooldown enforcement, and de-duplication.
-    private func performFullRefresh() async {
-        var errors: [String] = []
-        let targetChildren = selectedChild.map { [$0] } ?? children
-        // Children with a direct Pronote bridge connection (QR code login)
-        let directPronoteChildren = targetChildren.filter { $0.schoolType == .pronote && $0.entProvider == nil }
-        // Children from MonLycée (have entProvider) — sync via logbook
-        let monlyceeChildren = targetChildren.filter { $0.entProvider == .monlycee }
-        // Pure ENT children (PCN etc)
-        let entChildren = targetChildren.filter { $0.schoolType == .ent && $0.entProvider != .monlycee }
-        // École Directe children
-        let edChildren = targetChildren.filter { $0.schoolType == .ecoledirecte }
-        // Skolengo children
-        let skolengoChildren = targetChildren.filter { $0.schoolType == .skolengo }
-
-        // Direct Pronote sync (QR code login)
-        if !directPronoteChildren.isEmpty {
-            if pronoteService.bridge == nil && !pronoteService.isReconnecting {
-                await PronoteAutoConnect.autoConnect(modelContext: modelContext)
-            } else if pronoteService.isReconnecting {
-                // RootView already started auto-connect — wait for it rather than spawning a second
-                while pronoteService.isReconnecting {
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                }
-            }
-            if let bridge = pronoteService.bridge {
-                // Resolve each child to its pawnote-session index via
-                // pawnoteID (or firstName fallback) — SwiftData order
-                // has no relation to the bridge's internal child list,
-                // so enumerated() would silently sync the wrong kid.
-                let pawnoteRoster = bridge.getChildren()
-                let syncService = PronoteSyncService(modelContext: modelContext)
-                for child in directPronoteChildren {
-                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
-                        // Surface the skip as a user-visible error instead of
-                        // a silent continue — otherwise the banner reads "tout
-                        // va bien" while one kid's dashboard freezes. The
-                        // remediation is always to re-run QR login, which
-                        // re-backfills pawnoteID via ChildDedupe.
-                        logger.warning("Skipping sync for \(child.firstName, privacy: .private): no matching pawnote resource")
-                        errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via QR code pour relier cet enfant à Pronote.")
-                        continue
-                    }
-                    await syncService.sync(child: child, bridge: bridge, childIndex: idx)
-                    if !syncService.failedCategories.isEmpty {
-                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
-                    }
-                }
-            } else {
+    /// Sync the children currently in scope, then rebuild the briefing.
+    /// Every call goes through `SyncCoordinator.requestSync`, which owns
+    /// `isSyncing`, de-duplication and the automatic-trigger cooldown.
+    /// - Parameter userInitiated: pull-to-refresh, "Synchroniser maintenant",
+    ///   Réessayer — bypasses the cooldown and is the only case where a lost
+    ///   Pronote session shows the modal alert (at launch the reconnect card
+    ///   above the feed already covers it).
+    private func syncNow(userInitiated: Bool) async {
+        let targets = scopedChildren
+        await syncCoordinator.requestSync(force: userInitiated) {
+            let result = await FullSyncService(modelContext: modelContext).sync(children: targets)
+            if userInitiated && result.pronoteUnavailable {
                 showNoConnectionAlert = true
-                errors.append("Connexion à Pronote impossible. Reconnectez-vous via QR code si le problème persiste.")
             }
+            await refreshBriefing()
         }
-
-        // MonLycée children: try Pronote bridge first, fallback to logbook
-        if !monlyceeChildren.isEmpty {
-            // If no bridge, attempt auto-reconnect (uses stored Pronote token if available)
-            if pronoteService.bridge == nil {
-                await PronoteAutoConnect.autoConnect(modelContext: modelContext)
-            }
-            if let bridge = pronoteService.bridge {
-                let pawnoteRoster = bridge.getChildren()
-                let syncService = PronoteSyncService(modelContext: modelContext)
-                for child in monlyceeChildren {
-                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
-                        logger.warning("Skipping monlycee sync for \(child.firstName, privacy: .private): no matching pawnote resource")
-                        errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via QR code pour relier cet enfant à Pronote.")
-                        continue
-                    }
-                    await syncService.sync(child: child, bridge: bridge, childIndex: idx)
-                    if !syncService.failedCategories.isEmpty {
-                        errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
-                    }
-                }
-            } else {
-                // Fallback: sync from stored logbook data
-                let syncService = MonLyceeSyncService(modelContext: modelContext)
-                for child in monlyceeChildren {
-                    syncService.syncFromStoredLogbook(for: child)
-                }
-            }
-        }
-
-        // Pure ENT/PCN sync
-        if !entChildren.isEmpty {
-            let entErrors = await syncENTChildren(entChildren)
-            errors.append(contentsOf: entErrors)
-        }
-
-        // École Directe sync
-        if !edChildren.isEmpty {
-            let edErrors = await syncEcoleDirecteChildren(edChildren)
-            errors.append(contentsOf: edErrors)
-        }
-
-        // Skolengo sync
-        if !skolengoChildren.isEmpty {
-            let skolengoErrors = await syncSkolengoChildren(skolengoChildren)
-            errors.append(contentsOf: skolengoErrors)
-        }
-
-        syncCoordinator.finishedSync(errors: errors.isEmpty ? nil : errors.joined(separator: "\n"))
-        await refreshBriefing()
-    }
-
-    @discardableResult
-    private func syncENTChildren(_ entChildren: [Child]) async -> [String] {
-        var errors: [String] = []
-
-        // Group children by provider so we login once per provider
-        var byProvider: [ENTProvider: [Child]] = [:]
-        for child in entChildren {
-            let provider = child.entProvider ?? .pcn
-            byProvider[provider, default: []].append(child)
-        }
-
-        let syncService = ENTSyncService(modelContext: modelContext)
-
-        for (provider, children) in byProvider {
-            let key = "ent_credentials_\(provider.rawValue)"
-            guard let credsData = try? KeychainService.load(key: key),
-                  let creds = String(data: credsData, encoding: .utf8) else {
-                errors.append("\(provider.name) : identifiants manquants")
-                continue
-            }
-
-            let parts = creds.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else {
-                errors.append("\(provider.name) : identifiants corrompus")
-                continue
-            }
-
-            let client = ENTClient(provider: provider)
-            do {
-                // ENT is a React SPA — must use HeadlessENTAuth (WKWebView), not URLSession POST
-                let loginURL = provider.baseURL.appendingPathComponent("auth/login")
-                let cookies = try await HeadlessENTAuth.login(
-                    loginURL: loginURL,
-                    email: String(parts[0]),
-                    password: String(parts[1])
-                )
-                ENTClient.importCookies(cookies)
-                // Signal PhotoGridView to retry any pending thumbnail loads — the session
-                // is now valid and cookies are in URLSession.shared's cookie storage.
-                NotificationCenter.default.post(name: .entSessionReady, object: nil)
-            } catch {
-                errors.append("\(provider.name) : reconnexion échouée — \(error.localizedDescription)")
-                continue
-            }
-
-            for child in children {
-                do {
-                    try await syncService.sync(
-                        child: child,
-                        client: client,
-                        entChildId: child.entChildId ?? child.firstName
-                    )
-                } catch {
-                    errors.append("\(child.firstName) : sync échouée — \(error.localizedDescription)")
-                }
-            }
-
-            // Pre-warm photo cache in background — auth is valid right now, ideal moment to download.
-            // Collect paths here (main actor) before crossing into the detached task.
-            let photoPaths = children.flatMap(\.photos).map(\.entPath)
-            if !photoPaths.isEmpty {
-                let preloadClient = client
-                Task.detached(priority: .background) {
-                    await ENTPhotoCache.shared.preload(paths: photoPaths, client: preloadClient)
-                }
-            }
-        }
-
-        return errors
-    }
-
-    @discardableResult
-    private func syncEcoleDirecteChildren(_ edChildren: [Child]) async -> [String] {
-        var errors: [String] = []
-        let syncService = EcoleDirecteSyncService(modelContext: modelContext)
-
-        // Group by accountId so we login once per famille account
-        var byAccount: [String: [Child]] = [:]
-        for child in edChildren {
-            let key = child.edAccountId ?? child.entChildId ?? child.firstName
-            byAccount[key, default: []].append(child)
-        }
-
-        for (accountId, children) in byAccount {
-            let credKey = "ed_credentials_\(accountId)"
-            guard let credsData = try? KeychainService.load(key: credKey),
-                  let creds = String(data: credsData, encoding: .utf8) else {
-                errors.append("École Directe : identifiants manquants — reconnectez-vous")
-                continue
-            }
-            let parts = creds.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else {
-                errors.append("École Directe : identifiants corrompus")
-                continue
-            }
-
-            let client = EcoleDirecteClient(accountId: accountId)
-            do {
-                _ = try await client.login(username: String(parts[0]), password: String(parts[1]))
-            } catch {
-                errors.append("École Directe : reconnexion échouée — \(error.localizedDescription)")
-                continue
-            }
-
-            for child in children {
-                do {
-                    try await syncService.sync(child: child, client: client)
-                } catch {
-                    NSLog("[noto][error] ED sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    errors.append("\(child.firstName) (ED) : sync échouée — \(error.localizedDescription)")
-                }
-            }
-        }
-
-        return errors
-    }
-
-    @discardableResult
-    private func syncSkolengoChildren(_ skolengoChildren: [Child]) async -> [String] {
-        var errors: [String] = []
-        let syncService = SkolengoSyncService(modelContext: modelContext)
-
-        // Group by schoolId — one session per school, matching how the
-        // API scopes auth (X-Skolengo-School-Id header on every call).
-        var bySchool: [String: [Child]] = [:]
-        for child in skolengoChildren {
-            guard let schoolId = child.skolengoSchoolId else {
-                errors.append("\(child.firstName) (Skolengo) : établissement manquant — reconnectez-vous")
-                continue
-            }
-            bySchool[schoolId, default: []].append(child)
-        }
-
-        for (schoolId, children) in bySchool {
-            // Minimal school stub — sufficient for header construction and
-            // token refresh (which reuses the cached token_endpoint, not a
-            // fresh OIDC discovery), so no live school re-search is needed
-            // for background sync.
-            let school = SkolengoSchool(
-                id: schoolId,
-                name: children.first?.establishment ?? "",
-                city: nil,
-                emsCode: children.first?.skolengoEmsCode,
-                emsOIDCWellKnownUrl: ""
-            )
-            let client = SkolengoClient(school: school)
-            do {
-                try await client.ensureValidToken()
-            } catch {
-                errors.append("Skolengo : reconnexion échouée — \(error.localizedDescription)")
-                continue
-            }
-
-            for child in children {
-                do {
-                    try await syncService.sync(child: child, client: client)
-                } catch {
-                    NSLog("[noto][error] Skolengo sync failed for %@: %@", child.firstName, error.localizedDescription)
-                    errors.append("\(child.firstName) (Skolengo) : sync échouée — \(error.localizedDescription)")
-                }
-            }
-        }
-
-        return errors
     }
 
     private func refreshBriefing() async {
@@ -697,6 +401,34 @@ final class BriefingEngineWrapper: ObservableObject {
 }
 
 // MARK: - Subviews
+
+/// One-line status card for the feed area (first-sync spinner, first-sync
+/// failure, all clear). Same scaffold for every state so they stay aligned.
+private struct StatusNoticeCard<Leading: View>: View {
+    let text: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+    @ViewBuilder let leading: () -> Leading
+
+    var body: some View {
+        HStack(spacing: NotoTheme.Spacing.sm) {
+            leading()
+            Text(text)
+                .font(NotoTheme.Typography.signalTitle)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            if let actionTitle, let action {
+                Spacer(minLength: NotoTheme.Spacing.sm)
+                Button(actionTitle, action: action)
+                    .font(NotoTheme.Typography.caption)
+                    .buttonStyle(.bordered)
+                    .tint(NotoTheme.Colors.brand)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(NotoTheme.Spacing.md)
+        .notoCard()
+    }
+}
 
 private struct SyncStatusRow: View {
     let isSyncing: Bool

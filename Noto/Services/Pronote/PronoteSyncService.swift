@@ -49,6 +49,8 @@ final class PronoteSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] Pronote sync for \(child.firstName) returned all-empty — preserving existing local data")
+            child.markSynced()
+            try? modelContext.save()
             return
         case .fail(let detail):
             NSLog("[noto][error] Pronote sync for \(child.firstName) failed with no data — aborting wipe (\(detail))")
@@ -60,6 +62,7 @@ final class PronoteSyncService {
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(discussions, for: child)
+        child.markSynced()
 
         try? modelContext.save()
         NSLog("[noto] Sync complete for \(child.firstName)")

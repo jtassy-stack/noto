@@ -13,7 +13,34 @@ struct RootView: View {
     /// OnboardingView sets this to `false` while it is visible.
     @AppStorage("onboarding_complete") private var onboardingComplete: Bool = true
 
+    /// Set once the launch task has re-established Pronote/ENT sessions.
+    /// The foreground trigger waits for it so the initial sync never logs
+    /// in concurrently with that setup.
+    @State private var launchSetupDone = false
+
     private var family: Family? { families.first }
+
+    /// Children that have never completed a sync (any connector).
+    private var childrenNeedingInitialSync: [Child] {
+        family?.children.filter(\.needsInitialSync) ?? []
+    }
+
+    /// Initial sync for children that have never synced, regardless of which
+    /// root screen is showing (child-mode devices included). Automatic:
+    /// deduped and throttled by SyncCoordinator, so it is safe to call from
+    /// every trigger. Sync failures surface on HomeView's first-sync card.
+    ///
+    /// Runs at launch and on foreground only. A child added later gets its
+    /// first sync from the AddChild flow itself; if that fails, the next
+    /// foreground retries it. There is deliberately no "child inserted"
+    /// trigger: it would race the in-sheet sync on runloop ordering.
+    private func runInitialSyncIfNeeded() async {
+        let pending = childrenNeedingInitialSync
+        guard !pending.isEmpty else { return }
+        await SyncCoordinator.shared.requestSync {
+            await FullSyncService(modelContext: modelContext).sync(children: pending)
+        }
+    }
 
     /// Re-establish ENT session on cold launch using stored Keychain credentials.
     /// Must run before preloadENTPhotos() so cookies are valid when fetching.
@@ -112,9 +139,7 @@ struct RootView: View {
         }
         .task {
             // Attempt silent reconnect on every launch using stored refresh tokens.
-            // Runs in background — UI is not blocked. HomeView observes
-            // PronoteService.isConnected and fires an initial sync when the
-            // bridge becomes available, so no notification is needed here.
+            // Runs in background — UI is not blocked.
             await PronoteAutoConnect.autoConnect(modelContext: modelContext)
 
             // Re-establish ENT session on cold launch (cookies don't survive app restart).
@@ -123,10 +148,18 @@ struct RootView: View {
 
             // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
+
+            // Sessions are up: give never-synced children their first sync.
+            launchSetupDone = true
+            await runInitialSyncIfNeeded()
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             clearClassLockIfNeeded()
+            // Retry a pending first sync on foreground, throttled by the
+            // coordinator's cooldown so failed logins are not hammered.
+            guard launchSetupDone else { return }
+            Task { await runInitialSyncIfNeeded() }
         }
     }
 
