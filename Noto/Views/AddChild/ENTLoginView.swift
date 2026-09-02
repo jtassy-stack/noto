@@ -273,8 +273,8 @@ struct ENTLoginView: View {
         createChildren(entChildren)
 
         // Immediately sync data using the session cookies already transferred from WebView.
-        // Routed through SyncCoordinator so RootView's child-added trigger joins this
-        // run instead of starting a second login. createChildren already saved.
+        // Goes through SyncCoordinator like every other sync (isSyncing, de-dup,
+        // attempt timestamp). createChildren already saved.
         let client = ENTClient(provider: .pcn)
         let syncService = ENTSyncService(modelContext: modelContext)
         let pcnChildren = (family?.children ?? []).filter { $0.entProvider == .pcn }
@@ -330,8 +330,7 @@ struct ENTLoginView: View {
             // Set bridge for immediate data sync
             PronoteService.shared.setBridge(bridge)
 
-            // Sync school data for all Pronote children (through the coordinator,
-            // so RootView's child-added trigger joins this run)
+            // Sync school data for all Pronote children (through the coordinator)
             guard let family else { return }
             let syncService = PronoteSyncService(modelContext: modelContext)
             let pronoteChildren = bridge.getChildren()
@@ -385,7 +384,7 @@ struct ENTLoginView: View {
             NSLog("[noto] %@ found %d children", provider.name, entChildren.count)
             createChildren(entChildren)
 
-            // Immediate sync (through the coordinator — see PCN path above)
+            // Immediate sync (through the coordinator)
             let syncService = ENTSyncService(modelContext: modelContext)
             let providerChildren = (family?.children ?? []).filter { $0.entProvider == provider }
             await SyncCoordinator.shared.requestSync(force: true) {

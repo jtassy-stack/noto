@@ -121,8 +121,7 @@ struct EcoleDirecteLoginView: View {
             try modelContext.save()
 
             // Step 4 — immediate sync (non-fatal: child is saved even if sync fails).
-            // Routed through SyncCoordinator so RootView's child-added trigger
-            // joins this run instead of logging in a second time.
+            // Goes through SyncCoordinator like every other sync.
             let syncService = EcoleDirecteSyncService(modelContext: modelContext)
             let edChildren = family.children.filter { $0.schoolType == .ecoledirecte }
             await SyncCoordinator.shared.requestSync(force: true) {

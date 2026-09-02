@@ -452,8 +452,7 @@ struct PronoteQRLoginView: View {
             // Partial fetch failures (e.g. school blocks one endpoint) are non-fatal:
             // the child row and refresh token are already persisted; missing sections
             // will retry on the next sync cycle.
-            // Routed through SyncCoordinator so RootView's child-added trigger
-            // joins this run instead of starting a second sync.
+            // Goes through SyncCoordinator like every other sync.
             let syncService = PronoteSyncService(modelContext: modelContext)
             var hadPartialFailure = false
             await SyncCoordinator.shared.requestSync(force: true) {

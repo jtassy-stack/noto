@@ -14,8 +14,8 @@ struct RootView: View {
     @AppStorage("onboarding_complete") private var onboardingComplete: Bool = true
 
     /// Set once the launch task has re-established Pronote/ENT sessions.
-    /// The foreground and child-added triggers wait for it so the initial
-    /// sync never logs in concurrently with that setup.
+    /// The foreground trigger waits for it so the initial sync never logs
+    /// in concurrently with that setup.
     @State private var launchSetupDone = false
 
     private var family: Family? { families.first }
@@ -29,6 +29,11 @@ struct RootView: View {
     /// root screen is showing (child-mode devices included). Automatic:
     /// deduped and throttled by SyncCoordinator, so it is safe to call from
     /// every trigger. Sync failures surface on HomeView's first-sync card.
+    ///
+    /// Runs at launch and on foreground only. A child added later gets its
+    /// first sync from the AddChild flow itself; if that fails, the next
+    /// foreground retries it. There is deliberately no "child inserted"
+    /// trigger: it would race the in-sheet sync on runloop ordering.
     private func runInitialSyncIfNeeded() async {
         let pending = childrenNeedingInitialSync
         guard !pending.isEmpty else { return }
@@ -147,12 +152,6 @@ struct RootView: View {
             // Sessions are up: give never-synced children their first sync.
             launchSetupDone = true
             await runInitialSyncIfNeeded()
-        }
-        .onChange(of: childrenNeedingInitialSync.map(\.id)) { previous, current in
-            // A child was just added: sync it. If the AddChild flow's own
-            // in-sheet sync is still running, the coordinator joins it.
-            guard launchSetupDone, !Set(current).subtracting(previous).isEmpty else { return }
-            Task { await runInitialSyncIfNeeded() }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
