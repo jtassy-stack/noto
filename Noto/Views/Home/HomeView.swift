@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var showNoConnectionAlert = false
     @State private var showSettings = false
     @State private var showAbsence = false
+    @State private var showMeetings = false
     @State private var celebrationsExpanded = false
     @State private var showPronoteReconnect = false
     @State private var showWellbeingSheet = false
@@ -110,6 +111,12 @@ struct HomeView: View {
                                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 }
                                 Spacer()
+                                Button { showMeetings = true } label: {
+                                    Image(systemName: "mic")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                }
+                                .accessibilityLabel("Réunions enregistrées")
                                 Button { showSettings = true } label: {
                                     Image(systemName: "gearshape")
                                         .font(.system(size: 18))
@@ -228,6 +235,9 @@ struct HomeView: View {
             .sheet(isPresented: $showAbsence) {
                 AbsenceView()
             }
+            .sheet(isPresented: $showMeetings) {
+                NavigationStack { MeetingsListView(children: children) }
+            }
             .sheet(isPresented: $showWellbeingSheet) {
                 WellbeingResourcesView(signal: wellbeingSignal)
             }
@@ -332,6 +342,9 @@ struct HomeView: View {
 
         case .screenTime:
             NotificationCenter.default.post(name: .navigateToSettings, object: nil)
+
+        case .meetingAgenda:
+            showMeetings = true
         }
     }
 
@@ -350,6 +363,9 @@ struct HomeView: View {
             let result = await FullSyncService(modelContext: modelContext).sync(children: targets)
             if userInitiated && result.pronoteUnavailable {
                 showNoConnectionAlert = true
+            }
+            for child in targets where child.scheduleCalendarSyncEnabled {
+                await ScheduleCalendarSyncService.sync(child: child)
             }
             await refreshBriefing()
         }

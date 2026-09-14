@@ -385,10 +385,21 @@ struct SchoolLocatorView: View {
         defer { isResolvingSelection = false }
         do {
             let school = try await directoryClient.fetchSchool(rne: summary.rne)
-            route = SuggestedConnectionRoute(
-                kind: SuggestedConnectionRoute.suggest(for: school, levelFilter: selectedKind),
-                schoolName: school.name
-            )
+            var kind = SuggestedConnectionRoute.suggest(for: school, levelFilter: selectedKind)
+
+            // The Paris-académie fallback guesses PCN for any collège/école
+            // with no direct ENT link — wrong for a cité scolaire, where the
+            // collège shares monlycee.net with its co-located lycée (see
+            // bug: Collège Camille Sée routed to PCN, actually monlycee).
+            // Confirm by checking whether a lycée of the same name exists
+            // in the same commune; celyn has no "cité scolaire" flag, so
+            // this is the only signal available short of a directory fix.
+            if case .ent(.pcn) = kind, school.ent == nil, selectedKind != .lycee,
+               await SuggestedConnectionRoute.isLikelyCiteScolaire(school, directoryClient: directoryClient) {
+                kind = .ent(.monlycee)
+            }
+
+            route = SuggestedConnectionRoute(kind: kind, schoolName: school.name)
         } catch {
             // Directory lookup failed — fall back to the generic provider
             // list rather than blocking the parent on a network hiccup.
@@ -419,11 +430,14 @@ struct SchoolLocatorView: View {
 /// alongside a regional ENT) — this picks the most likely single starting
 /// point, and the parent can always back out to `ManualProviderListView`;
 /// (2) celyn's per-school `ent` link is populated for only a small
-/// fraction of establishments (confirmed empirically — e.g. Collège
-/// Camille Sée, Paris 15e, has `ent: null` despite Paris collèges
-/// universally running PCN) — so this falls back to an académie/région
+/// fraction of establishments — so this falls back to an académie/région
 /// heuristic when the direct link is missing, rather than defaulting
-/// every unlinked school to the same guess.
+/// every unlinked school to the same guess. That fallback isn't reliable
+/// for a cité scolaire (a collège co-located with and administratively
+/// unified under a lycée) — e.g. Collège Camille Sée, Paris 15e, has
+/// `ent: null` and would wrongly guess PCN despite actually running
+/// monlycee.net like its lycée. `isLikelyCiteScolaire` below cross-checks
+/// against a same-name lycée in the same commune before trusting that guess.
 struct SuggestedConnectionRoute: Identifiable, Hashable {
     enum Kind {
         case pronote
@@ -496,5 +510,38 @@ struct SuggestedConnectionRoute: Identifiable, Hashable {
             return .pronote
         }
         return .unknown
+    }
+
+    /// True when a lycée of the same name exists in the same commune —
+    /// the observable signature of a cité scolaire (a collège and lycée
+    /// administratively unified, sharing one ENT deployment even though
+    /// celyn stores them as two separate RNE records). Best-effort: a
+    /// network failure here just keeps the caller's original guess.
+    static func isLikelyCiteScolaire(_ school: DirectorySchool, directoryClient: DirectoryAPIClient) async -> Bool {
+        guard let insee = school.commune?.insee else { return false }
+        guard let results = try? await directoryClient.searchSchools(q: baseName(school.name), insee: insee, limit: 10) else {
+            return false
+        }
+        return results.contains { $0.rne != school.rne && SchoolLocatorView.SchoolKindFilter.lycee.matches($0.kind) }
+    }
+
+    /// Strips a leading "Collège "/"École "/"Lycée "/etc. so the search
+    /// query matches the establishment's proper name regardless of which
+    /// level's record we started from (celyn's FTS is name-based, and
+    /// "Collège Camille Sée" vs "Lycée Camille Sée" should both surface
+    /// under the shared "Camille Sée").
+    private static let kindPrefixes = [
+        "ecole maternelle", "ecole elementaire", "ecole",
+        "lycee professionnel", "lycee general et technologique", "lycee",
+        "college", "cite scolaire",
+    ].sorted { $0.count > $1.count }
+
+    private static func baseName(_ name: String) -> String {
+        let folded = name.folding(options: .diacriticInsensitive, locale: .current).lowercased()
+        for prefix in kindPrefixes where folded.hasPrefix(prefix + " ") {
+            let cut = name.index(name.startIndex, offsetBy: prefix.count + 1)
+            return String(name[cut...])
+        }
+        return name
     }
 }

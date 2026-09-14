@@ -45,6 +45,11 @@ final class Child {
     /// successful sync — the single source of truth for "first sync
     /// pending", regardless of which connector or view ran it.
     var lastSyncedAt: Date?
+    /// Identifier of the dedicated EKCalendar nōto created for this child's
+    /// emploi du temps, when the parent has opted in — see
+    /// `ScheduleCalendarSyncService`. Nil means sync was never enabled.
+    var eventKitCalendarIdentifier: String?
+    var scheduleCalendarSyncEnabled: Bool = false
     var family: Family?
     var createdAt: Date
 

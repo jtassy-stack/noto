@@ -989,7 +989,9 @@ private struct GradeDetailView: View {
 
 private struct ScheduleListView: View {
     let children: [Child]
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedDay: Date = .now
+    @State private var syncErrorMessage: String?
 
     private var allEntries: [(child: Child, entry: ScheduleEntry)] {
         children.flatMap { child in
@@ -1037,6 +1039,12 @@ private struct ScheduleListView: View {
             }
         } else {
             VStack(spacing: 0) {
+                ForEach(children) { child in
+                    CalendarSyncToggleRow(child: child, onError: { syncErrorMessage = $0 })
+                }
+                .padding(.horizontal, NotoTheme.Spacing.md)
+                .padding(.top, NotoTheme.Spacing.sm)
+
                 // Day selector
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: NotoTheme.Spacing.sm) {
@@ -1065,6 +1073,14 @@ private struct ScheduleListView: View {
                     .listStyle(.plain)
                 }
             }
+            .alert("Synchronisation impossible", isPresented: Binding(
+                get: { syncErrorMessage != nil },
+                set: { if !$0 { syncErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(syncErrorMessage ?? "")
+            }
             .onAppear {
                 // Default to today if available, else first day
                 if let today = availableDays.first(where: { Calendar.current.isDateInToday($0) }) {
@@ -1072,6 +1088,51 @@ private struct ScheduleListView: View {
                 } else if let first = availableDays.first {
                     selectedDay = first
                 }
+            }
+        }
+    }
+}
+
+/// Per-child toggle for `ScheduleCalendarSyncService` — creates/removes the
+/// dedicated EKCalendar and keeps it live across future syncs.
+private struct CalendarSyncToggleRow: View {
+    @Bindable var child: Child
+    var onError: (String) -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var isWorking = false
+
+    var body: some View {
+        HStack {
+            Label("Synchroniser l'emploi du temps de \(child.firstName)", systemImage: "calendar.badge.clock")
+                .font(NotoTheme.Typography.caption)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            Spacer()
+            if isWorking {
+                ProgressView().scaleEffect(0.7)
+            } else {
+                Toggle("", isOn: Binding(
+                    get: { child.scheduleCalendarSyncEnabled },
+                    set: { toggle($0) }
+                ))
+                .labelsHidden()
+            }
+        }
+        .padding(.vertical, NotoTheme.Spacing.xs)
+    }
+
+    private func toggle(_ enabled: Bool) {
+        isWorking = true
+        Task {
+            defer { isWorking = false }
+            if enabled {
+                do {
+                    try await ScheduleCalendarSyncService.enable(for: child, modelContext: modelContext)
+                } catch {
+                    onError(error.localizedDescription)
+                }
+            } else {
+                ScheduleCalendarSyncService.disable(for: child, modelContext: modelContext)
             }
         }
     }
@@ -1391,6 +1452,14 @@ struct HomeworkDetailView: View {
                             .foregroundStyle(NotoTheme.Colors.success)
                             .padding(.top, NotoTheme.Spacing.md)
                     }
+
+                    AddToCalendarButton(draft: CalendarEventDraft(
+                        title: "Devoir : \(hw.subject)",
+                        notes: hw.descriptionText,
+                        startDate: hw.dueDate,
+                        endDate: hw.dueDate,
+                        isAllDay: true
+                    ))
 
                     Divider()
 

@@ -34,6 +34,10 @@
     <string>Pour ajouter un événement culturel recommandé à votre calendrier.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Pour retrouver l'établissement de votre enfant et afficher les événements culturels proches de vous.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Pour enregistrer une réunion parents-professeurs et en extraire les informations importantes, entièrement sur votre appareil.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Pour transcrire la réunion enregistrée, sans que l'audio ne quitte votre appareil.</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleIconName</key>

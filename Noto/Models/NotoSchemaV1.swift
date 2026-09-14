@@ -32,6 +32,8 @@ enum NotoSchemaV1: VersionedSchema {
             Curriculum.self,
             CultureReco.self,
             Insight.self,
+            MeetingNote.self,
+            ExtractedItem.self,
         ]
     }
 }

@@ -263,6 +263,21 @@ final class BriefingEngine: ObservableObject {
             ))
         }
 
+        // Confirmed agenda items extracted from recorded meetings
+        for item in confirmedMeetingAgendaItems(for: child) {
+            let dueDate = item.dueDate ?? .distantFuture
+            let isUrgent = dueDate < twoDays
+            cards.append(BriefingCard(
+                type: .meetingAgenda,
+                childName: child.firstName,
+                title: item.title,
+                subtitle: item.detail ?? "",
+                priority: isUrgent ? .urgent : .normal,
+                icon: "person.2.wave.2",
+                detail: dueDate == .distantFuture ? nil : dueDate.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "fr_FR")))
+            ))
+        }
+
         // Insights (difficulties, strengths, trends)
         for insight in child.insights {
             let (icon, priority): (String, BriefingPriority) = switch insight.type {
@@ -288,6 +303,25 @@ final class BriefingEngine: ObservableObject {
 
     private func formatTime(_ date: Date) -> String {
         date.formatted(.dateTime.hour().minute().locale(Locale(identifier: "fr_FR")))
+    }
+
+    // MARK: - Meeting-extracted agenda
+
+    /// `ExtractedItem` isn't `Child`-relational (see MeetingNote.swift) —
+    /// it carries a free-text `childName`, so matching here is a name
+    /// containment check rather than a relationship fetch. An item with
+    /// no `childName` (a meeting covering the whole family) applies to
+    /// every child.
+    private func confirmedMeetingAgendaItems(for child: Child) -> [ExtractedItem] {
+        let descriptor = FetchDescriptor<ExtractedItem>(
+            predicate: #Predicate { $0.confirmedByUser == true }
+        )
+        guard let items = try? modelContext.fetch(descriptor) else { return [] }
+        return items.filter { item in
+            guard item.kind == .agenda else { return false }
+            guard let name = item.childName else { return true }
+            return name.localizedCaseInsensitiveContains(child.firstName)
+        }
     }
 
     // MARK: - Screen time attribution
@@ -371,4 +405,8 @@ enum BriefingCardType {
     /// `WellbeingResourcesView` sheet; not a link to a SwiftData detail.
     case wellbeing
     case screenTime
+    /// Confirmed agenda item extracted from a recorded meeting transcript
+    /// (see MeetingNote.swift / MeetingExtractionService). Taps route to
+    /// `MeetingsListView` rather than a SwiftData detail.
+    case meetingAgenda
 }
