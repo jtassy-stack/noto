@@ -20,6 +20,38 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────
+  # Job 0 — Secrets scan (gitleaks)
+  # Scans the working tree and the commits of this push/PR only. Repo
+  # history is NOT rewritten (prod app), so a full-history scan would flag
+  # the pre-rotation keys forever; the range scan only sees added lines.
+  # ──────────────────────────────────────────────
+  secrets:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Scan working tree
+        run: gitleaks dir . --config .gitleaks.toml --redact --verbose
+      - name: Scan commits in range
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
+            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="$BASE..HEAD"
+          else
+            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="-n 50"
+          fi
+
+  # ──────────────────────────────────────────────
   # Job 1 — Build (every PR + master push)
   # Compiles for simulator, no signing required.
   # ──────────────────────────────────────────────
@@ -27,6 +59,7 @@ jobs:
     name: Build (simulator)
     runs-on: macos-15
     timeout-minutes: 25
+    needs: secrets
 
     steps:
       - name: Checkout
@@ -47,6 +80,19 @@ jobs:
 
       - name: Install XcodeGen
         run: brew install xcodegen
+
+      # Build-time secret → Config.xcconfig (gitignored) → Info.plist.
+      # Rotating a key = `gh secret set <NAME>`, no code change.
+      - name: Write Config.xcconfig from secrets
+        env:
+          DIRECTORY_API_KEY: ${{ secrets.DIRECTORY_API_KEY }}
+          CULTURE_API_KEY: ${{ secrets.CULTURE_API_KEY }}
+        run: |
+          if [ -z "$DIRECTORY_API_KEY" ] || [ -z "$CULTURE_API_KEY" ]; then
+            echo "::error::DIRECTORY_API_KEY / CULTURE_API_KEY secrets are not set"; exit 1
+          fi
+          printf 'DIRECTORY_API_KEY = %s\nCULTURE_API_KEY = %s\n' \
+            "$DIRECTORY_API_KEY" "$CULTURE_API_KEY" > Config.xcconfig
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -164,6 +210,19 @@ jobs:
 
       - name: Install XcodeGen
         run: brew install xcodegen
+
+      # Build-time secret → Config.xcconfig (gitignored) → Info.plist.
+      # Rotating a key = `gh secret set <NAME>`, no code change.
+      - name: Write Config.xcconfig from secrets
+        env:
+          DIRECTORY_API_KEY: ${{ secrets.DIRECTORY_API_KEY }}
+          CULTURE_API_KEY: ${{ secrets.CULTURE_API_KEY }}
+        run: |
+          if [ -z "$DIRECTORY_API_KEY" ] || [ -z "$CULTURE_API_KEY" ]; then
+            echo "::error::DIRECTORY_API_KEY / CULTURE_API_KEY secrets are not set"; exit 1
+          fi
+          printf 'DIRECTORY_API_KEY = %s\nCULTURE_API_KEY = %s\n' \
+            "$DIRECTORY_API_KEY" "$CULTURE_API_KEY" > Config.xcconfig
 
       - name: Generate Xcode project
         run: xcodegen generate

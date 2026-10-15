@@ -40,6 +40,10 @@
     <string>Pour enregistrer une réunion parents-professeurs et en extraire les informations importantes, entièrement sur votre appareil.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Pour transcrire la réunion enregistrée, sans que l'audio ne quitte votre appareil.</string>
+    <key>DirectoryAPIKey</key>
+    <string>$(DIRECTORY_API_KEY)</string>
+    <key>CultureAPIKey</key>
+    <string>$(CULTURE_API_KEY)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleIconName</key>

@@ -11,11 +11,22 @@ final class DirectoryAPIClient: Sendable {
     private let apiKey: String
     private let session: URLSession
 
-    private static let defaultAPIKey = "noto_32dd04dfb3a21056"
+    /// API key injected at build time: `Config.xcconfig` (local, gitignored)
+    /// or the `DIRECTORY_API_KEY` CI secret → `DIRECTORY_API_KEY` build
+    /// setting → `DirectoryAPIKey` in Info.plist. Never hard-code it here.
+    /// An empty key is tolerated (the server answers 401 and callers fall
+    /// back to bundled data) so a missing config never crashes the app.
+    static var bundledAPIKey: String {
+        let key = Bundle.main.object(forInfoDictionaryKey: "DirectoryAPIKey") as? String ?? ""
+        if key.isEmpty {
+            NSLog("[DirectoryAPIClient] DirectoryAPIKey missing from Info.plist — see Config.example.xcconfig")
+        }
+        return key
+    }
 
     init(
         baseURL: URL = URL(string: "https://celyn.io/api/directory")!,
-        apiKey: String = DirectoryAPIClient.defaultAPIKey,
+        apiKey: String = DirectoryAPIClient.bundledAPIKey,
         session: URLSession = URLSession(configuration: .ephemeral)
     ) {
         self.baseURL = baseURL

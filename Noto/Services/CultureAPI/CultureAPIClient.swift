@@ -7,9 +7,17 @@ final class CultureAPIClient: Sendable {
     private let apiKey: String
     private let session: URLSession
 
-    private static let defaultAPIKey = "ck_caccfd12fb2d4dd99551769a0ab33196"
+    /// API key injected at build time (`Config.xcconfig` / CI secret
+    /// `CULTURE_API_KEY` → Info.plist `CultureAPIKey`). Never hard-code it.
+    static var bundledAPIKey: String {
+        let key = Bundle.main.object(forInfoDictionaryKey: "CultureAPIKey") as? String ?? ""
+        if key.isEmpty {
+            NSLog("[CultureAPIClient] CultureAPIKey missing from Info.plist — see Config.example.xcconfig")
+        }
+        return key
+    }
 
-    init(baseURL: URL = URL(string: "https://celyn.io/api")!, apiKey: String = CultureAPIClient.defaultAPIKey) {
+    init(baseURL: URL = URL(string: "https://celyn.io/api")!, apiKey: String = CultureAPIClient.bundledAPIKey) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         let configuration = URLSessionConfiguration.ephemeral

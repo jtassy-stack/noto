@@ -10,6 +10,7 @@ SourcePackages/
 *.dSYM
 
 # Secrets
+Config.xcconfig
 .env
 .env.*
 !.env.example

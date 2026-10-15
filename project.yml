@@ -5,6 +5,16 @@ options:
     iOS: "17.0"
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
+  # Config.xcconfig is gitignored (secrets); generation must not fail when
+  # it is absent — the app then runs with an empty DIRECTORY_API_KEY.
+  disabledValidations:
+    - missingConfigFiles
+
+# Build-time secrets (DIRECTORY_API_KEY). Copy Config.example.xcconfig to
+# Config.xcconfig locally; CI writes it from the DIRECTORY_API_KEY secret.
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
 
 settings:
   base:

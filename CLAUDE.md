@@ -4,18 +4,29 @@
 
 - **NEVER transit credentials through a proxy or third-party server**
 - **NEVER store credentials on a server** — only in iOS Keychain via `KeychainService`
+- **NEVER hard-code API keys in source** — build-time keys (celyn directory + culture-api) live in `Config.xcconfig` (gitignored, see `Config.example.xcconfig`) → Info.plist → client. CI writes the file from GitHub secrets. `gitleaks` runs in CI and as a pre-commit hook (`git config core.hooksPath .githooks`)
 - **Photos of children** must go phone ↔ school server ONLY, never through any third party
 - **Notifications** are local-first: background fetch + local notification, no push server
 - Before implementing any feature, evaluate privacy impact FIRST
 - If a feature requires server-side credential storage, flag it and propose alternatives
 - RGPD compliance is non-negotiable
 
-## Tone — PARENT-ADDRESSED
+## Tone — PARENT-ADDRESSED (vouvoiement), CHILD MODE TUTOIEMENT
 
-- All text, summaries, and briefings address **parents**, not students
+- In `DeviceMode.parent`, all text, summaries, and briefings address **parents**, not students
 - "Votre enfant a 5 cours aujourd'hui" — never "Tu as 5 cours"
 - LLM prompts explicitly instruct: "Tu t'adresses au parent, pas à l'élève"
 - Applies to: BriefingEngine, InsightEngine, greeting messages
+- **Only exception**: `DeviceMode.child` (child app, quizzes, rewards) addresses the child with tutoiement — "Ta cagnotte : 12 min"
+
+## Scope — COLLÈGE & LYCÉE
+
+- Product scope is **6e → Terminale**. Primary (CP → CM2) gets no question bank, no revision path, no priority connector work
+- Roadmap: `docs/PLAN_REVISIONS_KMP_ANDROID.md` (one branch + one PR per phase)
+
+## Screen Time — CLASS LOCK IS ABSOLUTE
+
+- **The class-hours shield (`ClassScheduleShieldService`) is never lifted by earned reward credit.** Minutes earned during a class block go to reserve, never consumed
 
 ## Testing
 
