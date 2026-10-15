@@ -94,6 +94,9 @@
 ## XcodeGen Workflow
 
 ```bash
+# Once per clone — build-time API keys (never committed):
+cp Config.example.xcconfig Config.xcconfig   # then fill in the real keys
+
 # After editing project.yml:
 xcodegen generate
 
