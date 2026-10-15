@@ -1,0 +1,5 @@
+// Reference only — do NOT fill this in by hand. Run ci_scripts/write-xcconfig.sh
+// (pulls from Infisical, project "noto") to produce Config.xcconfig (gitignored),
+// which Config.base.xcconfig includes → Info.plist (DirectoryAPIKey, CultureAPIKey).
+DIRECTORY_API_KEY = your_celyn_directory_key
+CULTURE_API_KEY = your_celyn_culture_key

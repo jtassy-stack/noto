@@ -424,9 +424,15 @@ final class PawnoteBridge {
                     session = URLSession.shared
                 }
 
+                // JSValue is not Sendable; both callbacks are only ever invoked
+                // back on the main queue (where the JSContext lives), so crossing
+                // the URLSession completion boundary is safe. Required by Swift 6.4
+                // (Xcode 27) region-isolation checking.
+                nonisolated(unsafe) let jsResolve = resolve
+                nonisolated(unsafe) let jsReject = reject
                 session.dataTask(with: request) { data, response, error in
                     if let error {
-                        DispatchQueue.main.async { reject.call(withArguments: [error.localizedDescription]) }
+                        DispatchQueue.main.async { jsReject.call(withArguments: [error.localizedDescription]) }
                         return
                     }
 
@@ -445,7 +451,7 @@ final class PawnoteBridge {
                             "statusCode": statusCode,
                             "headers": headers,
                         ]
-                        resolve.call(withArguments: [result])
+                        jsResolve.call(withArguments: [result])
                     }
                 }.resume()
             }

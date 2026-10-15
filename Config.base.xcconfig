@@ -1,0 +1,8 @@
+// Committed base configuration. Keys default to empty so a fresh clone
+// builds; the clients log a warning and fall back when a key is missing.
+// Real values come from Config.xcconfig (gitignored, see
+// Config.example.xcconfig), written by CI from GitHub secrets.
+DIRECTORY_API_KEY =
+CULTURE_API_KEY =
+
+#include? "Config.xcconfig"

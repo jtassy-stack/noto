@@ -6,6 +6,14 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+# Build-time secrets. Config.base.xcconfig (committed, empty defaults)
+# optionally #includes Config.xcconfig (gitignored): copy
+# Config.example.xcconfig to Config.xcconfig locally; CI writes it from the
+# DIRECTORY_API_KEY / CULTURE_API_KEY secrets. A fresh clone builds without it.
+configFiles:
+  Debug: Config.base.xcconfig
+  Release: Config.base.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "6.0"

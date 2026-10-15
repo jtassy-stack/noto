@@ -71,7 +71,8 @@ private func stubbedClient() -> DirectoryAPIClient {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [DirectoryStubProtocol.self]
     let session = URLSession(configuration: config)
-    return DirectoryAPIClient(session: session)
+    // Explicit key: unit tests must not depend on Config.xcconfig / Info.plist.
+    return DirectoryAPIClient(apiKey: "noto_test_key", session: session)
 }
 
 // MARK: - Decoder fixtures (drive through the client)
@@ -319,7 +320,7 @@ struct DirectoryAPIClientHTTPTests {
 
         _ = try await stubbedClient().fetchENTs()
         let header = DirectoryStubProtocol.lastRequest()?.value(forHTTPHeaderField: "x-api-key")
-        #expect(header != nil && !header!.isEmpty)
+        #expect(header == "noto_test_key")
     }
 }
 

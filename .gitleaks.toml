@@ -1,0 +1,32 @@
+# gitleaks config — nōto. Extends the default ruleset with the celyn
+# directory key shape, which has too little entropy for generic-api-key.
+title = "noto"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "celyn-culture-api-key"
+description = "celyn.io culture-api key (ck_<32 hex>)"
+regex = '''ck_[a-f0-9]{32}'''
+keywords = ["ck_"]
+
+[[rules]]
+id = "celyn-directory-api-key"
+description = "celyn.io directory API key (noto_<16 hex>)"
+regex = '''noto_[a-f0-9]{16}'''
+keywords = ["noto_"]
+
+[allowlist]
+description = "Fixtures and placeholders"
+regexes = [
+  '''noto_test_key''',
+  '''your_celyn_(directory|culture)_key''',
+]
+# No path-wide exemption for the xcconfig files: only the placeholder
+# values above are allowed, so a real key pasted into Config.example.xcconfig
+# (or a force-added Config.xcconfig) is still caught.
+paths = [
+  # Vendored esbuild bundle of @niicojs/pawnote: crypto code, no secrets.
+  '''Noto/Resources/pawnote-bundle\.js''',
+]
