@@ -121,4 +121,52 @@ struct GradeInferenceTests {
     func thirteenthNoMatch() {
         #expect(GradeInference.level(from: "13e") == .college)
     }
+
+    // MARK: - Lycée labels from Pronote / ENT (Phase 2)
+
+    @Test("Seconde labels → 2nde / lycee", arguments: ["SECONDE", "2NDE", "2DE", "2GT", "2nde 4", "2DE3", "Seconde générale"])
+    func secondeLabels(label: String) {
+        #expect(GradeInference.grade(from: label) == "2nde")
+        #expect(GradeInference.level(from: label) == .lycee)
+    }
+
+    @Test("Première labels → 1re / lycee", arguments: ["PREMIERE", "1ERE", "1RE", "1G", "1G3", "1 G 2", "1STMG", "1 STMG", "1 STI2D 2", "1-G3", "Première générale", "1ère G4"])
+    func premiereLabels(label: String) {
+        #expect(GradeInference.grade(from: label) == "1re")
+        #expect(GradeInference.level(from: label) == .lycee)
+    }
+
+    @Test("Terminale labels → Tle / lycee", arguments: ["TERMINALE", "TLE", "TG", "TG2", "T G 3", "TSTMG", "T STMG", "T-STI2D", "T G3", "T1", "Terminale générale", "Tle G1"])
+    func terminaleLabels(label: String) {
+        #expect(GradeInference.grade(from: label) == "Tle")
+        #expect(GradeInference.level(from: label) == .lycee)
+    }
+
+    @Test("Words merely containing lycée codes do not match", arguments: [
+        "Atelier Tango", "montgolfière", "Groupe 1", "T", "STG", "TGV", "subtle", "Outgoing", "test", "1st", "CM2",
+    ])
+    func lyceeNegatives(label: String) {
+        #expect(GradeInference.grade(from: label) == "")
+        #expect(GradeInference.level(from: label) == .college)
+    }
+
+    @Test("Spaced collège label still reads as collège")
+    func spacedCollege() {
+        #expect(GradeInference.grade(from: "6eA") == "6e")
+        #expect(GradeInference.grade(from: "4 E") == "4e")
+    }
+
+    @Test("Collège label with a trailing group/trimester code stays collège", arguments: [
+        ("3E T1", "3e"), ("5e - T2", "5e"), ("4E GR T1", "4e"), ("6E A T 2", "6e"),
+    ])
+    func collegeWithTrailingCode(label: String, expected: String) {
+        #expect(GradeInference.grade(from: label) == expected)
+        #expect(GradeInference.level(from: label) == .college)
+    }
+
+    @Test("16e / 13e no longer yield a grade (prefix boundary on grade too)")
+    func digitPrefixGrade() {
+        #expect(GradeInference.grade(from: "16e") == "")
+        #expect(GradeInference.grade(from: "13e") == "")
+    }
 }

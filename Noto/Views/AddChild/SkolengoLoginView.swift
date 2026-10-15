@@ -151,10 +151,14 @@ struct SkolengoLoginView: View {
             }
             guard !alreadyExists else { continue }
 
+            // Canonical grade first ("TG2" → "Tle"); raw label only when
+            // nothing is recognised.
+            let className = user.className ?? ""
+            let resolved = GradeInference.resolve(className)
             let child = Child(
                 firstName: user.firstName,
-                level: inferLevel(from: user.className ?? ""),
-                grade: user.className ?? "",
+                level: resolved?.level ?? inferLevel(from: className),
+                grade: resolved?.grade ?? className,
                 schoolType: .skolengo,
                 establishment: school.name
             )

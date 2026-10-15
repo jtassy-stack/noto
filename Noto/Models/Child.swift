@@ -50,6 +50,11 @@ final class Child {
     /// `ScheduleCalendarSyncService`. Nil means sync was never enabled.
     var eventKitCalendarIdentifier: String?
     var scheduleCalendarSyncEnabled: Bool = false
+    /// Lycée spécialités (1re/Tle), canonical names as in `curriculum.json`
+    /// ("Mathématiques", "HGGSP", "NSI", …). Empty = unknown → CurriculumService
+    /// keeps every spécialité eligible. Default value keeps SwiftData's
+    /// automatic lightweight migration working for existing stores.
+    var specialties: [String] = []
     var family: Family?
     var createdAt: Date
 
@@ -74,7 +79,8 @@ final class Child {
         schoolType: SchoolType,
         establishment: String,
         pawnoteID: String? = nil,
-        rneCode: String? = nil
+        rneCode: String? = nil,
+        specialties: [String] = []
     ) {
         self.firstName = firstName
         self.level = level
@@ -83,6 +89,7 @@ final class Child {
         self.establishment = establishment
         self.pawnoteID = pawnoteID
         self.rneCode = rneCode
+        self.specialties = specialties
         self.createdAt = .now
         self.grades = []
         self.schedule = []
@@ -109,8 +116,11 @@ extension Child {
     /// Record a completed sync. Called by every sync service on its
     /// success path (including the "empty payload, preserve" branch) so the
     /// stamp is set no matter which view triggered the sync.
+    /// Also refreshes the 1re / Tle spécialités from the freshly synced
+    /// subject labels — the one spot every connector goes through.
     func markSynced(at date: Date = .now) {
         lastSyncedAt = date
+        refreshInferredSpecialties()
     }
 
     /// Generic fallback label when the stored establishment is URL-shaped.

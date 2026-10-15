@@ -320,7 +320,7 @@ struct DiscoverView: View {
             var topics: [String] = []
             let subjects = Set(child.grades.map(\.subject))
             for subject in subjects {
-                let themes = curriculumService.cultureTopics(for: child.grade, subject: subject, maxPerSubject: 2)
+                let themes = curriculumService.cultureTopics(for: child.grade, subject: subject, maxPerSubject: 2, specialties: child.specialties)
                 if themes.isEmpty {
                     topics.append(Self.normalizeSubject(subject))
                 } else {

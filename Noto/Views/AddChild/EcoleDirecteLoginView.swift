@@ -106,10 +106,13 @@ struct EcoleDirecteLoginView: View {
                 }
                 guard !alreadyExists else { continue }
 
+                // Canonical grade first ("Première" → "1re"); raw label only
+                // when nothing is recognised.
+                let resolved = GradeInference.resolve(eleve.grade)
                 let child = Child(
                     firstName: eleve.firstName,
-                    level: inferLevel(from: eleve.grade),
-                    grade: eleve.grade,
+                    level: resolved?.level ?? inferLevel(from: eleve.grade),
+                    grade: resolved?.grade ?? eleve.grade,
                     schoolType: .ecoledirecte,
                     establishment: eleve.establishmentName
                 )

@@ -40,7 +40,8 @@ final class BriefingEngine: ObservableObject {
         let cultureQuery = matcher.buildCultureQuery(
             level: child.grade,
             recentChapters: chapterContexts,
-            difficulties: difficultyContexts
+            difficulties: difficultyContexts,
+            specialties: child.specialties
         )
 
         // 4. Query culture-api for recommendations
@@ -142,7 +143,7 @@ final class BriefingEngine: ObservableObject {
         for child in children {
             let chapters = insightEngine.chapterContexts(for: child)
             let diffs = insightEngine.difficultyContexts(for: child)
-            let q = matcher.buildCultureQuery(level: child.grade, recentChapters: chapters, difficulties: diffs)
+            let q = matcher.buildCultureQuery(level: child.grade, recentChapters: chapters, difficulties: diffs, specialties: child.specialties)
             guard !q.topics.isEmpty else { continue }
             batchQueries.append(BatchQuery(
                 topics: q.topics,

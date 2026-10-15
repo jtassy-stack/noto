@@ -12,7 +12,8 @@ struct CurriculumMatcher {
     func buildCultureQuery(
         level: String,
         recentChapters: [ChapterContext],
-        difficulties: [DifficultyContext]
+        difficulties: [DifficultyContext],
+        specialties: [String]? = nil
     ) -> CultureQuery {
         var allKeywords: [WeightedKeyword] = []
 
@@ -21,7 +22,8 @@ struct CurriculumMatcher {
             let keywords = curriculumService.matchKeywords(
                 text: chapter.text,
                 level: level,
-                subject: chapter.subject
+                subject: chapter.subject,
+                specialties: specialties
             )
             for kw in keywords {
                 allKeywords.append(WeightedKeyword(keyword: kw, weight: 1.0, isDifficulty: false))
@@ -33,7 +35,8 @@ struct CurriculumMatcher {
             let keywords = curriculumService.matchKeywords(
                 text: difficulty.subject,
                 level: level,
-                subject: difficulty.subject
+                subject: difficulty.subject,
+                specialties: specialties
             )
             for kw in keywords {
                 allKeywords.append(WeightedKeyword(keyword: kw, weight: 1.5, isDifficulty: true))

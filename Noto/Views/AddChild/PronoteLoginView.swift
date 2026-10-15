@@ -122,10 +122,13 @@ struct PronoteLoginView: View {
         guard let family else { return }
 
         for pc in pronoteChildren {
+            // Canonical grade first ("1G3" → "1re"); legacy parsing only
+            // when nothing is recognised.
+            let resolved = GradeInference.resolve(pc.className)
             let child = Child(
                 firstName: pc.name.components(separatedBy: " ").first ?? pc.name,
-                level: inferLevel(from: pc.className),
-                grade: inferGrade(from: pc.className),
+                level: resolved?.level ?? inferLevel(from: pc.className),
+                grade: resolved?.grade ?? inferGrade(from: pc.className),
                 schoolType: .pronote,
                 establishment: pc.establishment
             )

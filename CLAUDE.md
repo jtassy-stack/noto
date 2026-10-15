@@ -64,7 +64,7 @@
 - `BriefingEngine` — priority-scored briefing items + LLM context string
 - `TrendAnalyzer` — Core ML linear regression on grade history
 - `CultureAPIClient` — REST client for `https://celyn.io` with grade-filtered thematic search
-- `CurriculumService` — loads bundled `curriculum.json`, maps grades to API format (`3e` → `3eme`), extracts BO culture topics
+- `CurriculumService` — loads bundled `curriculum.json` (subjects carry `track` `tronc_commun`/`specialite` + optional `specialty`), maps grades to API format (`3e` → `3eme`), extracts BO culture topics. Revisions path = `CurriculumService.revisionLevels` (6e → Tle; CP → CM2 kept in the JSON for Discover only). `themes`/`matchKeywords` take the child's `specialties` (`Child.specialties`, empty = unknown → all spécialités eligible), resolve Pronote labels through the `SubjectAlias` table (`HISTOIRE-GEOGRAPHIE` → Histoire + Géographie union, `SC. ECONO.& SOCIALES` → SES…), and match keywords < 4 chars (`adn`, `pib`) on whole words only
 - `CurriculumMatcher` — matches homework/chapter text to curriculum keywords for culture-api queries
 
 ### View Structure (`Noto/Views/`)
