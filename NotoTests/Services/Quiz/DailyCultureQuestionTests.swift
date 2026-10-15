@@ -51,7 +51,7 @@ struct DailyCultureQuestionTests {
 
     private let calendar = QuizClock.calendar
 
-    private func withDefaults(_ body: (UserDefaults) async throws -> Void) async throws {
+    private func withDefaults(_ body: @MainActor (UserDefaults) async throws -> Void) async throws {
         let suite = "DailyCultureQuestionTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
