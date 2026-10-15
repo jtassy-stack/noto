@@ -88,8 +88,10 @@ jobs:
           DIRECTORY_API_KEY: ${{ secrets.DIRECTORY_API_KEY }}
           CULTURE_API_KEY: ${{ secrets.CULTURE_API_KEY }}
         run: |
+          # Simulator build only: an empty key compiles fine (clients log and
+          # fall back), so fork PRs without secrets still build. Deploy is strict.
           if [ -z "$DIRECTORY_API_KEY" ] || [ -z "$CULTURE_API_KEY" ]; then
-            echo "::error::DIRECTORY_API_KEY / CULTURE_API_KEY secrets are not set"; exit 1
+            echo "::warning::DIRECTORY_API_KEY / CULTURE_API_KEY secrets not set — building with empty keys"
           fi
           printf 'DIRECTORY_API_KEY = %s\nCULTURE_API_KEY = %s\n' \
             "$DIRECTORY_API_KEY" "$CULTURE_API_KEY" > Config.xcconfig
