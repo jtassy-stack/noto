@@ -35,10 +35,10 @@ struct QuizModelPersistenceTests {
                         sourceRef: "4e/francais.json#0", reviewed: true, fetchedAt: QuizClock.now)
     }
 
-    @Test("NotoSchemaV1 lists the Révisions models and SchoolPhoto")
+    @Test("NotoSchemaV1 lists the Révisions models, StreakJoker and SchoolPhoto")
     func schemaListsModels() {
         let names = NotoSchemaV1.models.map { String(describing: $0) }
-        for expected in ["QuizItem", "QuizAttempt", "NotionMastery", "SchoolPhoto"] {
+        for expected in ["QuizItem", "QuizAttempt", "NotionMastery", "StreakJoker", "SchoolPhoto"] {
             #expect(names.contains(expected))
         }
         #expect(NotoSchemaV1.versionIdentifier == Schema.Version(1, 0, 0))

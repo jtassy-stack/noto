@@ -42,7 +42,8 @@ extension SubjectProgress {
 }
 
 /// « Mon parcours »: the themes of the child's level per subject, each with
-/// its progress (five dots = Leitner boxes). Child mode, tutoiement.
+/// its progress (five dots = Leitner boxes), and the subject's XP and level
+/// (`Gamification`, 3.6). Child mode, tutoiement.
 struct SubjectPathView: View {
     let child: Child
     var curriculum: CurriculumSnapshot = .bundled
@@ -53,8 +54,13 @@ struct SubjectPathView: View {
                              curriculum: curriculum)
     }
 
+    private var subjectXP: [SubjectXP] {
+        GamificationStore.subjectXP(of: child)
+    }
+
     var body: some View {
         let subjects = self.subjects
+        let xp = self.subjectXP
         ScrollView {
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
                 if subjects.isEmpty {
@@ -62,11 +68,12 @@ struct SubjectPathView: View {
                                     title: "Ton parcours arrive bientôt",
                                     message: "Les thèmes de ta classe apparaîtront ici.")
                 } else {
-                    Text("Chaque quiz fait avancer tes thèmes : plus il y a de points verts, mieux tu les connais.")
+                    Text("Chaque quiz fait avancer tes thèmes : plus il y a de points verts, mieux tu les connais. "
+                         + "Chaque bonne réponse te rapporte aussi de l'XP dans sa matière.")
                         .font(ChildStyle.body)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                     ForEach(subjects) { subject in
-                        subjectSection(subject)
+                        subjectSection(subject, xp: Gamification.xp(for: subject.subject, in: xp))
                     }
                 }
             }
@@ -77,7 +84,7 @@ struct SubjectPathView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func subjectSection(_ subject: SubjectProgress) -> some View {
+    private func subjectSection(_ subject: SubjectProgress, xp: Int) -> some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text(subject.subject)
@@ -91,6 +98,9 @@ struct SubjectPathView: View {
                     .accessibilityLabel("\(subject.masteredCount) thèmes maîtrisés sur \(subject.themes.count)")
             }
             .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            SubjectLevelBar(xp: xp)
+                .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
                 ForEach(Array(subject.themes.enumerated()), id: \.element.id) { index, theme in
@@ -129,6 +139,37 @@ struct SubjectPathView: View {
         case 4...: "Tu maîtrises"
         default: "En cours : \(theme.box) sur 5"
         }
+    }
+}
+
+/// « Niveau 2 · 140 XP » and the progress towards the next level.
+struct SubjectLevelBar: View {
+    let xp: Int
+
+    var body: some View {
+        let progress = Gamification.level(forXP: xp)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Niveau \(progress.level)")
+                    .font(ChildStyle.caption.weight(.semibold))
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Spacer()
+                Text("\(xp) XP")
+                    .font(ChildStyle.caption.monospacedDigit())
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
+            ProgressView(value: Double(progress.xpIntoLevel), total: Double(max(1, progress.xpForNextLevel)))
+                .tint(ChildStyle.accent)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilityLabel(xp: xp))
+    }
+
+    static func accessibilityLabel(xp: Int) -> String {
+        let progress = Gamification.level(forXP: xp)
+        let remaining = progress.xpForNextLevel - progress.xpIntoLevel
+        return "Niveau \(progress.level), \(xp) points d'expérience. "
+            + "Encore \(remaining) pour le niveau \(progress.level + 1)."
     }
 }
 

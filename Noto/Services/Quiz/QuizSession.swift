@@ -38,6 +38,8 @@ struct QuizQuestion: Identifiable, Equatable, Sendable {
     /// `NotionKey` of the item's theme (Leitner granularity), nil when the
     /// item has no subject or theme.
     let notionKey: String?
+    /// `QuizItem.difficulty` (1…3), for the XP bonus (`Gamification`).
+    var difficulty: Int = 1
 }
 
 /// Outcome of a finished quiz, for `QuizResultView`.
@@ -48,6 +50,11 @@ struct QuizSessionResult: Equatable, Sendable {
     let decision: RewardDecision
     /// Right answers needed to earn minutes (`RewardConfig.passThreshold`).
     let requiredCorrect: Int
+    /// XP of this quiz (`Gamification` table; 0 when a farming guard caught
+    /// it: too fast, or an identical replay of any earlier attempt).
+    var xpEarned: Int = 0
+    /// Subject levels reached with this quiz.
+    var levelUps: [SubjectLevelUp] = []
     var minutesEarned: Int { decision.total }
 }
 
@@ -159,26 +166,51 @@ final class QuizSession {
         let end = now()
         let duration = max(0, Int(end.timeIntervalSince(startedAt)))
         let correct = zip(questions, answers).filter { $0.answerIndex == $1 }.count
+        let history = child.quizAttempts.map { AttemptSnapshot($0) }
 
         let snapshot = AttemptSnapshot(date: end, questionKeys: questions.map(\.questionKey),
                                        correctCount: correct, totalCount: questions.count,
                                        durationSec: duration)
         let decision = RewardPolicy.evaluate(
             attempt: snapshot,
-            history: child.quizAttempts.map { AttemptSnapshot($0) },
+            history: history,
             homeworkTomorrow: child.homework.map { HomeworkSnapshot($0, calendar: calendar) },
             scheduleTomorrow: child.schedule.map { ScheduleSnapshot($0) },
             config: config, now: end, calendar: calendar
         )
+
+        // XP per question, frozen now (subject + difficulty are not kept on
+        // the attempt otherwise). The farming guards are checked on their
+        // own, not through `decision.denial` (a fast or replayed attempt
+        // below the threshold is denied as `.belowThreshold` first).
+        let itemXP = Gamification.questionXP(
+            difficulties: questions.map(\.difficulty),
+            correct: zip(questions, answers).map { $0.answerIndex == $1 },
+            earnsXP: Gamification.earnsXP(attempt: snapshot, history: history, config: config,
+                                          now: end, calendar: calendar)
+        )
+        let subjects = questions.map { $0.subject ?? "" }
+        let xpBefore = Gamification.subjectXP(attempts: history)
 
         let attempt = QuizAttempt(
             child: child, date: end,
             itemIDs: questions.map(\.id), questionKeys: questions.map(\.questionKey),
             answers: answers, correctCount: correct, totalCount: questions.count, durationSec: duration,
             minutesEarned: decision.total, bonusApplied: decision.bonus > 0, bonusMinutes: decision.bonus,
-            denialReason: decision.denial?.rawValue
+            denialReason: decision.denial?.rawValue,
+            itemSubjects: subjects, itemXP: itemXP
         )
         modelContext.insert(attempt)
+
+        // A passed quiz closes the current gap: the jokers that bridge it are
+        // spent now, in the same save (pending until then, `Gamification`).
+        if decision.countsAsSuccess {
+            let passedNow = AttemptSnapshot(date: end, questionKeys: snapshot.questionKeys,
+                                            correctCount: correct, totalCount: questions.count,
+                                            durationSec: duration, passed: true)
+            GamificationStore.recordDueJokers(for: child, attempts: history + [passedNow], in: modelContext,
+                                              now: end, calendar: calendar, save: false)
+        }
 
         // Mastery moves whatever the reward decision (a rushed or replayed
         // quiz still tells us what the child knows).
@@ -192,9 +224,15 @@ final class QuizSession {
 
         // Same tolerance as `RewardPolicy` (0.8 * 5 = 4.000000000000001).
         let required = Int((config.passThreshold * Double(questions.count) - 1e-9).rounded(.up))
+        let thisAttempt = AttemptSnapshot(date: end, questionKeys: [], correctCount: correct,
+                                          totalCount: questions.count, durationSec: duration,
+                                          itemSubjects: subjects, itemXP: itemXP)
+        let xpAfter = Gamification.subjectXP(attempts: history + [thisAttempt])
         result = QuizSessionResult(correctCount: correct, totalCount: questions.count,
                                    durationSec: duration, decision: decision,
-                                   requiredCorrect: max(0, required))
+                                   requiredCorrect: max(0, required),
+                                   xpEarned: thisAttempt.xpEarned,
+                                   levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter))
         phase = .finished
     }
 
@@ -313,7 +351,7 @@ final class QuizSession {
             return QuizQuestion(id: item.id, questionKey: item.questionKey, question: item.question,
                                 choices: item.choices, answerIndex: item.answerIndex,
                                 explanation: item.explanation, subject: item.subject, theme: item.theme,
-                                notionKey: notionKey)
+                                notionKey: notionKey, difficulty: item.difficulty)
         }
     }
 

@@ -2,23 +2,17 @@ import Foundation
 
 /// Pure daily counters shown on the child home (cagnotte, série). No state,
 /// no clock, no actor: `now` and `calendar` are passed in.
+///
+/// Since 3.6 the série with jokers lives in `Gamification.streak`; `current`
+/// is the joker-free count kept for callers that have no joker history.
 enum QuizStreak {
     /// Consecutive calendar days with at least one passed quiz
     /// (`AttemptSnapshot.passed`, so a quiz that only ran out of minutes still
     /// counts). Counted back from today; when nothing has passed yet today the
     /// count starts from yesterday, so the série is not shown as broken before
-    /// the child has had a chance to play. Jokers come in 3.6.
+    /// the child has had a chance to play. No joker (`jokerBudget: 0`).
     static func current(attempts: [AttemptSnapshot], now: Date, calendar: Calendar) -> Int {
-        let passedDays = Set(attempts.filter(\.passed).map { calendar.startOfDay(for: $0.date) })
-        guard !passedDays.isEmpty else { return 0 }
-        let today = calendar.startOfDay(for: now)
-        var day = passedDays.contains(today) ? today : calendar.quizStartOfDay(addingDays: -1, to: now)
-        var count = 0
-        while passedDays.contains(day) {
-            count += 1
-            day = calendar.quizStartOfDay(addingDays: -1, to: day)
-        }
-        return count
+        Gamification.streak(attempts: attempts, jokers: [], now: now, calendar: calendar, jokerBudget: 0).days
     }
 
     /// Minutes credited today (base + bonus), as stored on the attempts.

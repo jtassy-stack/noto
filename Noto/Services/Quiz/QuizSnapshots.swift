@@ -44,6 +44,19 @@ struct MasterySnapshot: Sendable, Equatable {
     let leitnerBox: Int
     let nextReview: Date
     let streakCorrect: Int
+    /// First time the notion reached a mastered box (`SpacedRepetition
+    /// .isMastered`), never cleared by a later miss: the « thème maîtrisé »
+    /// badge stays earned (3.6). Nil when never mastered, or mastered before
+    /// the field existed.
+    let masteredAt: Date?
+
+    init(notionKey: String, leitnerBox: Int, nextReview: Date, streakCorrect: Int, masteredAt: Date? = nil) {
+        self.notionKey = notionKey
+        self.leitnerBox = leitnerBox
+        self.nextReview = nextReview
+        self.streakCorrect = streakCorrect
+        self.masteredAt = masteredAt
+    }
 }
 
 struct AttemptSnapshot: Sendable, Equatable {
@@ -63,10 +76,17 @@ struct AttemptSnapshot: Sendable, Equatable {
     /// as credited. Keeps the daily cap on base minutes only, whatever the
     /// current `RewardConfig.examEveBonus`.
     let bonusMinutes: Int
+    /// Mirrors `QuizAttempt.itemSubjects` / `itemXP` (3.6): subject ("" when
+    /// none) and XP of each question, in play order. Empty before 3.6.
+    let itemSubjects: [String]
+    let itemXP: [Int]
+
+    /// XP of the whole attempt (`Gamification`).
+    var xpEarned: Int { itemXP.reduce(0) { $0 + max(0, $1) } }
 
     init(date: Date, questionKeys: [String], correctCount: Int, totalCount: Int,
          durationSec: Int, minutesEarned: Int = 0, passed: Bool = false, bonusApplied: Bool = false,
-         bonusMinutes: Int = 0) {
+         bonusMinutes: Int = 0, itemSubjects: [String] = [], itemXP: [Int] = []) {
         self.date = date
         self.questionKeys = questionKeys
         self.correctCount = correctCount
@@ -76,6 +96,8 @@ struct AttemptSnapshot: Sendable, Equatable {
         self.passed = passed
         self.bonusApplied = bonusApplied
         self.bonusMinutes = bonusMinutes
+        self.itemSubjects = itemSubjects
+        self.itemXP = itemXP
     }
 }
 
@@ -168,7 +190,8 @@ extension ScheduleSnapshot {
 extension MasterySnapshot {
     @MainActor init(_ mastery: NotionMastery) {
         self.init(notionKey: mastery.notionKey, leitnerBox: mastery.leitnerBox,
-                  nextReview: mastery.nextReview, streakCorrect: mastery.streakCorrect)
+                  nextReview: mastery.nextReview, streakCorrect: mastery.streakCorrect,
+                  masteredAt: mastery.masteredAt)
     }
 }
 
@@ -182,7 +205,8 @@ extension AttemptSnapshot {
                   correctCount: attempt.correctCount, totalCount: attempt.totalCount,
                   durationSec: attempt.durationSec, minutesEarned: attempt.minutesEarned,
                   passed: passed, bonusApplied: attempt.bonusApplied,
-                  bonusMinutes: attempt.bonusMinutes)
+                  bonusMinutes: attempt.bonusMinutes,
+                  itemSubjects: attempt.itemSubjects, itemXP: attempt.itemXP)
     }
 }
 
@@ -193,5 +217,10 @@ extension NotionMastery {
         nextReview = snapshot.nextReview
         streakCorrect = snapshot.streakCorrect
         lastReviewedAt = reviewedAt
+        // Stamped once, never cleared (a later miss keeps the badge).
+        if masteredAt == nil {
+            masteredAt = snapshot.masteredAt
+                ?? (SpacedRepetition.isMastered(snapshot) ? reviewedAt : nil)
+        }
     }
 }

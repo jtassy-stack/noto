@@ -173,25 +173,42 @@ enum PreviewData {
             ctx.insert(item)
         }
 
+        let subjects = sampleQuizItems.map(\.subject)
         let attempt = QuizAttempt(
             child: child, date: .now.addingTimeInterval(-3600), itemIDs: [],
             questionKeys: Array(keys.prefix(5)), answers: [1, 0, 2, 3, 1],
-            correctCount: 4, totalCount: 5, durationSec: 140, minutesEarned: 10, bonusApplied: false
+            correctCount: 4, totalCount: 5, durationSec: 140, minutesEarned: 10, bonusApplied: false,
+            itemSubjects: Array(subjects.prefix(5)), itemXP: [10, 10, 0, 12, 10]
         )
         ctx.insert(attempt)
         let yesterday = QuizAttempt(
             child: child, date: .now.addingTimeInterval(-86400), itemIDs: [],
             questionKeys: Array(keys.suffix(5)), answers: [0, 2, 3, 0, 2],
-            correctCount: 5, totalCount: 5, durationSec: 120, minutesEarned: 10, bonusApplied: false
+            correctCount: 5, totalCount: 5, durationSec: 120, minutesEarned: 10, bonusApplied: false,
+            itemSubjects: Array(subjects.suffix(5)), itemXP: [10, 12, 15, 10, 10]
         )
         ctx.insert(yesterday)
+        // Three days ago, then a missed day covered by a joker: the série
+        // card shows « Un joker a protégé ta série » on the day after.
+        let earlier = QuizAttempt(
+            child: child, date: .now.addingTimeInterval(-3 * 86400), itemIDs: [],
+            questionKeys: Array(keys.prefix(5)), answers: [1, 0, 2, 3, 1],
+            correctCount: 5, totalCount: 5, durationSec: 150, minutesEarned: 10, bonusApplied: false,
+            itemSubjects: Array(subjects.prefix(5)), itemXP: [10, 10, 12, 12, 10]
+        )
+        ctx.insert(earlier)
+        let joker = StreakJoker(
+            child: child, day: CalendarDay(.now.addingTimeInterval(-2 * 86400), calendar: .current),
+            createdAt: .now.addingTimeInterval(-86400)
+        )
+        ctx.insert(joker)
 
         let mastery = NotionMastery(
             child: child,
             notionKey: NotionKey.make(level: "4e", subject: "Mathématiques", theme: "Théorème de Pythagore et triangles"),
             now: .now, calendar: .current
         )
-        mastery.leitnerBox = 3
+        mastery.leitnerBox = 4
         ctx.insert(mastery)
     }
 

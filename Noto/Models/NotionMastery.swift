@@ -16,6 +16,10 @@ final class NotionMastery {
     var nextReview: Date
     var streakCorrect: Int
     var lastReviewedAt: Date?
+    /// First review that reached a mastered box (≥ 4); never cleared, so the
+    /// « thème maîtrisé » badge survives a later miss (Gamification 3.6).
+    /// Optional with an inline default: additive, lightweight migration.
+    var masteredAt: Date? = nil
 
     /// Box 1, due today (`nextReview = startOfDay(now)`). `calendar` is passed
     /// in rather than read from `Calendar.current`, for testability.

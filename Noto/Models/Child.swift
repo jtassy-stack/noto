@@ -77,6 +77,9 @@ final class Child {
     var quizAttempts: [QuizAttempt] = []
     @Relationship(deleteRule: .cascade, inverse: \NotionMastery.child)
     var notionMasteries: [NotionMastery] = []
+    // Gamification (3.6): série jokers spent. Same additive pattern.
+    @Relationship(deleteRule: .cascade, inverse: \StreakJoker.child)
+    var streakJokers: [StreakJoker] = []
 
     init(
         firstName: String,
