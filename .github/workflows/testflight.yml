@@ -44,14 +44,19 @@ jobs:
       - name: Scan commits in range
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Manual run on an already-scanned ref: nothing new to cover beyond
+            # the tip (the working-tree scan above covers HEAD's content).
+            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="-1"
+          elif [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
             gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="$BASE..HEAD"
           else
-            # workflow_dispatch / new branch: no base to diff against. Scan the
-            # tip commit only — older history still contains the pre-rotation
-            # keys (not rewritten) and the working-tree scan above covers HEAD.
-            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="-1"
+            # Push with no reachable base (new branch, force-push): scan the
+            # whole history. Pre-rotation keys are ignored by exact fingerprint
+            # in .gitleaksignore, so any other secret anywhere still fails.
+            gitleaks git . --config .gitleaks.toml --redact --verbose
           fi
 
   # ──────────────────────────────────────────────

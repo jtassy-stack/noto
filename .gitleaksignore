@@ -1,0 +1,5 @@
+# Historic findings: the pre-rotation celyn keys committed before Phase 1
+# (history is not rewritten). Both keys are rotated/retired; new keys live
+# in Infisical. Only these exact commit:file:rule:line fingerprints are ignored.
+fd92629d61d14805380a00d5b3cdfa8036bd9526:Noto/Services/Directory/DirectoryAPIClient.swift:celyn-directory-api-key:14
+9648f650ce38541a5dced6784b379a0f2aa41b52:Noto/Services/CultureAPI/CultureAPIClient.swift:celyn-culture-api-key:10
