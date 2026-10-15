@@ -109,6 +109,14 @@ Tests : 100 % des branches de `RewardPolicy`, `SpacedRepetition`, `QuizSourceSel
 - Génération assistée possible hors app (script `tools/generate-questions/` avec Claude API, exécuté par Julien), **chaque question relue** avant commit ; champ `reviewed: true` obligatoire pour être servie.
 - Le JSON référence les `theme` exacts de `curriculum.json` (test de cohérence).
 
+### 3.2 bis S'appuyer sur celyn (quiz et recommandations) — décision du 15/10/2026
+celyn (`jtassy-stack/culture-api`) fait déjà tourner un moteur de quiz en production (« Koi ? » pour Keskonfé, Sirius, Le Club) et un moteur de recommandation d'œuvres. On le réutilise au lieu de réinventer :
+- **Pipeline de génération** : reprendre l'architecture de `src/lib/koi/` — une source par typologie (`QuizSource`, build `llm` | `deterministic`), questions **ancrées uniquement sur des faits stockés** (`groundingProblems`), **relecture à l'aveugle** (Jev via TypeSafe, repli Mistral) avec seuils de confiance, `question_key` pour dédoublonner, placement de la bonne réponse à une position tirée, signalement d'erreur (`report`) avec seuil d'exclusion et période de probation. Pour nōto : une typologie « programme » ancrée sur `curriculum.json` + les œuvres au programme, et une typologie déterministe (dates, œuvres/auteurs, prix littéraires) sans LLM.
+- **Où générer** : de préférence côté celyn (job + table `koi_quizzes`, `app=noto`, contrat `quiz v2` — `GET /api/quiz/v2/lot`), la banque étant **non personnelle** : l'app ne télécharge que des questions, rien sur l'enfant ne remonte. À défaut, `tools/generate-questions/` réutilise le même pipeline hors ligne. Le champ `reviewed: true` de 3.2 correspond à `review_method`/`review_confidence` de celyn.
+- **Question du jour culture G (3.6)** : servie par le lot quotidien Koi (`/api/partie/daily` ou `quiz v2`), filtrée par niveau, au lieu d'une banque dédiée.
+- **Recommandations de livres, films, etc.** : catalogue `oeuvres` de celyn (type `book`, prix `oeuvre_awards`, `?awarded=true`), `/api/recommendations/:oeuvreId`, et recherche thématique par niveau (`?grade=`). Relier les œuvres au programme (`curriculum.json`, ex. « Les Fourberies de Scapin » en 5e) aux œuvres celyn pour proposer « à lire / à voir » après un quiz ou un devoir.
+- **Avant de coder** : charger le skill `/celyn` (règle CLAUDE.md) et lire `docs/quiz-v2-contrat.md` de celyn ; ne jamais envoyer de données de l'enfant (requêtes anonymisées : niveau + thème).
+
 ### 3.3 Génération personnalisée (iOS 26)
 - `Noto/Services/Quiz/QuizGenerator.swift` : chaîne **FoundationModels → banque**.
 - Activer le code FoundationModels aujourd'hui commenté (`TextSummarizer`, `BriefingTools`, `MeetingExtractionService`) derrière `if #available(iOS 26, *)`.
@@ -141,7 +149,7 @@ Remplacer `Noto/Views/ChildHomeView.swift` par `Noto/Views/Child/` :
 
 ### 3.6 Gamification
 - XP par question, niveau par matière, série quotidienne + 2 jokers/mois, badges sur jalons réels (thème maîtrisé = toutes les notions en boîte ≥ 4).
-- Question du jour de culture générale (banque + `CultureAPIClient`, requête anonymisée : niveau + thème, pas de lat/lng pour ce cas).
+- Question du jour de culture générale : lot quotidien Koi de celyn (voir 3.2 bis), requête anonymisée (niveau + thème, pas de lat/lng).
 - Défi familial hebdo : désactivé par défaut, activable par le parent.
 
 ### 3.7 App parent
