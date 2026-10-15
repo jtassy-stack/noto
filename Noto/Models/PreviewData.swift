@@ -59,6 +59,10 @@ enum PreviewData {
         // Messages
         addMessages(to: lea, ctx: ctx)
 
+        // Révisions (child mode): a few reviewed 4e questions, one passed
+        // quiz today and one notion in progress.
+        addQuizSamples(for: lea, ctx: ctx)
+
         // --- Tom (élémentaire, ENT) ---
         let tom = Child(firstName: "Tom", level: .elementaire, grade: "CM2",
                         schoolType: .ent, establishment: "École Jean Moulin")
@@ -100,6 +104,95 @@ enum PreviewData {
         }
 
         try? ctx.save()
+    }
+
+    // MARK: - Révisions samples
+
+    /// Léa as inserted in `container` (`lea` above is a detached instance).
+    static var revisionChild: Child {
+        let children = (try? container.mainContext.fetch(FetchDescriptor<Child>())) ?? []
+        return children.first { $0.firstName == "Léa" } ?? children[0]
+    }
+
+    /// A 4e child and no question at all: the « questions arrivent bientôt » state.
+    static let emptyBankContainer: ModelContainer = {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: Schema(NotoSchemaV1.models), configurations: config)
+        let family = Family(parentName: "Marie")
+        container.mainContext.insert(family)
+        let child = Child(firstName: "Léa", level: .college, grade: "4e",
+                          schoolType: .pronote, establishment: "Collège Victor Hugo")
+        family.children.append(child)
+        container.mainContext.insert(child)
+        try? container.mainContext.save()
+        return container
+    }()
+
+    /// Reviewed 4e items on real `curriculum.json` themes (subject + theme
+    /// verbatim) so previews go through `QuizSession`'s matching path.
+    static let sampleQuizItems: [(subject: String, theme: String, question: String,
+                                  choices: [String], answer: Int, explanation: String)] = [
+        ("Mathématiques", "Théorème de Pythagore et triangles",
+         "Dans un triangle rectangle, comment s'appelle le côté opposé à l'angle droit ?",
+         ["La médiane", "L'hypoténuse", "La bissectrice", "La hauteur"], 1,
+         "L'hypoténuse est le plus grand côté du triangle rectangle."),
+        ("Mathématiques", "Calcul littéral et équations",
+         "Quelle est la solution de l'équation 2x + 3 = 11 ?",
+         ["x = 4", "x = 7", "x = 3", "x = 5,5"], 0,
+         "2x = 11 − 3 = 8, donc x = 8 ÷ 2 = 4."),
+        ("Français", "La fiction pour interroger le réel — réalisme et naturalisme",
+         "Quel écrivain est le chef de file du naturalisme ?",
+         ["Victor Hugo", "Molière", "Émile Zola", "Jean de La Fontaine"], 2,
+         "Émile Zola a écrit la série des Rougon-Macquart, dont « Germinal »."),
+        ("Histoire", "Le XVIIIe siècle : expansions, Lumières et révolutions",
+         "En quelle année a lieu la prise de la Bastille ?",
+         ["1715", "1804", "1848", "1789"], 3,
+         "Le 14 juillet 1789, les Parisiens prennent la Bastille."),
+        ("SVT", "Le vivant et son évolution — reproduction et évolution",
+         "Quel scientifique a proposé la théorie de l'évolution par la sélection naturelle ?",
+         ["Charles Darwin", "Louis Pasteur", "Isaac Newton", "Marie Curie"], 0,
+         "Darwin publie « L'Origine des espèces » en 1859."),
+        ("Physique-Chimie", "Des signaux pour observer et communiquer — lumière et son",
+         "Dans quel milieu le son ne peut-il pas se propager ?",
+         ["Dans l'eau", "Dans l'air", "Dans le vide", "Dans le métal"], 2,
+         "Le son a besoin de matière pour se propager : il ne traverse pas le vide."),
+    ]
+
+    private static func addQuizSamples(for child: Child, ctx: ModelContext) {
+        var keys: [String] = []
+        for (index, sample) in sampleQuizItems.enumerated() {
+            let key = QuizKey.make(question: sample.question, choices: sample.choices)
+            keys.append(key)
+            let item = QuizItem(
+                id: QuizKey.deterministicID(for: key), questionKey: key, kind: "programme",
+                question: sample.question, choices: sample.choices, answerIndex: sample.answer,
+                explanation: sample.explanation, domain: "programme", difficulty: 1,
+                level: "4e", subject: sample.subject, theme: sample.theme,
+                source: .bank, sourceRef: "preview/4e#\(index)", reviewed: true, fetchedAt: .now
+            )
+            ctx.insert(item)
+        }
+
+        let attempt = QuizAttempt(
+            child: child, date: .now.addingTimeInterval(-3600), itemIDs: [],
+            questionKeys: Array(keys.prefix(5)), answers: [1, 0, 2, 3, 1],
+            correctCount: 4, totalCount: 5, durationSec: 140, minutesEarned: 10, bonusApplied: false
+        )
+        ctx.insert(attempt)
+        let yesterday = QuizAttempt(
+            child: child, date: .now.addingTimeInterval(-86400), itemIDs: [],
+            questionKeys: Array(keys.suffix(5)), answers: [0, 2, 3, 0, 2],
+            correctCount: 5, totalCount: 5, durationSec: 120, minutesEarned: 10, bonusApplied: false
+        )
+        ctx.insert(yesterday)
+
+        let mastery = NotionMastery(
+            child: child,
+            notionKey: NotionKey.make(level: "4e", subject: "Mathématiques", theme: "Théorème de Pythagore et triangles"),
+            now: .now, calendar: .current
+        )
+        mastery.leitnerBox = 3
+        ctx.insert(mastery)
     }
 
     // MARK: - Helpers
