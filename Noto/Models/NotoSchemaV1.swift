@@ -34,6 +34,14 @@ enum NotoSchemaV1: VersionedSchema {
             Insight.self,
             MeetingNote.self,
             ExtractedItem.self,
+            // Previously reached only through `Child.photos`; listed so a
+            // future V1 freeze cannot miss it.
+            SchoolPhoto.self,
+            // Révisions (Phase 3.1). New entities are a lightweight-migration
+            // case: appended in place, no V2 and no migration plan (see above).
+            QuizItem.self,
+            QuizAttempt.self,
+            NotionMastery.self,
         ]
     }
 }

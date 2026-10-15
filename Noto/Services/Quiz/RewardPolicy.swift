@@ -1,0 +1,124 @@
+import Foundation
+
+/// Which earlier attempts make an identical quiz a replay.
+enum ReplayWindow: String, Codable, Sendable {
+    case sameDay
+    case ever
+}
+
+/// Parent-configurable reward rules. Persisted later as JSON in the app group
+/// (`Shared/RewardLedger.swift`, phase 3.4) so the extension can read it.
+struct RewardConfig: Codable, Sendable, Equatable {
+    /// Minutes for the 1st, 2nd, 3rd successful quiz of the day; later = 0.
+    var tiers: [Int] = [10, 5, 5]
+    /// 4/5 → correct / total >= 0.8.
+    var passThreshold: Double = 0.8
+    /// Applies to base minutes only (the exam-eve bonus sits on top).
+    var dailyCap: Int = 20
+    var examEveBonus: Int = 5
+    var examEveBonusEnabled: Bool = true
+    /// Minimum total duration of the quiz.
+    var minDurationSec: Int = 30
+    var replayWindow: ReplayWindow = .ever
+
+    static let `default` = RewardConfig()
+}
+
+enum RewardDenial: String, Codable, Sendable {
+    case belowThreshold, tooFast, identicalReplay, tiersExhausted, capReached, emptyQuiz
+
+    /// A passed quiz that only ran out of minutes still feeds XP and streak (3.6).
+    var countsAsSuccess: Bool {
+        self == .tiersExhausted || self == .capReached
+    }
+}
+
+struct RewardDecision: Sendable, Equatable {
+    let base: Int
+    let bonus: Int
+    var total: Int { base + bonus }
+    let denial: RewardDenial?
+    let countsAsSuccess: Bool
+
+    static func denied(_ denial: RewardDenial) -> RewardDecision {
+        RewardDecision(base: 0, bonus: 0, denial: denial, countsAsSuccess: denial.countsAsSuccess)
+    }
+}
+
+/// Minutes of screen time a quiz earns. Pure: no state, no clock, no actor.
+///
+/// It only computes the minutes earned. Whether the credit goes to reserve
+/// (class hours) or is consumed is decided in `RewardUnlockService` (3.4)
+/// against `ClassScheduleShieldService`: the class lock stays absolute and
+/// lives in one place, outside this layer.
+enum RewardPolicy {
+    /// Rules are evaluated in order; the first denial wins.
+    /// 1. no question → `.emptyQuiz`
+    /// 2. correct / total below `passThreshold` → `.belowThreshold`
+    /// 3. total duration below `minDurationSec` → `.tooFast`
+    /// 4. a passed attempt with the same question-key set, inside
+    ///    `replayWindow` → `.identicalReplay`
+    /// 5. tier of the day, counting only today's credited successes →
+    ///    `.tiersExhausted` when none is left
+    /// 6. daily cap on base minutes → `.capReached` when nothing is left
+    /// 7. exam-eve bonus on top of the cap, at most once per day.
+    ///
+    /// "Today" is the calendar day of `now` in `calendar`.
+    /// - Parameters:
+    ///   - attempt: the attempt being scored (`minutesEarned`, `passed`,
+    ///     `bonusApplied` and `bonusMinutes` ignored).
+    ///   - history: this child's prior attempts, any day.
+    static func evaluate(attempt: AttemptSnapshot,
+                         history: [AttemptSnapshot],
+                         homeworkTomorrow: [HomeworkSnapshot],
+                         scheduleTomorrow: [ScheduleSnapshot],
+                         config: RewardConfig,
+                         now: Date,
+                         calendar: Calendar) -> RewardDecision {
+        // 1.
+        guard attempt.totalCount > 0 else { return .denied(.emptyQuiz) }
+
+        // 2. Tolerance absorbs binary rounding (0.8 * 5 = 4.000000000000001).
+        guard Double(attempt.correctCount) >= config.passThreshold * Double(attempt.totalCount) - 1e-9 else {
+            return .denied(.belowThreshold)
+        }
+
+        // 3.
+        guard attempt.durationSec >= config.minDurationSec else { return .denied(.tooFast) }
+
+        // 4. Keys compared as sets: same questions in another order is a replay.
+        //    Only passed priors block (brief A.5 rule 4). Open question for
+        //    Julien (brief C.4): a rushed or failed attempt reveals the answers,
+        //    then a slow identical replay earns the full tier.
+        let keys = Set(attempt.questionKeys)
+        let isReplay = history.contains { prior in
+            prior.passed && Set(prior.questionKeys) == keys
+                && (config.replayWindow == .ever || calendar.isDate(prior.date, inSameDayAs: now))
+        }
+        guard !isReplay else { return .denied(.identicalReplay) }
+
+        // 5. Denied attempts (minutesEarned == 0) never use up a tier slot.
+        let today = history.filter { calendar.isDate($0.date, inSameDayAs: now) }
+        let successesToday = today.filter { $0.passed && $0.minutesEarned > 0 }.count
+        let tierMinutes = successesToday < config.tiers.count ? config.tiers[successesToday] : 0
+        guard tierMinutes > 0 else { return .denied(.tiersExhausted) }
+
+        // 6. The cap counts base minutes only: the stored bonus is taken back
+        //    out (never the current config, which the parent may change mid-day).
+        let earnedBaseToday = today.reduce(0) { sum, prior in
+            sum + max(0, prior.minutesEarned - prior.bonusMinutes)
+        }
+        let base = min(tierMinutes, config.dailyCap - earnedBaseToday)
+        guard base > 0 else { return .denied(.capReached) }
+
+        // 7. On top of the cap (with 10+5+5 the base alone reaches the cap of
+        //    20, so a bonus inside the cap could never be earned). Default
+        //    awaiting Julien's decision.
+        let bonusDue = config.examEveBonusEnabled
+            && !today.contains(where: \.bonusApplied)
+            && ExamKeywordDetector.hasExamTomorrow(homework: homeworkTomorrow, schedule: scheduleTomorrow,
+                                                   now: now, calendar: calendar)
+        return RewardDecision(base: base, bonus: bonusDue ? config.examEveBonus : 0,
+                              denial: nil, countsAsSuccess: true)
+    }
+}

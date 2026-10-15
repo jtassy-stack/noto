@@ -194,19 +194,7 @@ final class CurriculumService {
         var matchedKeywords: [(keywords: [String], score: Int)] = []
 
         for theme in themes {
-            var score = 0
-            let normalizedTheme = SubjectAlias.fold(theme.theme)
-
-            // Check if the text mentions the theme name
-            if !normalizedTheme.isEmpty && normalizedText.contains(normalizedTheme) {
-                score += 10
-            }
-
-            // Check keyword matches
-            for keyword in theme.keywords where Self.textMatches(normalizedText, keyword: SubjectAlias.fold(keyword)) {
-                score += 3
-            }
-
+            let score = Self.themeScore(foldedText: normalizedText, theme: theme)
             if score > 0 {
                 matchedKeywords.append((keywords: theme.keywords, score: score))
             }
@@ -219,6 +207,23 @@ final class CurriculumService {
     }
 
     // MARK: - Matching helpers
+
+    /// Relevance of `theme` for an already-folded homework / chapter text:
+    /// +10 when the text contains the theme name, +3 per matching keyword
+    /// (whole-word for keywords < 4 chars, see `textMatches`). Shared by
+    /// `matchKeywords` and `QuizSourceSelector.bestTheme` so the two scorings
+    /// cannot drift.
+    static func themeScore(foldedText: String, theme: CurriculumTheme) -> Int {
+        var score = 0
+        let normalizedTheme = SubjectAlias.fold(theme.theme)
+        if !normalizedTheme.isEmpty && foldedText.contains(normalizedTheme) {
+            score += 10
+        }
+        for keyword in theme.keywords where textMatches(foldedText, keyword: SubjectAlias.fold(keyword)) {
+            score += 3
+        }
+        return score
+    }
 
     private func isEligible(_ subject: CurriculumSubject, specialties: [String]?) -> Bool {
         guard subject.track == .specialite else { return true }
@@ -261,7 +266,7 @@ final class CurriculumService {
     }
 
     /// True when `needle` appears as a contiguous run inside `haystack`.
-    private static func containsSequence(_ haystack: [String], _ needle: [String]) -> Bool {
+    static func containsSequence(_ haystack: [String], _ needle: [String]) -> Bool {
         guard !needle.isEmpty, needle.count <= haystack.count else { return false }
         for i in 0...(haystack.count - needle.count) where Array(haystack[i..<(i + needle.count)]) == needle {
             return true
@@ -427,7 +432,7 @@ struct CurriculumSubject: Codable, Sendable {
     }
 }
 
-struct CurriculumTheme: Codable, Sendable {
+struct CurriculumTheme: Codable, Sendable, Equatable {
     let theme: String
     let keywords: [String]
     let period: String?

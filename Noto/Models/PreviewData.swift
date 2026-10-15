@@ -12,7 +12,8 @@ enum PreviewData {
     static let container: ModelContainer = {
         let schema = Schema([Family.self, Child.self, Grade.self, ScheduleEntry.self,
                              Homework.self, Message.self, Insight.self, SchoolPhoto.self,
-                             CultureReco.self, Curriculum.self])
+                             CultureReco.self, Curriculum.self,
+                             QuizItem.self, QuizAttempt.self, NotionMastery.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: schema, configurations: config)
         populate(container.mainContext)
