@@ -71,6 +71,12 @@ final class Child {
     var insights: [Insight]
     @Relationship(deleteRule: .cascade, inverse: \SchoolPhoto.child)
     var photos: [SchoolPhoto]
+    // Révisions (Phase 3.1). Inline defaults keep the additive to-many
+    // relationships lightweight-migration compatible for existing stores.
+    @Relationship(deleteRule: .cascade, inverse: \QuizAttempt.child)
+    var quizAttempts: [QuizAttempt] = []
+    @Relationship(deleteRule: .cascade, inverse: \NotionMastery.child)
+    var notionMasteries: [NotionMastery] = []
 
     init(
         firstName: String,
