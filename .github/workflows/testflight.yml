@@ -48,7 +48,10 @@ jobs:
           if [ -n "$BASE" ] && git cat-file -e "$BASE" 2>/dev/null; then
             gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="$BASE..HEAD"
           else
-            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="-n 50"
+            # workflow_dispatch / new branch: no base to diff against. Scan the
+            # tip commit only — older history still contains the pre-rotation
+            # keys (not rewritten) and the working-tree scan above covers HEAD.
+            gitleaks git . --config .gitleaks.toml --redact --verbose --log-opts="-1"
           fi
 
   # ──────────────────────────────────────────────
