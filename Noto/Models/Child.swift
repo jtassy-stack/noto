@@ -116,8 +116,11 @@ extension Child {
     /// Record a completed sync. Called by every sync service on its
     /// success path (including the "empty payload, preserve" branch) so the
     /// stamp is set no matter which view triggered the sync.
+    /// Also refreshes the 1re / Tle spécialités from the freshly synced
+    /// subject labels — the one spot every connector goes through.
     func markSynced(at date: Date = .now) {
         lastSyncedAt = date
+        refreshInferredSpecialties()
     }
 
     /// Generic fallback label when the stored establishment is URL-shaped.

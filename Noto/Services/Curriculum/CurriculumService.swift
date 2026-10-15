@@ -52,10 +52,87 @@ final class CurriculumService {
 
     // MARK: - Query
 
-    /// The program for a level, if loaded.
+    /// The program for a level, if loaded. `level` is canonicalised first so
+    /// children persisted with a raw class label ("1ère", "TG2", "1G3") still
+    /// resolve to their programme.
     func program(for level: String) -> CurriculumProgram? {
-        programs.first(where: { $0.level == level })
+        let canonical = Self.canonicalLevel(level)
+        return programs.first(where: { $0.level == canonical })
     }
+
+    /// Canonical curriculum level for a stored grade / class label:
+    /// collège + lycée via `GradeInference` ("Première" → "1re", "Terminale"
+    /// → "Tle", "3ème" → "3e"), primary codes via `GradeInference.primaryGrade`
+    /// ("cm1" → "CM1"); anything unrecognised ("", "?") is returned unchanged.
+    static func canonicalLevel(_ level: String) -> String {
+        if let primary = GradeInference.primaryGrade(from: level) { return primary }
+        let secondary = GradeInference.grade(from: level)
+        return secondary.isEmpty ? level : secondary
+    }
+
+    // MARK: - Spécialités inference
+
+    /// Levels where spécialités exist.
+    static let specialtyLevels: Set<String> = ["1re", "Tle"]
+
+    /// Spécialités a student takes per level (3 in 1re, 2 in Tle). An
+    /// inferred list shorter than this is incomplete (an unaliased label
+    /// missed one) and must not be persisted: a partial list would *narrow*
+    /// `isEligible` and hide a spé the child actually takes, whereas an empty
+    /// list keeps every spécialité eligible.
+    static let expectedSpecialtyCount: [String: Int] = ["1re": 3, "Tle": 2]
+
+    /// Spécialités of a 1re / Tle child, inferred from the subject labels seen
+    /// in its synced data (schedule, grades, homework). Returns canonical
+    /// specialty names in curriculum order, or `[]` for any other level.
+    ///
+    /// A label counts only when it maps to a `.specialite` subject:
+    /// 1. through the alias table (`HIST.GEO.GEOPOL.&SC.POL.` → HGGSP) — an
+    ///    alias hit that lands on tronc commun only (`ENSEIGN.SCIENTIFIQUE`,
+    ///    `ANGLAIS`, `HISTOIRE-GEOGRAPHIE`) adds nothing;
+    /// 2. otherwise by exact compact equality with the spécialité's name /
+    ///    specialty (`NSI`, `SPE SES`) — never containment, so `MATHS
+    ///    COMPLEMENTAIRES` (taken *instead of* spé maths in Tle) adds nothing.
+    /// In 1re, `MATHEMATIQUES` reads as spé Mathématiques even though a tronc
+    /// commun row shares the name — accepted, it is overwhelmingly the case.
+    func inferSpecialties(level: String, subjectLabels: [String]) -> [String] {
+        let canonicalLevel = Self.canonicalLevel(level)
+        guard Self.specialtyLevels.contains(canonicalLevel),
+              let program = program(for: canonicalLevel) else { return [] }
+        let specialites = program.subjects.filter { $0.track == .specialite }
+        guard !specialites.isEmpty else { return [] }
+
+        var wanted = Set<String>()
+        for label in Set(subjectLabels) {
+            let aliases = SubjectAlias.canonicalNames(for: label)
+            let keys: Set<String>
+            if !aliases.isEmpty {
+                keys = Set(aliases.map(SubjectAlias.compact))
+            } else {
+                let compact = SubjectAlias.meaningfulTokens(label).joined()
+                guard !compact.isEmpty else { continue }
+                keys = [compact]
+            }
+            for subject in specialites where subjectKeys(subject).contains(where: keys.contains) {
+                wanted.insert(subject.specialty ?? subject.name)
+            }
+        }
+
+        var seen = Set<String>()
+        return specialites
+            .map { $0.specialty ?? $0.name }
+            .filter { wanted.contains($0) && seen.insert($0).inserted }
+    }
+
+    /// Programs decoded once from the bundled `curriculum.json` (empty when the
+    /// resource is missing). `CurriculumProgram` is `Sendable`, so this static
+    /// is safe under Swift 6 strict concurrency.
+    static let bundledPrograms: [CurriculumProgram] = {
+        guard let url = Bundle.main.url(forResource: "curriculum", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let programs = try? decodePrograms(from: data) else { return [] }
+        return programs
+    }()
 
     /// Subjects of `level` matching a (Pronote) subject label, filtered by
     /// track: tronc commun subjects are always eligible; spécialités are
@@ -194,7 +271,7 @@ final class CurriculumService {
 
     /// Get all subjects for a given level.
     func subjects(for level: String) -> [String] {
-        guard let program = programs.first(where: { $0.level == level }) else { return [] }
+        guard let program = program(for: level) else { return [] }
         return program.subjects.map(\.name)
     }
 
@@ -208,7 +285,7 @@ final class CurriculumService {
 
     /// Age range (min, max) for a given grade level.
     func ageRange(for level: String) -> (min: Int, max: Int) {
-        switch level {
+        switch Self.canonicalLevel(level) {
         case "CP": return (6, 7)
         case "CE1": return (7, 8)
         case "CE2": return (8, 9)
@@ -219,8 +296,8 @@ final class CurriculumService {
         case "4e": return (13, 14)
         case "3e": return (14, 15)
         case "2nde": return (15, 16)
-        case "1re", "1ère": return (16, 17)
-        case "Tle", "Terminale": return (17, 18)
+        case "1re": return (16, 17)
+        case "Tle": return (17, 18)
         default: return (10, 18)
         }
     }
@@ -228,7 +305,7 @@ final class CurriculumService {
     /// Convert app grade to celyn.io API format.
     /// Collège: "3e" → "3eme". Lycée: "2nde", "1re" → "1ere", "Tle" → "terminale". Primaire: passed through.
     func apiGrade(for grade: String) -> String {
-        let g = grade.lowercased().trimmingCharacters(in: .whitespaces)
+        let g = Self.canonicalLevel(grade).lowercased().trimmingCharacters(in: .whitespaces)
         // Already in API format
         if g.hasSuffix("eme") || g.hasSuffix("ème") { return g.replacingOccurrences(of: "ème", with: "eme") }
         // Short collège format: "6e" → "6eme", "3e" → "3eme"
@@ -246,6 +323,58 @@ final class CurriculumService {
     /// Get all available levels.
     var levels: [String] {
         programs.map(\.level)
+    }
+}
+
+// MARK: - Child spécialités refresh
+
+extension Child {
+    /// Subject labels across the child's synced schedule, grades and homework.
+    /// Rows deleted earlier in the same (unsaved) sync are skipped: wipe-and-
+    /// insert connectors call `markSynced` before `save()`, and SwiftData keeps
+    /// pending-deleted rows in the to-many arrays until then.
+    var syncedSubjectLabels: [String] {
+        schedule.filter { !$0.isDeleted }.map(\.subject)
+            + grades.filter { !$0.isDeleted }.map(\.subject)
+            + homework.filter { !$0.isDeleted }.map(\.subject)
+    }
+
+    /// Recompute `specialties` from the synced subject labels (1re / Tle only).
+    /// Called from `markSynced`, on the same actor as the sync service that
+    /// just wrote the data. Only writes on change, so a routine sync does not
+    /// dirty the context.
+    ///
+    /// - A live schedule (a full week of courses) is authoritative: the
+    ///   inferred list replaces the stored one, so a dropped spé goes away.
+    /// - Without a schedule (ENT / MonLycée homework only, or a Pronote run
+    ///   whose timetable failed) the evidence is partial: the inferred list
+    ///   only widens the stored one, never shrinks it.
+    /// - Either way the result is persisted only when it reaches the expected
+    ///   spécialité count for the level; otherwise `specialties` is left as is
+    ///   (empty = every spécialité stays eligible).
+    func refreshInferredSpecialties(using service: CurriculumService? = nil) {
+        let level = CurriculumService.canonicalLevel(grade)
+        guard CurriculumService.specialtyLevels.contains(level),
+              let expected = CurriculumService.expectedSpecialtyCount[level] else { return }
+        // Connectors delete the previous rows and insert fresh ones before
+        // saving; until the context processes those deletes, the old rows are
+        // still in the to-many arrays (and `isDeleted` is not yet set). Flush
+        // pending changes (no save) so last year's subjects are not counted.
+        modelContext?.processPendingChanges()
+        let curriculum = service ?? CurriculumService(programs: CurriculumService.bundledPrograms)
+        let inferred = curriculum.inferSpecialties(level: grade, subjectLabels: syncedSubjectLabels)
+        guard !inferred.isEmpty else { return }
+
+        let hasLiveSchedule = schedule.contains { !$0.isDeleted }
+        let next: [String]
+        if hasLiveSchedule {
+            next = inferred
+        } else {
+            let known = Set(specialties)
+            next = specialties + inferred.filter { !known.contains($0) }
+        }
+        guard next.count >= expected, next != specialties else { return }
+        specialties = next
     }
 }
 

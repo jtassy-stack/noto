@@ -18,12 +18,16 @@ enum GradeInference {
     /// CurriculumService treats empty as "fall back to general recos"
     /// rather than storing a garbage prefix.
     static func grade(from className: String) -> String {
-        let tokens = mergedTokens(className)
+        let runs = mergedTokenRuns(className)
+        let tokens = runs.map { $0.token }
         // First token that matches any rule wins, so a trailing group or
         // trimester code ("3E T1", "5e - T2") never overrides the level
         // written first. Within a token, lycée rules run before collège ones.
         for (i, token) in tokens.enumerated() {
-            if let lycee = lyceeGrade(token) { return lycee }
+            // A bare "1 G" / "T G" glued from spaced single letters is too
+            // weak a signal ("Groupe 1 G") — require the class digit ("1 G 2").
+            let weakMerge = runs[i].merged && token.count == 2 && token.last == "g"
+            if !weakMerge, let lycee = lyceeGrade(token) { return lycee }
             if let college = collegeGrade(token) { return college }
             if i + 1 < tokens.count, let split = splitLyceeGrade(token, next: tokens[i + 1]) {
                 return split
@@ -40,6 +44,48 @@ enum GradeInference {
         case "2nde", "1re", "Tle": return .lycee
         default: return .college
         }
+    }
+
+    /// Primary-school codes, in the priority order of the legacy ENT /
+    /// Skolengo / École Directe parsers.
+    static let primaryGrades = ["PS", "MS", "GS", "CP", "CE1", "CE2", "CM1", "CM2"]
+
+    /// Canonical `(grade, level)` for any connector's class label, or nil when
+    /// nothing is recognised (callers keep their own legacy fallback then).
+    ///
+    /// Primary codes are checked first, on whole tokens only, so a primary
+    /// label carrying a trimester / group code ("CM2 T1") never reads as a
+    /// lycée level; then `grade(from:)` for collège / lycée.
+    static func resolve(_ className: String) -> (grade: String, level: SchoolLevel)? {
+        if let primary = primaryGrade(from: className) {
+            let level: SchoolLevel = ["PS", "MS", "GS"].contains(primary) ? .maternelle : .elementaire
+            return (primary, level)
+        }
+        let secondary = grade(from: className)
+        guard !secondary.isEmpty else { return nil }
+        return (secondary, level(from: className))
+    }
+
+    /// Primary-school code ("CP", "CE1", …, "PS") when one appears as a whole
+    /// token ("CM1 - CM2 A", "CE1-B") or followed by a single class letter
+    /// for the digit-ending codes ("CM2A"). Nil otherwise.
+    static func primaryGrade(from className: String) -> String? {
+        let folded = className.folding(
+            options: [.diacriticInsensitive, .caseInsensitive],
+            locale: Locale(identifier: "fr")
+        ).lowercased()
+        let tokens = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        for code in primaryGrades {
+            let c = code.lowercased()
+            let endsWithDigit = c.last?.isNumber == true
+            let hit = tokens.contains { t in
+                if t == c { return true }
+                guard endsWithDigit, t.hasPrefix(c), t.count == c.count + 1 else { return false }
+                return t.last?.isLetter == true
+            }
+            if hit { return code }
+        }
+        return nil
     }
 
     // MARK: - Token rules
@@ -61,8 +107,11 @@ enum GradeInference {
             if rest.first == "g", rest.dropFirst().allSatisfy(\.isNumber) { return "1re" }
             if rest.hasPrefix(seriesPrefix), rest.count > seriesPrefix.count { return "1re" }
         }
-        // Terminale: "tle", "terminale", "tg", "tg2", "tstmg", "t1".
-        if t == "terminale" || t.hasPrefix("tle") {
+        // Terminale: "tle", "term", "terminale", "tg", "tg2", "tstmg", "t1".
+        // "tle" / "term" only as a level code (bare, or + class digits / "g"
+        // + digits / series code) — never as the start of a word or a
+        // teacher name ("Termeau", "Tlemsani").
+        if t == "terminale" || isLevelCode(t, stem: "tle") || isLevelCode(t, stem: "term") {
             return "Tle"
         }
         if t.hasPrefix("t") {
@@ -73,6 +122,16 @@ enum GradeInference {
             if !rest.isEmpty, rest.allSatisfy(\.isNumber) { return "Tle" }
         }
         return nil
+    }
+
+    /// `t` is `stem` alone or followed by a class suffix: digits ("tle3"),
+    /// "g" + digits ("tleg1"), or a technological series code ("tlestmg").
+    private static func isLevelCode(_ t: String, stem: String) -> Bool {
+        guard t.hasPrefix(stem) else { return false }
+        let rest = t.dropFirst(stem.count)
+        if rest.allSatisfy(\.isNumber) { return true }
+        if rest.first == "g", rest.dropFirst().allSatisfy(\.isNumber) { return true }
+        return seriesCodes.contains(where: { rest.hasPrefix($0) })
     }
 
     /// Technological series codes written after a detached "1" / "T"
@@ -95,6 +154,14 @@ enum GradeInference {
     }
 
     private static func collegeGrade(_ t: String) -> String? {
+        // Spelled-out levels (École Directe: "Troisième", "SIXIEME").
+        switch t {
+        case "sixieme": return "6e"
+        case "cinquieme": return "5e"
+        case "quatrieme": return "4e"
+        case "troisieme": return "3e"
+        default: break
+        }
         // Prefix-only (no suffix boundary): "6eA" is a plausible Pronote class name.
         for digit in ["6", "5", "4", "3"] where t.hasPrefix(digit + "e") {
             return digit + "e"
@@ -107,16 +174,26 @@ enum GradeInference {
     /// Folded, lowercased alphanumeric tokens, with runs of ≥ 2 consecutive
     /// single-character tokens merged ("1 g 2" → "1g2").
     static func mergedTokens(_ className: String) -> [String] {
+        mergedTokenRuns(className).map { $0.token }
+    }
+
+    /// `mergedTokens` plus, per token, whether it was glued from a run of
+    /// single-character tokens.
+    private static func mergedTokenRuns(_ className: String) -> [(token: String, merged: Bool)] {
         let folded = className.folding(
             options: [.diacriticInsensitive, .caseInsensitive],
             locale: Locale(identifier: "fr")
         ).lowercased()
         let raw = folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
 
-        var result: [String] = []
+        var result: [(token: String, merged: Bool)] = []
         var run: [String] = []
         func flushRun() {
-            if run.count >= 2 { result.append(run.joined()) } else { result.append(contentsOf: run) }
+            if run.count >= 2 {
+                result.append((run.joined(), true))
+            } else {
+                result.append(contentsOf: run.map { ($0, false) })
+            }
             run.removeAll()
         }
         for token in raw {
@@ -124,7 +201,7 @@ enum GradeInference {
                 run.append(token)
             } else {
                 flushRun()
-                result.append(token)
+                result.append((token, false))
             }
         }
         flushRun()

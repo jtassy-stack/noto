@@ -430,10 +430,13 @@ struct ENTLoginView: View {
                 let firstName = nameParts.count > 1
                     ? nameParts.drop(while: { $0 == $0.uppercased() }).first ?? nameParts.last ?? ec.displayName
                     : ec.displayName
+                // Canonical grade first ("1ère" → "1re", "Term" → "Tle", "CM2 A"
+                // → "CM2"); legacy parsing only when nothing is recognised.
+                let resolved = GradeInference.resolve(ec.className)
                 let child = Child(
                     firstName: firstName,
-                    level: inferLevel(from: ec.className),
-                    grade: inferGrade(from: ec.className),
+                    level: resolved?.level ?? inferLevel(from: ec.className),
+                    grade: resolved?.grade ?? inferGrade(from: ec.className),
                     schoolType: .ent,
                     establishment: provider.name
                 )
