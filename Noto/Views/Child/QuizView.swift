@@ -95,7 +95,7 @@ private struct QuestionScreen: View {
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
                 header
 
-                Text(question.question)
+                Text(BankText.attributed(question.question))
                     .font(ChildStyle.question)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -179,7 +179,7 @@ private struct QuestionScreen: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .frame(minWidth: 24)
                     .accessibilityHidden(true)
-                Text(text)
+                Text(BankText.attributed(text))
                     .font(ChildStyle.body)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                     .multilineTextAlignment(.leading)
@@ -214,7 +214,7 @@ private struct QuestionScreen: View {
         // Locked once answered: VoiceOver says so instead of offering
         // buttons that silently ignore taps.
         .disabled(state != .idle)
-        .accessibilityLabel("Réponse \(letter) : \(text)")
+        .accessibilityLabel("Réponse \(letter) : \(BankText.plain(text))")
         .accessibilityValue(accessibilityValue(for: state))
         .accessibilityHint(state == .idle ? "Touche deux fois pour choisir cette réponse" : "")
     }
@@ -254,12 +254,12 @@ private struct QuestionScreen: View {
                 .font(ChildStyle.headline)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
             if !correct {
-                Text("La bonne réponse : \(answer)")
+                Text("La bonne réponse : \(BankText.plain(answer))")
                     .font(ChildStyle.body)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
             }
             if let explanation = question.explanation, !explanation.isEmpty {
-                Text(explanation)
+                Text(BankText.attributed(explanation))
                     .font(ChildStyle.body)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
