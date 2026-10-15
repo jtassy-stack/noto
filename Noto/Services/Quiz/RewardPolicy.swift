@@ -72,6 +72,12 @@ struct RewardConfig: Codable, Sendable, Equatable {
         var c = self
         c.tiers = Array(tiers.prefix(5)).map { min(max($0, Self.tierRange.lowerBound), Self.tierRange.upperBound) }
         if c.tiers.isEmpty { c.tiers = Self.default.tiers }
+        // A 0-minute tier ends the barème: RewardPolicy only advances past a
+        // tier that paid minutes, so a positive tier after a 0 (10 / 0 / 10)
+        // could never be reached. Everything after the first 0 becomes 0.
+        if let firstZero = c.tiers.firstIndex(of: 0) {
+            for i in firstZero..<c.tiers.count { c.tiers[i] = 0 }
+        }
         c.passThreshold = passThreshold.isFinite ? min(max(passThreshold, 0.5), 1.0) : Self.default.passThreshold
         c.dailyCap = min(max(dailyCap, Self.dailyCapRange.lowerBound), Self.dailyCapRange.upperBound)
         c.examEveBonus = min(max(examEveBonus, Self.examEveBonusRange.lowerBound), Self.examEveBonusRange.upperBound)

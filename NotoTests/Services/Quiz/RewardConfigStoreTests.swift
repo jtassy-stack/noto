@@ -69,3 +69,17 @@ struct RewardConfigStoreTests {
         #expect(RewardConfigStore.load(defaults: defaults) == .default)
     }
 }
+
+@Suite("RewardConfig — zero tier ends the barème (Codex #50)")
+struct RewardConfigZeroTierTests {
+    @Test("a positive tier after a 0 is zeroed so it cannot trap progression")
+    func zeroTierTruncates() {
+        var c = RewardConfig.default
+        c.tiers = [10, 0, 10]
+        #expect(c.sanitized().tiers == [10, 0, 0])
+        c.tiers = [10, 5, 5]
+        #expect(c.sanitized().tiers == [10, 5, 5])
+        c.tiers = [0, 10]
+        #expect(c.sanitized().tiers == [0, 0])
+    }
+}

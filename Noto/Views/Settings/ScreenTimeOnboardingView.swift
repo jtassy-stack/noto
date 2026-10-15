@@ -1,5 +1,6 @@
 import SwiftUI
 import FamilyControls
+import ManagedSettings
 
 /// Guided Screen Time setup (plan §3.7), parent tone: age profile with
 /// repères → apps loisirs → apps toujours permises → budget de base,
@@ -419,6 +420,17 @@ struct ScreenTimeOnboardingView: View {
                 onApplied()
                 return
             }
+        } else if !Self.hasApps(leisure), monitor.isMonitoring {
+            // Leisure apps cleared while monitoring: release them like
+            // ScreenTimeView.clearRestrictions() — stop the app-limit activity
+            // and clear the DEFAULT store's shields. The class-lock store
+            // (ClassLockConstants.storeName) is never touched here.
+            let store = ManagedSettingsStore()
+            store.shield.applications = nil
+            store.shield.applicationCategories = nil
+            monitor.stopMonitoring()
+            ScreenTimeEventStore.storeWatchedSelection(FamilyActivitySelection())
+            ScreenTimeEventStore.storeThreshold(hours: baseHours)
         } else {
             ScreenTimeEventStore.storeWatchedSelection(leisure)
             ScreenTimeEventStore.storeThreshold(hours: baseHours)

@@ -375,7 +375,7 @@ struct RewardPolicyTests {
     func sanitized() {
         let wild = RewardConfig(tiers: [-5, 99], passThreshold: 3, dailyCap: -1, examEveBonus: 40,
                                 minDurationSec: -3, minQuestionCount: 50).sanitized()
-        #expect(wild.tiers == [0, 30])
+        #expect(wild.tiers == [0, 0]) // clamped to [0, 30], then a 0 ends the barème
         #expect(wild.passThreshold == 1)
         #expect(wild.dailyCap == 0)
         #expect(wild.examEveBonus == 15)
