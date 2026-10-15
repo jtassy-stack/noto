@@ -73,7 +73,9 @@ struct QuizGenerationValidatorTests {
     @Test("answer equal to a bank answer of the same theme is accepted")
     func bankAnswer() {
         let c = GenFixtures.candidate("Quel auteur de récit fantastique dois-tu connaître ?",
-                                      choices: ["Théophile Gautier", "Zola", "Maupassant", "Balzac"], answer: 0,
+                                      // No distractor may appear in the homework text (Maupassant does:
+                                      // that would be .ambiguousDistractor, tested separately).
+                                      choices: ["Théophile Gautier", "Zola", "Flaubert", "Balzac"], answer: 0,
                                       explanation: "C'est un récit fantastique de Gautier.")
         #expect(V.rejection(for: c, request: GenFixtures.request()) == .notGrounded)
         let withBank = GenFixtures.request(bankAnswers: ["theophile GAUTIER"])
@@ -454,7 +456,7 @@ struct QuizSessionGenerationTests {
         let plain = QuizSession(child: child, modelContext: context, curriculum: QuizCurriculumFixtures.curriculum,
                                 config: .default, calendar: QuizClock.calendar, seed: 7, now: { clock.now })
         #expect(made.questions == plain.questions)
-        #expect(!made.questions.contains(where: \.isGenerated))
+        #expect(!made.questions.contains { $0.isGenerated })
     }
 
     @Test("homework slot without a bank item gets the generated question first")
@@ -527,7 +529,7 @@ struct QuizSessionGenerationTests {
 
         let stub = StubGenerator(candidates: [GenFixtures.candidate()])
         let session = await make(child, generator: stub)
-        #expect(!session.questions.contains(where: \.isGenerated))
+        #expect(!session.questions.contains { $0.isGenerated })
         #expect(await stub.log.requests.isEmpty)
     }
 
@@ -553,7 +555,7 @@ struct QuizSessionGenerationTests {
 
         let stub = StubGenerator(candidates: [GenFixtures.candidate()])
         let session = await make(child, generator: stub)
-        #expect(!session.questions.contains(where: \.isGenerated))
+        #expect(!session.questions.contains { $0.isGenerated })
         #expect(session.questions.count == 2)
         #expect(await stub.log.requests.isEmpty)
     }
