@@ -1,6 +1,6 @@
 {
-  "version": "2025-2026",
-  "lastUpdated": "2025-09-01",
+  "version": "2026-2027",
+  "lastUpdated": "2026-10-15",
   "programs": [
     {
       "level": "CP",
@@ -165,57 +165,103 @@
       "subjects": [
         {
           "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Le monstre, aux limites de l'humain", "keywords": ["monstre", "Odyssée", "mythologie", "Ulysse", "Cyclope", "métamorphose"], "period": "Trimestre 1" },
-            { "theme": "Récits d'aventures", "keywords": ["aventure", "voyage", "Robinson", "île", "exploration", "naufrage"], "period": "Trimestre 2" },
-            { "theme": "Récits de création, création poétique", "keywords": ["création", "mythe", "Genèse", "cosmogonie", "poésie", "univers"], "period": "Trimestre 3" }
+            { "theme": "Rencontrer des monstres : expérience de l'autre, expérience de soi", "keywords": ["monstre", "odyssée", "ulysse", "cyclope", "polyphème", "minotaure", "la belle et la bête", "petit poucet", "chant ix"], "period": "Année" },
+            { "theme": "Partir à l'aventure !", "keywords": ["aventure", "robinson", "naufrage", "île au trésor", "exploration", "jules verne", "récit de voyage", "tour du monde", "vie sauvage"], "period": "Année" },
+            { "theme": "Créer, recréer le monde : récits des origines", "keywords": ["récit des origines", "création du monde", "genèse", "mythologie", "métamorphoses", "prométhée", "pandore", "déluge", "gilgamesh", "ovide"], "period": "Année" },
+            { "theme": "Chanter et enchanter le monde : mots et merveilles (poésie)", "keywords": ["poésie", "poème", "poète", "recueil", "strophe", "calligramme", "haïku"], "period": "Année" },
+            { "theme": "Se masquer, jouer, déjouer : ruses en action (théâtre)", "keywords": ["théâtre", "molière", "scapin", "fourberies", "comédie", "farce", "ruse", "didascalie", "réplique", "tirade"], "period": "Année" },
+            { "theme": "Grammaire, orthographe et vocabulaire", "keywords": ["grammaire", "conjugaison", "orthographe", "dictée", "passé simple", "imparfait", "verbe", "homophone", "accord sujet", "nature et fonction"], "period": "Année" }
           ]
         },
         {
           "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Nombres et calculs", "keywords": ["fraction", "décimal", "pourcentage", "priorité des opérations", "divisibilité"], "period": "Année" },
-            { "theme": "Géométrie", "keywords": ["symétrie axiale", "triangle", "parallélogramme", "cercle", "médiatrice"], "period": "Année" },
-            { "theme": "Grandeurs et mesures", "keywords": ["aire", "volume", "durée", "conversion", "unité de mesure"], "period": "Année" },
-            { "theme": "Algorithmique et programmation", "keywords": ["Scratch", "algorithme", "boucle", "variable", "programme"], "period": "Trimestre 3" }
+            { "theme": "Nombres entiers et décimaux", "keywords": ["décimaux", "décimal", "nombres entiers", "milliard", "demi-droite graduée", "division euclidienne", "multiplication", "opérations posées", "calcul mental"], "period": "Année" },
+            { "theme": "Fractions", "keywords": ["fraction", "fraction décimale", "quotient", "numérateur", "dénominateur", "fractions égales"], "period": "Année" },
+            { "theme": "Algèbre : initiation à la pensée algébrique", "keywords": ["algèbre", "pensée algébrique", "nombre inconnu", "modèle en barres", "schéma en barres", "programme de calcul", "motif"], "period": "Année" },
+            { "theme": "Grandeurs et mesures", "keywords": ["périmètre", "calcul d'aire", "aire du rectangle", "aire du disque", "cm²", "unités d'aire", "contenance", "conversion d'unités", "volume du pavé", "durée"], "period": "Année" },
+            { "theme": "Espace et géométrie", "keywords": ["médiatrice", "symétrie", "mesurer un angle", "angle droit", "rapporteur", "perpendiculaire", "parallèle", "cercle", "compas", "pavé droit"], "period": "Année" },
+            { "theme": "Organisation et gestion de données et probabilités", "keywords": ["probabilité", "équiprobabilité", "expérience aléatoire", "diagramme en barres", "diagramme circulaire", "tableau à double entrée", "hasard"], "period": "Année" },
+            { "theme": "Proportionnalité", "keywords": ["proportionnalité", "proportionnel", "tableau de proportionnalité", "pourcentage", "calcul d'échelle", "échelle d'un plan", "linéarité", "passage par l'unité"], "period": "Année" },
+            { "theme": "Initiation à la pensée informatique", "keywords": ["scratch", "algorithme", "séquence d'instructions", "tableur", "boucle", "programmation", "robot"], "period": "Année" }
           ]
         },
         {
           "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "La longue histoire de l'humanité", "keywords": ["préhistoire", "néolithique", "Mésopotamie", "écriture", "premiers États"], "period": "Trimestre 1" },
-            { "theme": "Récits fondateurs et citoyenneté dans le monde antique", "keywords": ["Athènes", "démocratie", "Rome", "République romaine", "mythologie", "Iliade"], "period": "Trimestre 2" },
-            { "theme": "L'Empire romain", "keywords": ["Empire romain", "César", "Auguste", "christianisme", "romanisation", "Pompéi"], "period": "Trimestre 3" }
+            { "theme": "La longue histoire de l'humanité et des migrations", "keywords": ["préhistoire", "paléolithique", "néolithique", "homo sapiens", "sédentarisation", "mésopotamie", "premiers états", "hiéroglyphe", "égypte", "pharaon"], "period": "Trimestre 1" },
+            { "theme": "Récits fondateurs, croyances et citoyenneté dans la Méditerranée antique au Ier millénaire avant J.-C.", "keywords": ["athènes", "grec", "démocratie athénienne", "homère", "iliade", "olympe", "romulus", "hébreux", "bible", "monothéisme"], "period": "Trimestre 2" },
+            { "theme": "L'Empire romain dans le monde antique", "keywords": ["romain", "auguste", "jules césar", "romanisation", "chrétien", "christianisme", "pompéi", "gaule", "route de la soie", "chine des han"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Habiter une métropole", "keywords": ["métropole", "urbanisation", "ville", "mégapole", "banlieue"], "period": "Trimestre 1" },
-            { "theme": "Habiter un espace de faible densité", "keywords": ["campagne", "montagne", "désert", "espace rural", "contrainte naturelle"], "period": "Trimestre 2" },
-            { "theme": "Habiter les littoraux", "keywords": ["littoral", "côte", "port", "tourisme balnéaire", "pêche"], "period": "Trimestre 3" }
+            { "theme": "Habiter une métropole", "keywords": ["métropole", "mégapole", "urbanisation", "étalement urbain", "banlieue", "ville de demain", "ville durable"], "period": "Année" },
+            { "theme": "Habiter un espace de faible densité", "keywords": ["faible densité", "rural", "montagne", "désert", "contrainte naturelle", "espace agricole", "campagne"], "period": "Année" },
+            { "theme": "Habiter les littoraux", "keywords": ["littoral", "littoraux", "industrialo-portuaire", "zone portuaire", "station balnéaire", "tourisme balnéaire"], "period": "Année" },
+            { "theme": "Le monde habité", "keywords": ["monde habité", "répartition de la population", "population mondiale", "peuplement", "densité de population", "croissance démographique"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Représenter les autres et servir l'intérêt général", "keywords": ["délégué", "scrutin", "vote", "intérêt général", "représentant", "démocratie représentative", "conseil de la vie collégienne", "parlement des enfants"], "period": "Année" },
+            { "theme": "Respecter des règles et en comprendre la finalité : l'exemple de la laïcité à l'École", "keywords": ["laïcité", "liberté de conscience", "charte de la laïcité", "loi de 1905", "règlement intérieur", "neutralité"], "period": "Année" },
+            { "theme": "Avoir des droits en tant que personne et respecter ceux des autres : l'exemple du droit à la vie privée", "keywords": ["vie privée", "droit à l'image", "majorité numérique", "harcèlement", "données personnelles", "traces numériques", "droits de l'enfant", "convention internationale des droits"], "period": "Année" }
           ]
         },
         {
           "name": "Sciences et technologie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "La Terre dans le système solaire", "keywords": ["Terre", "Lune", "Soleil", "planète", "saison", "éclipse"], "period": "Trimestre 1" },
-            { "theme": "Le vivant et son évolution", "keywords": ["cellule", "évolution", "espèce", "fossile", "adaptation", "Darwin"], "period": "Trimestre 2" },
-            { "theme": "Matière et énergie", "keywords": ["énergie", "électricité", "circuit", "signal", "mouvement"], "period": "Trimestre 3" }
+            { "theme": "Matière, mouvement, énergie, information", "keywords": ["circuit électrique", "électricité", "énergie", "vitesse moyenne", "trajectoire", "mouvement", "mélange", "états de la matière", "changement", "objet technique"], "period": "Année" },
+            { "theme": "Le vivant, sa diversité et les fonctions qui le caractérisent", "keywords": ["cellule", "classification", "micro-organisme", "nutrition", "chaîne alimentaire", "végétaux", "germination", "reproduction", "fossile", "biodiversité"], "period": "Année" },
+            { "theme": "La Terre, une planète peuplée par des êtres vivants", "keywords": ["système solaire", "rotation de la terre", "jour et nuit", "saisons", "éclipse", "réchauffement climatique", "météorologie", "risque naturel"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Personnes et personnages", "keywords": ["family", "diary", "journal intime", "masks", "costumes", "pets", "introduce yourself", "describe yourself"], "period": "Année" },
+            { "theme": "Le quotidien : vivre, jouer, apprendre", "keywords": ["school", "daily routine", "timetable", "sports", "hobbies", "holidays", "school uniform", "present simple", "have got"], "period": "Année" },
+            { "theme": "Pays et paysages", "keywords": ["landscapes", "highlands", "scotland", "london", "united kingdom", "usa", "new york", "australia", "national parks", "wildlife"], "period": "Année" },
+            { "theme": "Imaginaire, contes et légendes", "keywords": ["dragon", "legend", "fairy tale", "wizard", "magic", "dr seuss", "ireland", "halloween", "ghost", "witch"], "period": "Année" },
+            { "theme": "Arts et expression des sentiments", "keywords": ["feelings", "how do you feel", "music", "painting", "christmas", "favourite"], "period": "Année" }
           ]
         },
         {
           "name": "Éducation musicale",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Musique et récit", "keywords": ["musique", "opéra", "conte musical", "Pierre et le Loup", "Prokofiev"], "period": "Trimestre 1" },
-            { "theme": "Musique et société", "keywords": ["orchestre", "jazz", "musique du monde", "tradition", "instrument"], "period": "Trimestre 2" }
+            { "theme": "Écouter, comparer et commenter", "keywords": ["air d'opéra", "flûte enchantée", "conte musical", "pierre et le loup", "prokofiev", "carnaval des animaux", "musique de film", "leitmotiv", "orchestre", "famille d'instruments"], "period": "Année" },
+            { "theme": "Explorer, imaginer et créer", "keywords": ["création musicale", "improvisation", "paysage sonore", "bruitage", "arrangement", "musique du monde", "jazz", "musique traditionnelle"], "period": "Année" },
+            { "theme": "Chanter et interpréter", "keywords": ["chorale", "chanson", "polyphonie", "projet musical", "voix chantée", "rythme", "pulsation"], "period": "Année" }
           ]
         },
         {
           "name": "Arts plastiques",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "La représentation", "keywords": ["dessin", "portrait", "paysage", "perspective", "couleur", "composition"], "period": "Trimestre 1" },
-            { "theme": "La matérialité", "keywords": ["sculpture", "installation", "matériau", "texture", "volume", "assemblage"], "period": "Trimestre 2" }
+            { "theme": "La représentation plastique et les dispositifs de présentation", "keywords": ["portrait", "autoportrait", "paysage", "perspective", "dessin", "cadrage", "accrochage"], "period": "Année" },
+            { "theme": "La matérialité de la production plastique et la sensibilité aux constituants de l'œuvre", "keywords": ["gouache", "fusain", "texture", "pigment", "peinture", "collage", "empreinte", "couleur"], "period": "Année" },
+            { "theme": "Les fabrications et la relation entre l'objet et l'espace", "keywords": ["sculpture", "installation", "assemblage", "modelage", "maquette", "ronde-bosse"], "period": "Année" }
           ]
         }
       ]
@@ -226,49 +272,157 @@
       "subjects": [
         {
           "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Récit de voyage et exploration", "keywords": ["voyage", "aventure", "Marco Polo", "exploration", "découverte", "récit de voyage"], "period": "Trimestre 1" },
-            { "theme": "Comédie et société — Molière", "keywords": ["Molière", "comédie", "théâtre", "famille", "satire sociale", "farce"], "period": "Trimestre 2" },
-            { "theme": "Utopie et science-fiction — Jules Verne", "keywords": ["utopie", "science-fiction", "Jules Verne", "imaginaire", "futur", "aventure scientifique"], "period": "Trimestre 3" }
+            { "theme": "Devenir héroïne/héros : destins romanesques", "keywords": ["héros", "héroïne", "épopée", "exploits", "chevalier", "roman de chevalerie", "chrétien de troyes", "table ronde", "roman d'aventure"], "period": "Trimestre 1" },
+            { "theme": "Voyager en poésie : du monde entier au cœur du monde", "keywords": ["poésie", "poème", "poète", "cendrars", "strophe", "versification", "calligramme", "haïku"], "period": "Trimestre 1" },
+            { "theme": "Expérimenter et jouer au théâtre : la société sens dessus dessous", "keywords": ["molière", "comédie", "théâtre", "farce", "valet", "marivaux", "scapin", "comique"], "period": "Trimestre 2" },
+            { "theme": "Imaginer, sentir, raisonner : des histoires pour plaire et instruire", "keywords": ["fable", "la fontaine", "les contes", "conte merveilleux", "apologue", "morale", "perrault", "ésope"], "period": "Trimestre 3" },
+            { "theme": "Étude de la langue : phrase, conjugaison, accords", "keywords": ["dictée", "conjugaison", "grammaire", "orthographe", "imparfait", "passé simple", "plus-que-parfait", "attribut du sujet", "participe passé", "discours direct"], "period": "Année" }
           ]
         },
         {
           "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Nombres relatifs et calculs", "keywords": ["nombres relatifs", "entiers", "opérations", "calcul", "opposé", "valeur absolue"], "period": "Trimestre 1" },
-            { "theme": "Géométrie dans l'espace — solides", "keywords": ["solide", "patron", "prisme", "cylindre", "volume", "géométrie dans l'espace"], "period": "Trimestre 2" },
-            { "theme": "Proportionnalité et graphiques", "keywords": ["proportionnalité", "pourcentage", "graphique", "tableau de valeurs", "vitesse moyenne"], "period": "Trimestre 3" }
-          ]
-        },
-        {
-          "name": "Physique-Chimie",
-          "themes": [
-            { "theme": "L'eau et ses propriétés", "keywords": ["eau", "état de la matière", "changement d'état", "fusion", "vaporisation", "pression"], "period": "Trimestre 1" },
-            { "theme": "Mélanges et solutions", "keywords": ["mélange", "solution", "soluté", "solvant", "dissolution", "filtration"], "period": "Trimestre 2" },
-            { "theme": "Signaux et information — son et lumière", "keywords": ["son", "lumière", "signal", "vibration", "onde", "spectre lumineux"], "period": "Trimestre 3" }
-          ]
-        },
-        {
-          "name": "SVT",
-          "themes": [
-            { "theme": "La biodiversité et l'évolution", "keywords": ["biodiversité", "évolution", "adaptation", "espèce", "milieu de vie", "classification"], "period": "Trimestre 1" },
-            { "theme": "Le fonctionnement du corps humain", "keywords": ["digestion", "respiration", "circulation", "muscles", "énergie", "nutrition"], "period": "Trimestre 2" },
-            { "theme": "La planète Terre — géologie", "keywords": ["Terre", "roche", "volcan", "séisme", "lithosphère", "tectonique"], "period": "Trimestre 3" }
+            { "theme": "Nombres relatifs", "keywords": ["nombres relatifs", "nombre relatif", "addition de relatifs", "soustraction de relatifs", "négatif", "valeur absolue", "droite graduée"], "period": "Trimestre 1" },
+            { "theme": "Opérations : priorités, multiples et diviseurs", "keywords": ["priorités opératoires", "parenthèses", "distributivité", "division euclidienne", "diviseur", "divisibilité", "multiple", "nombre premier"], "period": "Trimestre 1" },
+            { "theme": "Repérage sur une droite et dans le plan", "keywords": ["dans un repère", "repère du plan", "coordonnées", "abscisse", "ordonnée", "repérage", "placer des points"], "period": "Trimestre 1" },
+            { "theme": "Angles et parallélisme", "keywords": ["angles alternes", "alternes-internes", "angles correspondants", "angle correspondant", "angles adjacents", "angles supplémentaires", "angles complémentaires", "opposés par le sommet", "parallélisme", "droites parallèles"], "period": "Trimestre 1" },
+            { "theme": "Nombres rationnels : fractions", "keywords": ["fraction", "dénominateur", "numérateur", "fractions égales", "comparer des fractions", "quotient"], "period": "Trimestre 2" },
+            { "theme": "Puissances : carré et cube", "keywords": ["puissance", "au carré", "au cube", "exposant", "carrés parfaits"], "period": "Trimestre 2" },
+            { "theme": "Calcul littéral et algébrique", "keywords": ["calcul littéral", "expression littérale", "développer", "factoriser", "équation", "inconnue", "programme de calcul", "substitution"], "period": "Trimestre 2" },
+            { "theme": "Triangles : angles, hauteurs, médianes, médiatrices", "keywords": ["triangle", "somme des angles", "hauteurs", "hauteur d'un triangle", "médiane", "médiatrice", "cercle circonscrit", "aire du triangle"], "period": "Trimestre 2" },
+            { "theme": "Transformations : symétrie centrale (demi-tour)", "keywords": ["symétrie centrale", "demi-tour", "centre de symétrie", "symétrique", "symétrie"], "period": "Trimestre 2" },
+            { "theme": "Représentation de l'espace — solides", "keywords": ["solides", "patron", "prisme", "cylindre", "pavé droit", "perspective cavalière", "calcul de volume", "aire du disque"], "period": "Trimestre 2" },
+            { "theme": "Parallélogrammes", "keywords": ["parallélogramme", "losange", "diagonales", "quadrilatère", "aire du parallélogramme"], "period": "Trimestre 3" },
+            { "theme": "Proportionnalité et pourcentages", "keywords": ["proportionnalité", "proportionnel", "pourcentage", "coefficient de proportionnalité", "échelle d'un plan", "proportions"], "period": "Trimestre 3" },
+            { "theme": "Fonctions : en fonction de, tableaux de valeurs", "keywords": ["en fonction de", "tableau de valeurs", "graphique cartésien", "lire un graphique", "lecture graphique", "courbe", "nuage de points"], "period": "Trimestre 3" },
+            { "theme": "Statistiques", "keywords": ["statistique", "effectif", "fréquence", "moyenne", "diagramme circulaire", "diagramme en barres", "tableur"], "period": "Trimestre 3" },
+            { "theme": "Probabilités", "keywords": ["probabilité", "expérience aléatoire", "issue", "événement", "évènement", "équiprobabilité", "hasard"], "period": "Trimestre 3" },
+            { "theme": "Pensée informatique — programmation par blocs", "keywords": ["algorithme", "scratch", "programmation", "boucle", "blocs", "lutin"], "period": "Année" }
           ]
         },
         {
           "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Chrétientés et islam au Moyen Âge", "keywords": ["Moyen Âge", "islam", "croisade", "cathédrale", "mosquée", "Byzance"], "period": "Trimestre 1" },
-            { "theme": "Société féodale et pouvoir politique", "keywords": ["féodalité", "seigneur", "château fort", "Église", "roi", "capétien"], "period": "Trimestre 2" },
-            { "theme": "Renaissance, humanisme et grandes découvertes", "keywords": ["Renaissance", "Léonard de Vinci", "humanisme", "Christophe Colomb", "imprimerie", "Réforme"], "period": "Trimestre 3" }
+            { "theme": "Chrétientés et islam (VIe-XIIIe siècles), des mondes en contact", "keywords": ["byzance", "byzantin", "charlemagne", "carolingien", "constantinople", "islam", "mahomet", "calife", "croisade"], "period": "Trimestre 1" },
+            { "theme": "Société, Église et pouvoir politique dans l'Occident féodal (XIe-XVe siècles)", "keywords": ["féodal", "seigneur", "vassal", "château fort", "paysan", "monastère", "cathédrale", "capétien"], "period": "Trimestre 2" },
+            { "theme": "Transformations de l'Europe et ouverture sur le monde aux XVIe et XVIIe siècles", "keywords": ["renaissance", "humanisme", "christophe colomb", "grandes découvertes", "charles quint", "réforme", "protestant", "luther"], "period": "Trimestre 3" },
+            { "theme": "Du Prince de la Renaissance au roi absolu (François Ier, Henri IV, Louis XIV)", "keywords": ["françois ier", "françois 1er", "roi absolu", "henri iv", "édit de nantes", "louis xiv", "absolutisme", "monarchie absolue", "versailles"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "La question démographique et l'inégal développement", "keywords": ["démographie", "croissance démographique", "population", "natalité", "pyramide des âges", "idh", "inégal développement", "pauvreté"], "period": "Trimestre 1" },
+            { "theme": "Des ressources limitées, à gérer et à renouveler (énergie, eau, alimentation)", "keywords": ["ressources", "énergies renouvelables", "énergies fossiles", "ressource en eau", "accès à l'eau", "irrigation", "nourrir les hommes", "sécurité alimentaire", "malnutrition"], "period": "Trimestre 2" },
+            { "theme": "Prévenir les risques, s'adapter au changement global", "keywords": ["changement climatique", "réchauffement", "risques", "risque naturel", "risque industriel", "résilience", "déforestation", "catastrophe"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Agir pour l'égalité femmes-hommes et lutter contre les discriminations — égalité femmes-hommes", "keywords": ["égalité femmes-hommes", "égalité filles-garçons", "égalité hommes", "filles et garçons", "hommes et femmes", "stéréotype", "sexisme", "parité", "égalité salariale", "égalité en droits"], "period": "Trimestre 1" },
+            { "theme": "Agir pour l'égalité femmes-hommes et lutter contre les discriminations — discriminations", "keywords": ["discrimination", "racisme", "antisémitisme", "harcèlement", "anti-lgbt", "préjugé", "xénophobie"], "period": "Trimestre 2" },
+            { "theme": "La solidarité et ses échelles", "keywords": ["solidarité", "fraternité", "sécurité sociale", "risques sociaux", "bénévolat", "association", "développement durable"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Organisation et transformations de la matière : états et changements d'état", "keywords": ["changement d'état", "état solide", "état liquide", "état gazeux", "fusion", "solidification", "vaporisation", "condensation"], "period": "Trimestre 1" },
+            { "theme": "Organisation et transformations de la matière : mélanges et solutions", "keywords": ["mélange", "solution aqueuse", "soluble", "soluté", "solvant", "dissolution", "filtration", "décantation", "corps pur"], "period": "Trimestre 2" },
+            { "theme": "Des signaux pour observer et communiquer : son et lumière", "keywords": ["signal", "sonore", "lumière", "lumineux", "lumineuse", "vibration", "propagation", "vitesse du son", "décibel"], "period": "Trimestre 3" },
+            { "theme": "L'énergie et ses conversions : circuits électriques", "keywords": ["circuit", "électrique", "dipôle", "générateur", "en série", "dérivation", "interrupteur", "lampe", "conducteur", "isolant"], "period": "Année" },
+            { "theme": "Mouvement et interactions", "keywords": ["mouvement", "trajectoire", "vitesse", "référentiel", "rectiligne", "uniforme"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Le vivant et son évolution : biodiversité", "keywords": ["biodiversité", "évolution des espèces", "adaptation au milieu", "espèce", "milieu de vie", "classification", "écosystème", "reproduction"], "period": "Trimestre 1" },
+            { "theme": "Le corps humain et la santé : nutrition et effort", "keywords": ["digestion", "respiration", "circulation sanguine", "muscle", "effort", "respiratoire", "nutrition", "rythme cardiaque", "appareil digestif", "échanges gazeux"], "period": "Trimestre 2" },
+            { "theme": "La planète Terre, l'environnement et l'action humaine : géologie et paysages", "keywords": ["les roches", "roche sédimentaire", "roche magmatique", "volcan", "séisme", "lithosphère", "tectonique", "érosion", "sédimentation", "paysage"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Technologie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Les objets et les systèmes techniques : leurs usages et leurs interactions à découvrir et à analyser", "keywords": ["objet technique", "système technique", "analyse du besoin", "fonction d'usage", "cycle de vie", "impact environnemental", "réparabilité", "mobilité"], "period": "Année" },
+            { "theme": "Structure, fonctionnement, comportement : des objets et des systèmes techniques à comprendre", "keywords": ["chaîne d'énergie", "chaîne d'information", "capteur", "actionneur", "modélisation", "simulation", "cybersécurité", "réseau informatique"], "period": "Année" },
+            { "theme": "Création, conception, réalisation, innovations : des objets à concevoir et à réaliser", "keywords": ["cahier des charges", "croquis", "prototype", "conception", "innovation", "programmation", "algorithme", "scratch", "micro:bit"], "period": "Année" }
           ]
         },
         {
           "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Voyages et rencontres — monde anglophone", "keywords": ["voyage", "exploration", "culture anglophone", "échange interculturel", "découverte"], "period": "Trimestre 1" },
-            { "theme": "Sciences et technologie — innovations", "keywords": ["invention", "science", "technologie", "innovation", "espace", "robots"], "period": "Trimestre 2" }
+            { "theme": "Portrait, autoportrait", "keywords": ["portrait", "autoportrait", "physical description", "describe", "appearance", "personality", "yearbook", "national portrait gallery", "selfie"], "period": "Trimestre 1" },
+            { "theme": "Le quotidien : lieux, rythmes, saisons", "keywords": ["daily routine", "seasons", "weather", "house", "quotidien", "saisons"], "period": "Trimestre 1" },
+            { "theme": "Le réel et l'imaginaire", "keywords": ["imaginaire", "legend", "fantasy", "ghost", "monster", "halloween", "superhero", "fairy tale"], "period": "Trimestre 2" },
+            { "theme": "École et loisirs", "keywords": ["school", "timetable", "hobbies", "free time", "school subjects", "loisirs"], "period": "Trimestre 2" },
+            { "theme": "Des langues, des lieux, des histoires", "keywords": ["migrations", "ellis island", "thanksgiving", "columbus day", "juneteenth", "english language", "slang"], "period": "Trimestre 3" },
+            { "theme": "Le Royaume-Uni", "keywords": ["united kingdom", "royaume-uni", "uk", "british", "england", "london", "scotland", "wales", "northern ireland", "royal family"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Portrait, autoportrait", "keywords": ["retrato", "autorretrato", "presentarse", "me llamo", "descripción", "autoportrait", "frida kahlo"], "period": "Trimestre 1" },
+            { "theme": "Le quotidien : lieux, rythmes, saisons", "keywords": ["rutina", "horario", "estaciones", "la hora", "casa", "saisons"], "period": "Trimestre 1" },
+            { "theme": "École et loisirs", "keywords": ["colegio", "asignaturas", "ocio", "aficiones", "tiempo libre", "deportes"], "period": "Trimestre 2" },
+            { "theme": "Le réel et l'imaginaire", "keywords": ["leyenda", "cuento", "imaginaire", "fiesta", "tradición"], "period": "Trimestre 2" },
+            { "theme": "Des langues, des lieux, des histoires", "keywords": ["hispanophone", "lenguas", "américa latina", "leyendas urbanas", "migración"], "period": "Trimestre 3" },
+            { "theme": "Le Mexique", "keywords": ["méxico", "mexique", "mexican", "aztecas", "día de muertos", "frida kahlo", "teotihuacán", "mariachi"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Arts plastiques",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "La représentation ; images, réalité et fiction", "keywords": ["représentation du réel", "ressemblance", "fiction", "narration", "photographie", "cadrage", "bande dessinée"], "period": "Année" },
+            { "theme": "La matérialité de l'œuvre ; l'objet et l'œuvre", "keywords": ["matérialité", "matériaux", "texture", "collage", "assemblage", "sculpture", "ready-made"], "period": "Année" },
+            { "theme": "L'œuvre, l'espace, l'auteur, le spectateur", "keywords": ["installation", "in situ", "spectateur", "exposition", "mise en espace", "land art"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Éducation musicale",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Réaliser des projets musicaux d'interprétation ou de création", "keywords": ["chanson", "chanter", "chant choral", "chorale", "interprétation", "polyphonie", "canon", "projet musical"], "period": "Année" },
+            { "theme": "Écouter, comparer, construire une culture musicale commune", "keywords": ["écoute comparée", "timbre", "instrument", "orchestre", "compositeur", "pulsation", "flûte", "œuvre musicale"], "period": "Année" },
+            { "theme": "Explorer, imaginer, créer et produire", "keywords": ["improvisation", "composition", "cellule rythmique", "arrangement", "création musicale"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EPS",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Produire une performance optimale, mesurable à une échéance donnée", "keywords": ["athlétisme", "natation", "demi-fond", "relais", "haies", "lancer du poids", "javelot", "saut en longueur"], "period": "Année" },
+            { "theme": "Adapter ses déplacements à des environnements variés", "keywords": ["escalade", "course d'orientation", "orientation", "sauvetage", "savoir nager", "vtt"], "period": "Année" },
+            { "theme": "S'exprimer devant les autres par une prestation artistique et/ou acrobatique", "keywords": ["acrosport", "gymnastique", "danse", "cirque", "chorégraphie", "arts du cirque"], "period": "Année" },
+            { "theme": "Conduire et maîtriser un affrontement collectif ou interindividuel", "keywords": ["handball", "basket", "volley", "badminton", "rugby", "football", "tennis de table", "sport de combat"], "period": "Année" }
           ]
         }
       ]
@@ -279,56 +433,114 @@
       "subjects": [
         {
           "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Réalisme et naturalisme — Zola, Maupassant", "keywords": ["réalisme", "naturalisme", "Zola", "Maupassant", "roman", "société du XIXe"], "period": "Trimestre 1" },
-            { "theme": "Poésie romantique — amour et lyrisme", "keywords": ["romantisme", "Hugo", "Lamartine", "sonnet", "lyrisme", "mélancolie"], "period": "Trimestre 2" },
-            { "theme": "Littérature et justice — Les Misérables", "keywords": ["justice", "liberté", "Hugo", "Les Misérables", "esclavage", "engagement"], "period": "Trimestre 3" }
+            { "theme": "La fiction pour interroger le réel — réalisme et naturalisme", "keywords": ["réalisme", "naturalisme", "zola", "maupassant", "balzac", "la parure", "horla", "boule de suif", "fantastique"], "period": "Trimestre 1" },
+            { "theme": "Dire l'amour — poésie lyrique et romantique", "keywords": ["dire l'amour", "lyrique", "lyrisme", "romantisme", "lamartine", "ronsard", "sonnet", "baudelaire", "aragon", "poème d'amour"], "period": "Trimestre 2" },
+            { "theme": "Individu et société : confrontations de valeurs ?", "keywords": ["confrontations de valeurs", "tragédie", "corneille", "le cid", "dilemme", "misérables", "molière", "engagement"], "period": "Trimestre 2" },
+            { "theme": "Informer, s'informer, déformer ?", "keywords": ["informer", "presse", "journalisme", "fake news", "article de presse", "médias", "désinformation", "une du journal"], "period": "Trimestre 3" },
+            { "theme": "La ville, lieu de tous les possibles ?", "keywords": ["la ville", "paysage urbain", "flâneur", "poésie urbaine", "verhaeren", "ville tentaculaire"], "period": "Année" },
+            { "theme": "Étude de la langue — subordonnées, modes et voix", "keywords": ["subjonctif", "subordonnée", "conjonctive", "proposition relative", "pronom relatif", "voix passive", "discours rapporté", "conditionnel", "valeurs des temps", "participe passé"], "period": "Année" }
           ]
         },
         {
           "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Calcul littéral et équations", "keywords": ["équation", "calcul littéral", "développement", "factorisation", "algèbre"], "period": "Trimestre 1" },
-            { "theme": "Géométrie — triangles et cercles", "keywords": ["triangle", "cercle", "Pythagore", "théorème", "construction géométrique"], "period": "Trimestre 2" },
-            { "theme": "Proportionnalité et statistiques", "keywords": ["proportionnalité", "pourcentage", "statistiques", "diagramme", "données"], "period": "Trimestre 3" }
+            { "theme": "Nombres relatifs, fractions et puissances", "keywords": ["relatif", "fraction", "inverse d'un nombre", "puissance", "notation scientifique", "opératoire", "diviseur", "nombre premier"], "period": "Trimestre 1" },
+            { "theme": "Calcul littéral et équations", "keywords": ["calcul littéral", "expression littérale", "équation", "développer", "factoriser", "factorisation", "réduire une expression", "distributivité"], "period": "Trimestre 1" },
+            { "theme": "Théorème de Pythagore et triangles", "keywords": ["pythagore", "réciproque", "hypoténuse", "triangle rectangle", "racine carrée", "thalès", "cosinus"], "period": "Trimestre 2" },
+            { "theme": "Transformations et géométrie dans l'espace", "keywords": ["translation", "rotation", "symétrie", "pyramide", "cône", "patron d'un", "parallélépipède", "volume", "solide"], "period": "Trimestre 2" },
+            { "theme": "Proportionnalité, statistiques et probabilités", "keywords": ["proportionnalité", "pourcentage", "statistique", "médiane", "moyenne pondérée", "moyenne d'une série", "probabilité", "fréquence", "quatrième proportionnelle"], "period": "Trimestre 3" },
+            { "theme": "Algorithmique et programmation", "keywords": ["algorithme", "scratch", "programme de calcul", "boucle", "variable", "tableur"], "period": "Année" }
           ]
         },
         {
           "name": "Physique-Chimie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Lumière et optique", "keywords": ["lumière", "optique", "réfraction", "spectre", "couleur", "laser"], "period": "Trimestre 1" },
-            { "theme": "Chimie des solutions et réactions", "keywords": ["solution", "acide", "base", "réaction chimique", "dissolution", "concentration"], "period": "Trimestre 2" },
-            { "theme": "Électricité — circuits et lois", "keywords": ["circuit électrique", "résistance", "tension", "Ohm", "courant", "énergie électrique"], "period": "Trimestre 3" }
+            { "theme": "Des signaux pour observer et communiquer — lumière et son", "keywords": ["lumière", "année-lumière", "optique", "spectre", "laser", "sonore", "propagation", "décibel", "fréquence"], "period": "Trimestre 1" },
+            { "theme": "Organisation et transformations de la matière — solutions et réactions", "keywords": ["molécule", "atome", "transformation chimique", "réaction chimique", "réactif", "ph", "masse volumique", "combustion", "dissolution", "acide"], "period": "Trimestre 2" },
+            { "theme": "L'énergie et ses conversions — électricité", "keywords": ["circuit", "dipôle", "dérivation", "résistance", "tension", "intensité", "loi d'ohm", "ampèremètre", "voltmètre", "énergie électrique"], "period": "Trimestre 3" },
+            { "theme": "Mouvement et interactions", "keywords": ["action mécanique", "interaction", "doi", "vitesse", "gravitation", "poids", "mouvement uniforme", "trajectoire", "référentiel", "chronophotographie"], "period": "Année" }
           ]
         },
         {
           "name": "SVT",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Reproduction et évolution du vivant", "keywords": ["reproduction", "évolution", "Darwin", "sélection naturelle", "espèce", "fossile"], "period": "Trimestre 1" },
-            { "theme": "Corps humain et santé — microbiologie", "keywords": ["microbe", "virus", "bactérie", "système immunitaire", "vaccin", "infection"], "period": "Trimestre 2" },
-            { "theme": "Géologie — roches et paysages", "keywords": ["roche", "minéral", "paysage géologique", "érosion", "sédimentation", "volcanisme"], "period": "Trimestre 3" }
+            { "theme": "Le vivant et son évolution — reproduction et évolution", "keywords": ["reproduction sexuée", "évolution", "darwin", "sélection naturelle", "espèce", "fossile", "biodiversité", "parenté", "adaptation", "classification"], "period": "Trimestre 1" },
+            { "theme": "Le corps humain et la santé — reproduction humaine et sexualité", "keywords": ["reproduction humaine", "puberté", "fécondation", "contraception", "hormone", "spermatozoïde", "ovule", "cycle menstruel"], "period": "Trimestre 2" },
+            { "theme": "Le corps humain et la santé — micro-organismes et immunité", "keywords": ["micro-organisme", "microbe", "virus", "bactérie", "système immunitaire", "anticorps", "vaccin", "antibiotique"], "period": "Trimestre 2" },
+            { "theme": "Le corps humain et la santé — système nerveux et effort", "keywords": ["système nerveux", "neurone", "message nerveux", "cerveau", "effort", "respiration", "rythme cardiaque"], "period": "Trimestre 2" },
+            { "theme": "La planète Terre, l'environnement et l'action humaine", "keywords": ["séisme", "sismique", "volcan", "tectonique", "risques naturels", "climat", "magma", "lithosphère", "érosion"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Les Lumières et la Révolution française", "keywords": ["Lumières", "Voltaire", "Rousseau", "Encyclopédie", "1789", "Révolution française", "Déclaration des droits de l'homme"], "period": "Trimestre 1" },
-            { "theme": "L'Europe industrielle et coloniale au XIXe siècle", "keywords": ["industrialisation", "colonisation", "empire colonial", "ouvrier", "suffrage universel"], "period": "Trimestre 2" },
-            { "theme": "La France républicaine au XIXe siècle", "keywords": ["République", "laïcité", "Jules Ferry", "Dreyfus", "impressionnisme", "Commune de Paris"], "period": "Trimestre 3" }
-          ]
-        },
-        {
-          "name": "Anglais",
-          "themes": [
-            { "theme": "Lieux et formes du pouvoir — monde anglophone", "keywords": ["démocratie", "pouvoir", "États-Unis", "Royaume-Uni", "élection", "médias"], "period": "Trimestre 1" },
-            { "theme": "Fictions et réalités — cinéma et littérature", "keywords": ["cinema", "Hollywood", "littérature anglaise", "roman", "adaptation", "fiction"], "period": "Trimestre 2" }
+            { "theme": "Le XVIIIe siècle : expansions, Lumières et révolutions", "keywords": ["lumières", "philosophe", "traite négrière", "esclavage", "commerce triangulaire", "1789", "révolution française", "monarchie constitutionnelle", "napoléon"], "period": "Trimestre 1" },
+            { "theme": "L'Europe et le monde au XIXe siècle — industrialisation et colonisation", "keywords": ["révolution industrielle", "industrialisation", "ouvrier", "usine", "machine à vapeur", "colonisation", "colonial", "colonies"], "period": "Trimestre 2" },
+            { "theme": "Société, culture et politique dans la France du XIXe siècle", "keywords": ["suffrage universel", "1848", "second empire", "commune de paris", "république", "jules ferry", "laïcité", "dreyfus", "place des femmes"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Urbanisation et métropolisation dans le monde", "keywords": ["mégapole", "urbanisation", "New York", "Tokyo", "Mumbai", "ville mondiale"], "period": "Trimestre 1" },
-            { "theme": "Les inégalités de développement", "keywords": ["développement", "inégalités mondiales", "pauvreté", "IDH", "pays émergents"], "period": "Trimestre 2" }
+            { "theme": "L'urbanisation du monde", "keywords": ["urbanisation", "villes", "mégapole", "mégalopole", "métropole", "périphérie", "étalement urbain", "bidonville", "ville mondiale", "new york"], "period": "Trimestre 1" },
+            { "theme": "Les mobilités humaines transnationales — migrants et tourisme", "keywords": ["migrant", "migration", "migratoire", "mobilité", "réfugié", "tourisme", "touriste"], "period": "Trimestre 2" },
+            { "theme": "Des espaces transformés par la mondialisation", "keywords": ["mondialisation", "maritimisation", "porte-conteneurs", "façade maritime", "états-unis", "etats unis", "afrique de l'ouest", "afrique australe", "afrique orientale"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'État de droit et les libertés — libertés et droits fondamentaux", "keywords": ["liberté", "liberté d'expression", "libertés individuelles", "libertés collectives", "liberté de la presse", "droits fondamentaux", "intérêt général"], "period": "Trimestre 1" },
+            { "theme": "L'État de droit et les libertés — hiérarchie des normes, justice et institutions judiciaires", "keywords": ["état de droit", "hiérarchie des normes", "ordre public", "justice", "justice administrative", "institutions judiciaires", "tribunal", "procès équitable", "présomption d'innocence", "juge des enfants"], "period": "Trimestre 2" },
+            { "theme": "Défendre le cadre démocratique : sécurité et défense nationale", "keywords": ["défense nationale", "sécurité", "terrorisme", "vigipirate", "jdc", "armée"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "École et société — monde anglophone", "keywords": ["british school", "school uniform", "high school", "citizenship", "elections", "democracy", "united kingdom", "united states"], "period": "Trimestre 1" },
+            { "theme": "Langages — arts, cinéma et littérature", "keywords": ["cinema", "hollywood", "screenplay", "film review", "poem", "poetry", "novel", "film adaptation"], "period": "Trimestre 2" },
+            { "theme": "Voyages et migrations", "keywords": ["travel", "immigration", "ellis island", "migrants", "road trip", "journey", "holidays"], "period": "Trimestre 3" },
+            { "theme": "Rencontres avec d'autres cultures", "keywords": ["commonwealth", "australia", "india", "ireland", "multicultural", "traditions", "stereotypes"], "period": "Année" },
+            { "theme": "Grammaire et lexique — temps, modaux, comparaison", "keywords": ["present perfect", "preterit", "past simple", "irregular verbs", "modal", "comparative", "superlative", "be going to"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "École et société", "keywords": ["colegio", "instituto", "familia", "horario", "uniforme", "jóvenes"], "period": "Trimestre 1" },
+            { "theme": "Voyages et migrations", "keywords": ["viaje", "inmigración", "emigración", "frontera", "latinoamérica", "américa latina", "turismo"], "period": "Trimestre 2" },
+            { "theme": "Rencontres avec d'autres cultures — fêtes et traditions", "keywords": ["tradiciones", "fiesta", "muertos", "navidad", "flamenco", "semana santa", "tomatina"], "period": "Trimestre 3" },
+            { "theme": "Langages — arts et expressions", "keywords": ["pintura", "frida kahlo", "picasso", "canción", "el cine", "película", "muralismo", "poema"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Technologie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Les objets et les systèmes techniques : leurs usages et leurs interactions à découvrir et analyser", "keywords": ["objet technique", "évolution des objets", "cycle de vie", "développement durable", "réparabilité", "cybersécurité", "données personnelles", "identité numérique", "intelligence artificielle", "ia"], "period": "Année" },
+            { "theme": "Structure, fonctionnement, comportement : des objets et des systèmes techniques à comprendre", "keywords": ["chaîne d'énergie", "chaîne d'information", "capteur", "actionneur", "microcontrôleur", "arduino", "matériau", "modélisation", "simulation", "réseau"], "period": "Année" },
+            { "theme": "Création, conception, réalisation, innovations : des objets à concevoir et à réaliser", "keywords": ["cahier des charges", "prototype", "innovation", "impression 3d", "croquis", "cao", "programmation", "algorigramme", "scratch", "microbit"], "period": "Année" }
           ]
         }
       ]
@@ -339,65 +551,153 @@
       "subjects": [
         {
           "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Autobiographie et récit de soi", "keywords": ["autobiographie", "journal intime", "mémoire", "identité", "Annie Ernaux"], "period": "Trimestre 1" },
-            { "theme": "Littérature engagée et satire", "keywords": ["satire", "dystopie", "Orwell", "caricature", "engagement", "Prévert"], "period": "Trimestre 2" },
-            { "theme": "Poésie de la Résistance", "keywords": ["résistance", "Eluard", "Aragon", "poésie", "guerre", "liberté"], "period": "Trimestre 3" }
+            { "theme": "Se raconter, se représenter (autobiographie)", "keywords": ["autobiographi", "souvenir", "enfance", "journal intime", "mémoires", "autoportrait", "ernaux", "perec", "sarraute", "rousseau"], "period": "Trimestre 1" },
+            { "theme": "Dénoncer les travers de la société (satire)", "keywords": ["satire", "dénonc", "caricature", "dystopie", "orwell", "voltaire", "candide", "la fontaine", "fable", "la bruyère"], "period": "Trimestre 1" },
+            { "theme": "Visions poétiques du monde", "keywords": ["poème", "poésie", "récitation", "visions poétiques", "sonnet", "alexandrin", "rimbaud", "baudelaire", "ponge", "verlaine"], "period": "Trimestre 2" },
+            { "theme": "Agir dans la cité : individu et pouvoir", "keywords": ["antigone", "anouilh", "témoignage", "engagement", "poésie engagée", "résistance", "eluard", "aragon", "vercors", "primo levi"], "period": "Trimestre 2" },
+            { "theme": "Progrès et rêves scientifiques", "keywords": ["science-fiction", "science fiction", "anticipation", "utopie", "jules verne", "frankenstein", "progrès scientifique", "robot"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Algèbre et équations — Pythagore, Thalès", "keywords": ["équation", "algèbre", "Pythagore", "Thalès", "démonstration", "théorème"], "period": "Trimestre 1" },
-            { "theme": "Fonctions et représentations graphiques", "keywords": ["fonction", "graphique", "coordonnées", "courbe", "variation", "proportionnalité"], "period": "Trimestre 2" },
-            { "theme": "Statistiques et probabilités", "keywords": ["statistiques", "probabilité", "fréquence", "données", "hasard", "échantillon"], "period": "Trimestre 3" }
+            { "theme": "Nombres et calculs — arithmétique et puissances", "keywords": ["arithmétique", "nombres premiers", "facteurs premiers", "fraction", "diviseur", "puissance", "notation scientifique", "racine carrée"], "period": "Trimestre 1" },
+            { "theme": "Calcul littéral et équations", "keywords": ["calcul littéral", "développer", "développement", "factoriser", "factorisation", "identité", "équation", "résoudre", "double distributivité"], "period": "Trimestre 1" },
+            { "theme": "Théorème de Pythagore et de Thalès", "keywords": ["pythagore", "thalès", "réciproque", "triangles semblables", "agrandissement", "contraposée"], "period": "Trimestre 1" },
+            { "theme": "Fonctions linéaires et affines", "keywords": ["fonction", "image", "antécédent", "affine", "linéaire", "coefficient directeur", "ordonnée à l'origine", "représentation graphique", "tableau de valeurs"], "period": "Trimestre 2" },
+            { "theme": "Trigonométrie et homothéties", "keywords": ["trigo", "cosinus", "sinus", "tangente", "côté adjacent", "sohcahtoa", "homothétie"], "period": "Trimestre 2" },
+            { "theme": "Espace — sphère, boule et sections", "keywords": ["sphère", "boule", "section", "solide", "cylindre", "cône", "pyramide", "pavé droit", "volume", "latitude"], "period": "Trimestre 3" },
+            { "theme": "Statistiques et probabilités", "keywords": ["statistique", "proba", "médiane", "étendue", "moyenne pondérée", "fréquence", "diagramme", "échantillon"], "period": "Trimestre 3" },
+            { "theme": "Algorithmique et programmation", "keywords": ["algorithme", "scratch", "programmation", "boucle", "instruction conditionnelle", "script"], "period": "Année" }
           ]
         },
         {
           "name": "Physique-Chimie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Constitution de la matière — atomes et molécules", "keywords": ["atome", "molécule", "tableau périodique", "électron", "ion", "chimie"], "period": "Trimestre 1" },
-            { "theme": "Électricité et énergie électrique", "keywords": ["électricité", "tension", "intensité", "circuit électrique", "énergie", "puissance"], "period": "Trimestre 2" },
-            { "theme": "Mécanique et forces", "keywords": ["force", "mouvement", "vitesse", "gravité", "interaction", "Newton"], "period": "Trimestre 3" }
+            { "theme": "Organisation et transformations de la matière", "keywords": ["atome", "molécule", "les ions", "ion hydrogène", "ph", "acide", "transformation chimique", "réaction chimique", "équation de réaction", "tableau périodique"], "period": "Trimestre 1" },
+            { "theme": "L'énergie et ses conversions — électricité", "keywords": ["électricité", "tension électrique", "voltmètre", "ampèremètre", "intensité", "loi d'ohm", "résistance", "puissance électrique", "énergie électrique", "circuit"], "period": "Trimestre 2" },
+            { "theme": "Mouvement et interactions", "keywords": ["forces", "modéliser une force", "action mécanique", "interaction", "gravitation", "poids", "masse", "vitesse", "mouvement", "référentiel"], "period": "Trimestre 2" },
+            { "theme": "L'énergie et ses conversions — énergie mécanique", "keywords": ["énergie cinétique", "énergie potentielle", "énergie de position", "énergie mécanique", "conversion d'énergie", "conservation de l'énergie", "chaîne énergétique", "distance de freinage", "sécurité routière", "joule"], "period": "Trimestre 3" },
+            { "theme": "Des signaux pour observer et communiquer", "keywords": ["signaux", "signal lumineux", "signal sonore", "lumière", "propagation", "ultrason", "fréquence", "hertz", "décibel"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "SVT",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Génétique et hérédité — l'ADN", "keywords": ["ADN", "gène", "hérédité", "chromosome", "mutation", "génétique", "Mendel"], "period": "Trimestre 1" },
-            { "theme": "Corps humain, santé et comportements", "keywords": ["système nerveux", "cerveau", "addiction", "alimentation", "immunité", "santé"], "period": "Trimestre 2" },
-            { "theme": "Tectonique des plaques et géologie", "keywords": ["tectonique", "séisme", "volcan", "dérive des continents", "Terre", "géologie"], "period": "Trimestre 3" }
+            { "theme": "Le vivant et son évolution — génétique et hérédité", "keywords": ["adn", "génétique", "allèle", "chromosome", "caryotype", "mutation", "hérédité", "méiose", "fécondation", "reproduction sexuée"], "period": "Trimestre 1" },
+            { "theme": "Le vivant et son évolution — évolution et biodiversité", "keywords": ["évolution", "sélection naturelle", "darwin", "biodiversité", "espèce", "classification", "ancêtre commun", "parenté", "fossile", "arbre phylogénétique"], "period": "Trimestre 1" },
+            { "theme": "Le corps humain et la santé — système nerveux et comportements", "keywords": ["système nerveux", "message nerveux", "cerveau", "neurone", "synapse", "réflexe", "addiction", "drogue", "alcool", "sommeil"], "period": "Trimestre 2" },
+            { "theme": "Le corps humain et la santé — immunité et micro-organismes", "keywords": ["immunité", "immunitaire", "anticorps", "lymphocyte", "vaccin", "phagocytose", "micro-organisme", "microbiote", "bactérie", "virus"], "period": "Trimestre 2" },
+            { "theme": "La planète Terre, l'environnement et l'action humaine", "keywords": ["tectonique", "séisme", "volcan", "plaque lithosphérique", "climat", "réchauffement climatique", "ressources naturelles", "écosystème"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Les deux guerres mondiales (1914-1945)", "keywords": ["1914-1918", "tranchée", "Verdun", "1939-1945", "Shoah", "Résistance", "débarquement"], "period": "Trimestre 1" },
-            { "theme": "Le monde depuis 1945 — guerre froide et décolonisation", "keywords": ["guerre froide", "décolonisation", "mur de Berlin", "ONU", "mondialisation"], "period": "Trimestre 2" },
-            { "theme": "La Ve République et la société française contemporaine", "keywords": ["Ve République", "De Gaulle", "mai 68", "immigration", "laïcité"], "period": "Trimestre 3" }
-          ]
-        },
-        {
-          "name": "Anglais",
-          "themes": [
-            { "theme": "Identités et échanges — culture anglophone", "keywords": ["culture anglophone", "États-Unis", "Royaume-Uni", "échange", "identité", "diversité"], "period": "Trimestre 1" },
-            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovation", "technologie", "intelligence artificielle", "environnement", "futur"], "period": "Trimestre 2" },
-            { "theme": "Arts et littérature du monde anglophone", "keywords": ["Shakespeare", "littérature anglaise", "cinema américain", "musique", "pop culture"], "period": "Trimestre 3" }
+            { "theme": "L'Europe, théâtre majeur des guerres totales — la Première Guerre mondiale", "keywords": ["première guerre mondiale", "1ère guerre mondiale", "1914-1918", "14-18", "grande guerre", "guerre totale", "tranchée", "verdun", "arménien", "poilu"], "period": "Trimestre 1" },
+            { "theme": "Démocraties fragilisées et expériences totalitaires dans l'entre-deux-guerres", "keywords": ["entre-deux-guerres", "totalitaire", "totalitarisme", "stalin", "nazi", "fascis", "hitler", "crise de 1929", "révolution russe", "front populaire"], "period": "Trimestre 1" },
+            { "theme": "La Deuxième Guerre mondiale, une guerre d'anéantissement — France défaite et occupée", "keywords": ["seconde guerre mondiale", "deuxième guerre mondiale", "2nde guerre mondiale", "anéantissement", "shoah", "génocide des juifs", "vichy", "collaboration", "résistance", "france libre"], "period": "Trimestre 1" },
+            { "theme": "Le monde depuis 1945 — guerre froide et monde bipolaire", "keywords": ["guerre froide", "mur de berlin", "bipolaire", "rideau de fer", "urss", "onu", "crise de cuba"], "period": "Trimestre 2" },
+            { "theme": "Le monde depuis 1945 — indépendances et décolonisation", "keywords": ["décolonisation", "indépendance", "guerre d'algérie", "tiers-monde", "guerre d'indochine", "bandung", "empire colonial"], "period": "Trimestre 2" },
+            { "theme": "Le monde depuis 1945 — affirmation du projet européen", "keywords": ["construction européenne", "projet européen", "traité de rome", "maastricht", "ceca", "élargissement", "jean monnet"], "period": "Trimestre 2" },
+            { "theme": "Le monde depuis 1945 — enjeux et conflits dans le monde après 1989", "keywords": ["après 1989", "attentats du 11 septembre", "terrorisme", "nouvel ordre mondial", "guerre du golfe", "mondialisation", "chute de l'urss"], "period": "Trimestre 2" },
+            { "theme": "Françaises et Français dans une République repensée — refonder la République, la Ve République", "keywords": ["refond", "1944-1947", "gprf", "ve république", "vème république", "5e république", "1958", "sécurité sociale", "alternance", "cohabitation"], "period": "Trimestre 3" },
+            { "theme": "Femmes et hommes dans la société des années 1950 aux années 1980", "keywords": ["place des femmes", "condition féminine", "émancipation", "féminisme", "mai 68", "loi veil", "droit de vote des femmes", "trente glorieuses", "immigration", "société de consommation"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Dynamiques territoriales de la France", "keywords": ["aménagement du territoire", "métropole", "rural", "inégalités territoriales", "région"], "period": "Trimestre 1" },
-            { "theme": "La France et l'Union européenne", "keywords": ["Union européenne", "frontière", "intégration", "citoyenneté européenne", "Schengen"], "period": "Trimestre 2" },
-            { "theme": "Défis mondiaux — énergie et développement durable", "keywords": ["énergie renouvelable", "climatique", "développement durable", "ressources naturelles", "empreinte carbone"], "period": "Trimestre 3" }
+            { "theme": "Dynamiques territoriales de la France contemporaine", "keywords": ["aire urbaine", "aire d'attraction", "périurbanisation", "productif", "faible densité", "métropolisation", "métropoles"], "period": "Trimestre 1" },
+            { "theme": "Pourquoi et comment aménager le territoire ?", "keywords": ["aménagement du territoire", "aménager", "inégalités territoriales", "outre-mer", "ultramarin", "drom"], "period": "Trimestre 2" },
+            { "theme": "La France et l'Union européenne", "keywords": ["union européenne", "schengen", "citoyenneté européenne", "fonds européens", "zone euro", "francophonie", "zee", "rayonnement", "puissance", "france dans le monde"], "period": "Trimestre 3" }
           ]
         },
         {
           "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "La démocratie et ses institutions", "keywords": ["démocratie", "citoyenneté", "vote", "élection", "droits de l'homme", "constitution"], "period": "Trimestre 1" },
-            { "theme": "Égalité et discrimination", "keywords": ["égalité", "discrimination", "racisme", "sexisme", "laïcité", "tolérance"], "period": "Trimestre 2" }
+            { "theme": "Faire vivre la démocratie — les règles du jeu démocratique", "keywords": ["démocratie", "état de droit", "hiérarchie des normes", "constitution", "élaboration de la loi", "séparation des pouvoirs", "institutions", "union européenne", "symboles de la république", "valeurs de la république"], "period": "Trimestre 1" },
+            { "theme": "Les acteurs du jeu démocratique et leur engagement — l'opinion", "keywords": ["opinion publique", "sondage", "lanceur d'alerte", "débat public", "désinformation", "esprit critique", "médias"], "period": "Trimestre 2" },
+            { "theme": "Les acteurs du jeu démocratique et leur engagement — l'engagement collectif", "keywords": ["engagement", "campagne électorale", "élection", "association", "syndicat", "partis politiques", "vote", "citoyenneté"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Rencontres avec d'autres cultures — identités du monde anglophone", "keywords": ["uk", "usa", "london", "new york", "ireland", "scotland", "british", "commonwealth", "thanksgiving", "native americans"], "period": "Trimestre 1" },
+            { "theme": "Voyages et migrations", "keywords": ["immigration", "migration", "ellis island", "american dream", "road trip", "exile", "travel"], "period": "Trimestre 2" },
+            { "theme": "École et société", "keywords": ["high school", "boarding school", "school uniform", "school life", "bullying", "teenagers", "civil rights", "mlk", "martin luther king"], "period": "Trimestre 2" },
+            { "theme": "Langages — arts et littérature du monde anglophone", "keywords": ["shakespeare", "littérature anglaise", "cinéma américain", "pop culture", "poem", "song", "storytelling"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Rencontres avec d'autres cultures", "keywords": ["hispanoamérica", "conquista", "civilisations précolombiennes", "muertos", "mestizaje", "aztecas", "mayas", "incas"], "period": "Trimestre 1" },
+            { "theme": "Voyages et migrations", "keywords": ["migra", "inmigración", "emigración", "frontera", "exilio", "migrantes", "exiliados"], "period": "Trimestre 2" },
+            { "theme": "École et société", "keywords": ["escuela", "sociedad", "dictadura", "franquismo", "franco", "guerra civil", "derechos", "juventud"], "period": "Trimestre 2" },
+            { "theme": "Langages", "keywords": ["frida kahlo", "picasso", "guernica", "flamenco", "muralismo", "poesía", "refranes", "arte urbano"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Technologie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Les objets et systèmes techniques : usages et interactions", "keywords": ["évolution des objets", "innovation de rupture", "cycle de vie", "réparabilité", "impact environnemental", "recyclage", "objet technique", "objets techniques"], "period": "Année" },
+            { "theme": "Structure, fonctionnement et comportement des objets et systèmes techniques", "keywords": ["chaîne d'énergie", "chaîne d'information", "capteur", "actionneur", "programm", "algorithme", "micro:bit", "microbit", "arduino", "cybersécurité"], "period": "Année" },
+            { "theme": "Création, conception, réalisation, innovations", "keywords": ["cahier des charges", "croquis", "prototype", "modélisation 3d", "fabrication", "matériaux", "conception", "design", "domotique"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Éducation musicale",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Réaliser des projets musicaux d'interprétation ou de création", "keywords": ["chant", "chorale", "interprétation", "polyphonie", "projet musical", "répertoire"], "period": "Année" },
+            { "theme": "Écouter, comparer, construire une culture musicale commune", "keywords": ["commentaire d'écoute", "timbre", "tempo", "orchestre", "genre musical", "instrument", "compositeur"], "period": "Année" },
+            { "theme": "Explorer, imaginer, créer et produire", "keywords": ["création musicale", "arrangement", "improvisation", "polyrythmie", "musique assistée", "mao"], "period": "Année" },
+            { "theme": "Échanger, partager, argumenter et débattre", "keywords": ["argumenter", "débat", "critique musicale", "vocabulaire musical", "jugement esthétique"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Arts plastiques",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "La représentation ; images, réalité et fiction", "keywords": ["représentation", "photomontage", "réalité", "fiction", "photographie", "point de vue", "cadrage"], "period": "Année" },
+            { "theme": "La matérialité de l'œuvre ; l'objet et l'œuvre", "keywords": ["matérialité", "texture", "assemblage", "installation", "ready-made", "sculpture", "collage"], "period": "Année" },
+            { "theme": "L'œuvre, l'espace, l'auteur, le spectateur", "keywords": ["spectateur", "exposition", "in situ", "land art", "musée", "scénographie", "mise en scène"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EPS",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Produire une performance optimale", "keywords": ["demi-fond", "course de vitesse", "relais", "saut en longueur", "lancer de poids", "haies", "athlétisme"], "period": "Année" },
+            { "theme": "Adapter ses déplacements à des environnements variés", "keywords": ["course d'orientation", "escalade", "natation", "sauvetage aquatique", "kayak"], "period": "Année" },
+            { "theme": "S'exprimer devant les autres par une prestation artistique et/ou acrobatique", "keywords": ["acrosport", "danse", "gymnastique", "chorégraphie", "arts du cirque", "acrobatie"], "period": "Année" },
+            { "theme": "Conduire et maîtriser un affrontement collectif ou interindividuel", "keywords": ["handball", "basket", "volley", "badminton", "football", "rugby", "tennis de table", "lutte"], "period": "Année" }
           ]
         }
       ]
@@ -408,20 +708,602 @@
       "subjects": [
         {
           "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "La poésie du Moyen Âge au XVIIIe siècle", "keywords": ["poésie", "sonnet", "Ronsard", "Du Bellay", "Pléiade", "baroque", "fable", "La Fontaine"], "period": "Trimestre 1" },
-            { "theme": "Le roman et le récit du XVIIIe au XXIe siècle", "keywords": ["roman", "réalisme", "Balzac", "Flaubert", "Stendhal", "récit"], "period": "Trimestre 2" },
-            { "theme": "Le théâtre du XVIIe au XXIe siècle", "keywords": ["théâtre", "tragédie", "comédie", "Racine", "Molière", "Marivaux"], "period": "Trimestre 3" },
-            { "theme": "La littérature d'idées du XVIe au XVIIIe siècle", "keywords": ["essai", "Montaigne", "Lumières", "Voltaire", "Candide", "argumentation"], "period": "Trimestre 3" }
+            { "theme": "La poésie du Moyen Âge au XVIIIe siècle", "keywords": ["poésie", "poème", "poète", "sonnet", "ronsard", "du bellay", "pléiade", "fable", "villon", "alexandrin"], "period": "Trimestre 1" },
+            { "theme": "La littérature d'idées et la presse du XIXe au XXIe siècle", "keywords": ["presse", "journalisme", "éditorial", "j'accuse", "argumenta", "essai", "discours", "plaidoyer", "réquisitoire", "hugo"], "period": "Trimestre 1" },
+            { "theme": "Le roman et le récit du XVIIIe au XXIe siècle", "keywords": ["roman", "réalisme", "naturalisme", "balzac", "flaubert", "maupassant", "zola", "incipit", "narrateur", "focalisation"], "period": "Trimestre 2" },
+            { "theme": "Le théâtre du XVIIe au XXIe siècle", "keywords": ["théâtre", "tragédie", "comédie", "scène", "tirade", "monologue", "dramaturg", "molière", "marivaux", "phèdre"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Nombres et calculs : arithmétique et nombres réels", "keywords": ["arithmétique", "nombre premier", "nombres premiers", "diviseur", "ensembles de nombres", "rationnel", "réels", "intervalle", "valeur absolue", "racine carrée"], "period": "Année" },
+            { "theme": "Algèbre : expressions, équations, inéquations", "keywords": ["factoris", "développer", "identité remarquable", "identités remarquables", "produit nul", "équation produit", "équation quotient", "inéquation", "tableau de signes", "calcul littéral"], "period": "Année" },
+            { "theme": "Vecteurs et problèmes de géométrie", "keywords": ["vecteur", "colinéa", "déterminant", "chasles", "translation", "coordonnées", "repère"], "period": "Année" },
+            { "theme": "Droites du plan", "keywords": ["équation de droite", "équations de droites", "équation réduite", "équation cartésienne", "coefficient directeur", "vecteur directeur", "ordonnée à l'origine", "droites parallèles", "droites sécantes", "point d'intersection"], "period": "Année" },
+            { "theme": "Fonctions : représentation algébrique et graphique", "keywords": ["affine", "fonctions de référence", "généralités sur les fonctions", "antécédent", "ensemble de définition", "courbe représentative", "parité", "fonction carré", "fonction inverse", "fonction cube"], "period": "Année" },
+            { "theme": "Variations et extremums d'une fonction", "keywords": ["tableau de variations", "sens de variation", "croissante", "décroissante", "extremum", "extrema", "monotonie"], "period": "Année" },
+            { "theme": "Information chiffrée et statistique descriptive", "keywords": ["pourcentage", "taux d'évolution", "coefficient multiplicateur", "évolutions successives", "statistique", "médiane", "quartile", "écart type", "écart-type", "boîte à moustache"], "period": "Année" },
+            { "theme": "Croisement de deux variables qualitatives et probabilités", "keywords": ["tableau croisé", "tableaux croisés", "fréquence conditionnelle", "fréquence marginale", "probabilité", "probabilité conditionnelle", "arbre pondéré", "événement contraire"], "period": "Année" },
+            { "theme": "Vocabulaire ensembliste et logique", "keywords": ["ensembliste", "appartenance", "implication", "contre-exemple", "raisonnement par l'absurde", "condition nécessaire", "condition suffisante", "quantificateur"], "period": "Année" },
+            { "theme": "Algorithmique et programmation", "keywords": ["algorithme", "algorithmique", "python", "boucle", "instruction conditionnelle", "programmation"], "period": "Année" },
+            { "theme": "Automatismes", "keywords": ["automatismes", "calcul mental", "fractions", "proportionnalité", "questions flash", "puissances"], "period": "Année" }
           ]
         },
         {
           "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
           "themes": [
-            { "theme": "Le monde méditerranéen : empreintes de l'Antiquité et du Moyen Âge", "keywords": ["Athènes", "Rome", "Méditerranée", "chrétienté", "islam", "al-Andalus"], "period": "Trimestre 1" },
-            { "theme": "XVe-XVIe siècles : un nouveau rapport au monde", "keywords": ["Renaissance", "humanisme", "imprimerie", "Gutenberg", "grandes découvertes", "Magellan"], "period": "Trimestre 2" },
-            { "theme": "L'État à l'époque moderne", "keywords": ["monarchie absolue", "Louis XIV", "Versailles", "Ancien Régime", "parlements"], "period": "Trimestre 2" },
-            { "theme": "Dynamiques et ruptures dans les sociétés des XVIIe et XVIIIe siècles", "keywords": ["révolution scientifique", "Lumières", "esclavage", "Révolution française", "1789"], "period": "Trimestre 3" }
+            { "theme": "Le monde méditerranéen : empreintes de l'Antiquité et du Moyen Âge", "keywords": ["méditerran", "athènes", "athénien", "périclès", "romain", "byzance", "chrétienté", "islam", "charlemagne", "croisade"], "period": "Trimestre 1" },
+            { "theme": "XVe-XVIe siècles : un nouveau rapport au monde, un temps de mutation intellectuelle", "keywords": ["renaissance", "humanisme", "imprimerie", "christophe colomb", "magellan", "grandes découvertes", "conquistador", "réforme", "luther", "érasme"], "period": "Trimestre 2" },
+            { "theme": "L'État à l'époque moderne : France et Angleterre", "keywords": ["monarchie absolue", "absolutisme", "louis xiv", "versailles", "glorieuse révolution", "bill of rights", "monarchie parlementaire", "cromwell"], "period": "Trimestre 2" },
+            { "theme": "Dynamiques et ruptures dans les sociétés des XVIIe et XVIIIe siècles", "keywords": ["lumières", "voltaire", "révolution scientifique", "galilée", "encyclopédie", "société d'ordres", "privilège", "traite négrière", "commerce triangulaire", "esclavage"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Sociétés et environnements : des équilibres fragiles", "keywords": ["développement durable", "risque", "ressource", "eau", "changement climatique", "transition énergétique", "énergie", "biodiversité", "vulnérabilité"], "period": "Trimestre 1" },
+            { "theme": "Territoires, populations et développement : quelles dynamiques ?", "keywords": ["population", "démographi", "fécondité", "vieillissement", "idh", "développement humain", "pays en développement", "inégalités"], "period": "Trimestre 2" },
+            { "theme": "Des mobilités généralisées", "keywords": ["mobilit", "migrat", "migrant", "réfugié", "touris", "diaspora"], "period": "Trimestre 2" },
+            { "theme": "L'Afrique australe : un espace en profonde mutation", "keywords": ["afrique australe", "afrique du sud", "apartheid", "johannesburg", "mozambique", "sadc", "mandela"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'État de droit garantit les droits et libertés et un pluralisme démocratique", "keywords": ["état de droit", "libertés fondamentales", "ddhc", "constitution de 1958", "pluralisme", "séparation des pouvoirs", "conseil constitutionnel", "laïcité", "loi de 1905"], "period": "Trimestre 1" },
+            { "theme": "Liberté et responsabilité : l'exemple de l'information", "keywords": ["médias", "éducation aux médias", "emi", "désinformation", "fake news", "liberté de la presse", "réseaux sociaux", "esprit critique", "complotisme"], "period": "Trimestre 2" },
+            { "theme": "Droits et responsabilité : protection de l'environnement et sauvegarde de la biodiversité", "keywords": ["environnement", "biodiversité", "charte de l'environnement", "développement durable", "climat", "écocitoyen"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Constitution de la matière : corps purs, mélanges et solutions", "keywords": ["corps pur", "mélange", "espèce chimique", "soluté", "concentration", "dissolution", "dilution", "étalonnage", "masse volumique", "chromatographie"], "period": "Trimestre 1" },
+            { "theme": "Modélisation de la matière à l'échelle microscopique", "keywords": ["atome", "électron", "noyau", "isotope", "tableau périodique", "molécule", "quantité de matière", "mole", "lewis", "ion monoatomique"], "period": "Trimestre 1" },
+            { "theme": "Transformations physiques, chimiques et nucléaires", "keywords": ["transformation chimique", "transformation physique", "réactif limitant", "équation de réaction", "stœchiométrie", "stoechiométrie", "changement d'état", "synthèse chimique", "nucléaire", "exothermique"], "period": "Trimestre 2" },
+            { "theme": "Mouvement et interactions", "keywords": ["mouvement", "vitesse", "référentiel", "trajectoire", "chronophotographie", "principe d'inertie", "action mécanique", "diagramme objet", "gravitation", "poids"], "period": "Trimestre 2" },
+            { "theme": "Ondes et signaux : émission et perception d'un son", "keywords": ["sonore", "fréquence", "timbre", "décibel", "ultrason", "audible"], "period": "Trimestre 3" },
+            { "theme": "Ondes et signaux : vision et image", "keywords": ["lumière blanche", "réfraction", "snell", "lentille", "convergente", "distance focale", "grandissement", "spectre", "dispersion", "longueur d'onde"], "period": "Trimestre 3" },
+            { "theme": "Ondes et signaux : signaux et capteurs", "keywords": ["ohm", "tension électrique", "intensité du courant", "résistance", "capteur", "circuit électrique", "dipôle"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'organisme pluricellulaire, un ensemble de cellules spécialisées", "keywords": ["cellule", "pluricellulaire", "organite", "tissu", "microscope", "spécialisation cellulaire", "matrice extracellulaire", "adn", "membrane"], "period": "Trimestre 1" },
+            { "theme": "Le métabolisme des cellules", "keywords": ["métabolisme", "photosynthèse", "respiration cellulaire", "fermentation", "enzyme", "chloroplaste", "mitochondrie"], "period": "Trimestre 1" },
+            { "theme": "Biodiversité, résultat et étape de l'évolution", "keywords": ["biodiversité", "évolution", "sélection naturelle", "dérive génétique", "allèle", "mutation", "espèce", "variabilité"], "period": "Trimestre 1" },
+            { "theme": "Géosciences et dynamique des paysages", "keywords": ["paysage", "érosion", "altération", "roche sédimentaire", "roche magmatique", "sédiment", "granite", "relief"], "period": "Trimestre 2" },
+            { "theme": "Agrosystèmes et développement durable", "keywords": ["agrosystème", "agriculture", "engrais", "pesticide", "humus", "intrant", "fertilisation", "sol", "rendement"], "period": "Trimestre 2" },
+            { "theme": "Procréation et sexualité humaine", "keywords": ["procréation", "sexualité", "contracep", "puberté", "hormon", "cycle menstruel", "ist", "fécondation", "ovaire", "testicule"], "period": "Trimestre 3" },
+            { "theme": "Microorganismes et santé", "keywords": ["microbiote", "micro-organisme", "microorganisme", "bactérie", "virus", "vaccin", "pathogène", "maladie vectorielle", "paludisme", "antibiotique"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SES",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Comment les économistes, les sociologues et les politistes raisonnent-ils et travaillent-ils ?", "keywords": ["enquête", "sondage", "échantillon", "corrélation", "causalité", "sciences sociales"], "period": "Trimestre 1" },
+            { "theme": "Comment crée-t-on des richesses et comment les mesure-t-on ?", "keywords": ["production", "pib", "valeur ajoutée", "facteurs de production", "productivité", "production non marchande"], "period": "Trimestre 1" },
+            { "theme": "Comment se forment les prix sur un marché ?", "keywords": ["l'offre", "la demande", "prix d'équilibre", "marché concurrentiel", "un marché", "concurrence", "courbe d'offre", "courbe de demande", "formation des prix", "preneur de prix"], "period": "Trimestre 2" },
+            { "theme": "Comment devenons-nous des acteurs sociaux ?", "keywords": ["socialisation", "socialisation primaire", "socialisation secondaire", "normes et valeurs", "instances de socialisation", "socialisation de genre"], "period": "Trimestre 2" },
+            { "theme": "Comment s'organise la vie politique ?", "keywords": ["vie politique", "pouvoir politique", "parti politique", "partis politiques", "démocratie", "régime parlementaire", "régime présidentiel", "élection", "vote", "institution"], "period": "Trimestre 3" },
+            { "theme": "Quelles relations entre le diplôme, l'emploi et le salaire ?", "keywords": ["diplôme", "taux d'emploi", "chômage", "salaire", "capital humain", "insertion professionnelle", "qualification"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SNT",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Internet", "keywords": ["internet", "protocole", "tcp", "adresse ip", "routeur", "paquet", "dns", "serveur"], "period": "Année" },
+            { "theme": "Le Web", "keywords": ["web", "html", "css", "url", "navigateur", "http", "moteur de recherche", "hypertexte"], "period": "Année" },
+            { "theme": "Les réseaux sociaux", "keywords": ["réseaux sociaux", "graphe social", "théorie des graphes", "identité numérique", "e-réputation", "cyberharcèlement", "petit monde", "recommandation"], "period": "Année" },
+            { "theme": "Les données structurées et leur traitement", "keywords": ["données structurées", "csv", "métadonnées", "base de données", "open data", "cloud", "descripteur"], "period": "Année" },
+            { "theme": "Localisation, cartographie et mobilité", "keywords": ["gps", "géolocalisation", "openstreetmap", "cartographie", "nmea", "itinéraire", "satellite", "galileo"], "period": "Année" },
+            { "theme": "Informatique embarquée et objets connectés", "keywords": ["objets connectés", "système embarqué", "capteur", "actionneur", "micro:bit", "microbit", "iot", "robot", "interface homme-machine"], "period": "Année" },
+            { "theme": "La photographie numérique", "keywords": ["photographie numérique", "pixel", "image numérique", "rvb", "rgb", "exif", "capteur photographique", "appareil photo", "traitement d'image"], "period": "Année" },
+            { "theme": "Notions transversales de programmation", "keywords": ["python", "programmation", "algorithme", "boucle", "instruction conditionnelle"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Représentation de soi et rapport à autrui", "keywords": ["identity", "identité", "self", "self-image", "selfie", "stereotype", "portrait", "social media"], "period": "Année" },
+            { "theme": "Vivre entre générations", "keywords": ["generation", "generation gap", "grandparent", "elderly", "elders", "teenager", "adolescence", "family"], "period": "Année" },
+            { "theme": "Le passé dans le présent", "keywords": ["heritage", "patrimoine", "memory", "mémoire", "legacy", "commemoration", "tradition"], "period": "Année" },
+            { "theme": "Défis et transitions", "keywords": ["climate", "global warming", "pollution", "sustainability", "environment", "urban", "activism", "protest"], "period": "Année" },
+            { "theme": "Créer et recréer", "keywords": ["artist", "artwork", "art", "film", "creativity", "remake", "adaptation", "street art", "museum", "remix"], "period": "Année" },
+            { "theme": "Les pays du Commonwealth : héritages, unité, diversité", "keywords": ["commonwealth", "india", "australia", "canada", "south africa", "british empire", "colonial", "independence", "aboriginal"], "period": "Année" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "1re",
+      "cycle": 5,
+      "subjects": [
+        {
+          "name": "Français",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Théâtre du XVIIe au XXIe siècle", "keywords": ["théâtre", "corneille", "le menteur", "musset", "badine", "perdican", "sarraute", "pour un oui ou pour un non", "jeux du coeur", "dorante"], "period": "Année" },
+            { "theme": "Roman et récit du Moyen Âge au XXIe siècle", "keywords": ["chrétien de troyes", "chevalier de la charrette", "lancelot", "zola", "bouille", "naturalisme", "schwarz", "télumée", "invention de l'amour", "le roman"], "period": "Année" },
+            { "theme": "Poésie du XIXe au XXIe siècle", "keywords": ["poésie", "poème", "sonnet", "rimbaud", "douai", "ponge", "atelier du poète", "dorion", "mes forêts", "fleurs du mal"], "period": "Année" },
+            { "theme": "Littérature d'idées du XVIe au XVIIIe siècle", "keywords": ["boétie", "servitude volontaire", "fontenelle", "pluralité des mondes", "graffigny", "péruvienne", "argumentation", "l'essai", "humanisme", "lumières"], "period": "Année" },
+            { "theme": "Étude de la langue (grammaire)", "keywords": ["grammaire", "subordonnée", "proposition relative", "circonstancielle", "phrase interrogative", "interrogation directe", "interrogation indirecte", "négation", "syntaxe"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'Europe face aux révolutions", "keywords": ["révolution française", "terreur", "consulat", "napoléon ier", "premier empire", "code civil", "congrès de vienne", "restauration", "1830", "printemps des peuples"], "period": "Trimestre 1" },
+            { "theme": "La France dans l'Europe des nationalités : politique et société (1848-1871)", "keywords": ["seconde république", "deuxième république", "second empire", "napoléon iii", "suffrage universel", "unification", "unité italienne", "bismarck", "1848", "1870"], "period": "Trimestre 1" },
+            { "theme": "La Troisième République avant 1914 : un régime politique, un empire colonial", "keywords": ["troisième république", "iiie république", "république opportuniste", "commune de paris", "jules ferry", "dreyfus", "1905", "laïcité", "colonisation", "empire colonial"], "period": "Trimestre 2" },
+            { "theme": "La Première Guerre mondiale : le « suicide de l'Europe » et la fin des empires européens", "keywords": ["guerre mondiale", "grande guerre", "14-18", "1914-1918", "verdun", "tranchées", "génocide arménien", "révolution russe", "empire ottoman", "traité de versailles"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "La métropolisation : un processus mondial différencié", "keywords": ["métropolisation", "métropole", "mégapole", "ville mondiale", "villes", "urbaine", "urbanisation", "étalement urbain", "gentrification", "aire d'attraction"], "period": "Trimestre 1" },
+            { "theme": "Une diversification des espaces et des acteurs de la production", "keywords": ["productif", "chaîne de valeur", "firme transnationale", "ftn", "délocalisation", "technopôle", "zone industrialo-portuaire", "zip", "valorisation locale"], "period": "Trimestre 2" },
+            { "theme": "Les espaces ruraux : multifonctionnalité ou fragmentation ?", "keywords": ["rural", "ruraux", "multifonctionnalité", "agriculture", "déprise", "fragmentation", "campagnes", "politique agricole commune", "pac", "politiques européennes"], "period": "Trimestre 2" },
+            { "theme": "La Chine : des recompositions spatiales multiples", "keywords": ["la chine", "en chine", "chinois", "recompositions spatiales", "pékin", "shanghai", "shenzhen", "littoralisation", "routes de la soie", "hukou"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Les valeurs et les principes de la République à l'épreuve de la cohésion sociale", "keywords": ["cohésion sociale", "fraternité", "solidarité", "égalité femmes-hommes", "parité", "sexisme", "laïcité", "pluralisme", "loi de 1905"], "period": "Trimestre 1" },
+            { "theme": "Les valeurs et les principes de la République à l'épreuve de la cohésion sociale (discriminations, société inclusive)", "keywords": ["discrimination", "racisme", "antisémitisme", "xénophobie", "homophobie", "loi pleven", "loi gayssot", "société inclusive"], "period": "Trimestre 2" },
+            { "theme": "La République et la Nation (une République indivisible et décentralisée)", "keywords": ["indivisible", "indivisibilité", "décentralisation", "collectivités", "langues régionales", "outre-mer", "ultramarin", "loi de 1982"], "period": "Trimestre 2" },
+            { "theme": "La République et la Nation (communauté nationale, nationalité et citoyenneté, mémoires, défense)", "keywords": ["nationalité", "citoyenneté", "naturalisation", "droit du sol", "droit du sang", "mémoire", "commémoration", "défense nationale", "sécurité nationale", "société numérique"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Enseignement scientifique",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Une longue histoire de la matière", "keywords": ["noyau", "radioactiv", "demi-vie", "nucléosynthèse", "cristal", "cristaux", "maille", "atome", "élément chimique", "cellule"], "period": "Trimestre 1" },
+            { "theme": "Le Soleil, notre source d'énergie", "keywords": ["soleil", "solaire", "fusion nucléaire", "corps noir", "loi de wien", "bilan radiatif", "albédo", "effet de serre", "photosynthèse", "bilan thermique"], "period": "Trimestre 2" },
+            { "theme": "La Terre, un astre singulier", "keywords": ["ératosthène", "méridien", "triangulation", "rayon de la terre", "forme de la terre", "âge de la terre", "héliocentrisme", "copernic", "galilée", "kepler"], "period": "Trimestre 2" },
+            { "theme": "Son et musique, porteurs d'information", "keywords": ["sonore", "son musical", "fréquence", "harmonique", "gamme", "octave", "pythagore", "décibel", "audition", "numérisation"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Automatismes", "keywords": ["automatisme", "calcul mental", "pourcentage", "taux d'évolution", "évolutions successives", "ordre de grandeur", "produit nul", "coefficient directeur"], "period": "Année" },
+            { "theme": "Analyse de l'information chiffrée", "keywords": ["information chiffrée", "tableau croisé", "nuage de points", "ajustement affine", "point moyen", "interpolation", "extrapolation", "tableur"], "period": "Année" },
+            { "theme": "Phénomènes aléatoires", "keywords": ["probabilit", "conditionnelle", "arbre pondéré", "arbre de probabilit", "indépendance", "bernoulli", "simulation", "loi de probabilité"], "period": "Année" },
+            { "theme": "Phénomènes d'évolution, modélisation par des fonctions", "keywords": ["suite arithmétique", "suite géométrique", "fonction affine", "polynôme", "second degré", "parabole", "exponentielle", "nombre dérivé", "tangente", "modélisation"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Identités et échanges", "keywords": ["identities", "exchanges", "identité", "migration", "exile", "melting pot", "globali", "american dream", "ellis island"], "period": "Année" },
+            { "theme": "Espace privé et espace public", "keywords": ["private space", "public space", "privacy", "espace privé", "espace public", "surveillance", "gender roles"], "period": "Année" },
+            { "theme": "Art et pouvoir", "keywords": ["art and power", "propaganda", "censorship", "protest song", "street art", "banksy", "propagande", "censure"], "period": "Année" },
+            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["mondes virtuels", "social media", "social network", "réseaux sociaux", "fake news", "cyberbullying", "screen addiction", "online privacy"], "period": "Année" },
+            { "theme": "Fictions et réalités", "keywords": ["dystopia", "utopia", "dystopie", "science fiction", "sci-fi", "orwell", "1984", "fictions et réalités", "fake or real", "hoax"], "period": "Année" },
+            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovations scientifiques", "artificial intelligence", "bioethics", "genetic", "gmo", "cloning", "clone", "robot", "climate change"], "period": "Année" },
+            { "theme": "Diversité et inclusion", "keywords": ["diversity", "inclusion", "civil rights", "segregation", "racism", "minorit", "black lives matter", "discrimination", "rosa parks", "martin luther king"], "period": "Année" },
+            { "theme": "Territoire et mémoire", "keywords": ["territor", "memory", "memorial", "commemoration", "native american", "colonial", "heritage", "mémoire"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "track": "specialite",
+          "specialty": "Mathématiques",
+          "themes": [
+            { "theme": "Automatismes", "keywords": ["automatisme", "calcul mental", "épreuve anticipée", "pourcentage", "taux d'évolution", "coefficient multiplicateur", "proportion", "lecture graphique"], "period": "Année" },
+            { "theme": "Suites numériques, modèles discrets", "keywords": ["suites", "arithmétique", "suite géométrique", "récurrence", "terme général", "somme des termes", "limite d'une suite"], "period": "Année" },
+            { "theme": "Équations, fonctions polynômes du second degré", "keywords": ["second degré", "trinôme", "discriminant", "forme canonique", "parabole", "racines", "factorisation"], "period": "Année" },
+            { "theme": "Dérivation", "keywords": ["nombre dérivé", "dérivée", "tangente", "taux de variation", "dérivation", "approximation affine", "approximation linéaire"], "period": "Année" },
+            { "theme": "Variations et courbes représentatives des fonctions", "keywords": ["tableau de variation", "sens de variation", "variations d'une fonction", "croissante", "extremum", "signe de la dérivée", "courbe représentative", "racine carrée"], "period": "Année" },
+            { "theme": "Fonction exponentielle", "keywords": ["exponentiel", "exp(", "fonction exp", "f'=f", "e^x"], "period": "Année" },
+            { "theme": "Trigonométrie", "keywords": ["trigo", "radian", "sinus", "angles associés", "mesure principale", "fonction périodique", "périodicité", "parité"], "period": "Année" },
+            { "theme": "Calcul vectoriel et produit scalaire", "keywords": ["produit scalaire", "kashi", "orthogonalité", "projeté orthogonal", "norme d'un vecteur", "formule de polarisation"], "period": "Année" },
+            { "theme": "Géométrie repérée", "keywords": ["équation cartésienne", "vecteur normal", "équation d'un cercle", "cercle de centre", "vecteur directeur", "géométrie repérée", "droite"], "period": "Année" },
+            { "theme": "Probabilités conditionnelles et indépendance", "keywords": ["conditionnelle", "arbre pondéré", "arbre de proba", "probabilités totales", "événements indépendants", "indépendance", "partition de l'univers", "bernoulli", "épreuves indépendantes"], "period": "Année" },
+            { "theme": "Variables aléatoires réelles", "keywords": ["variable aléatoire", "variables aléatoires", "loi de probabilité", "espérance", "variance", "écart type", "écart-type", "gain moyen", "huygens"], "period": "Année" },
+            { "theme": "Algorithmique et programmation", "keywords": ["python", "algorithme", "seuil", "méthode de newton", "tableur", "simulation"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "track": "specialite",
+          "specialty": "Physique-Chimie",
+          "themes": [
+            { "theme": "Suivi de l'évolution d'un système siège d'une transformation", "keywords": ["tableau d'avancement", "réactif limitant", "titrage", "dosage", "équivalence", "oxydo", "oxydant", "réducteur", "demi-équation"], "period": "Année" },
+            { "theme": "Détermination d'une quantité de matière (spectrophotométrie)", "keywords": ["absorbance", "beer-lambert", "spectrophotom", "courbe d'étalonnage", "volume molaire", "quantité de matière", "concentration", "masse molaire"], "period": "Année" },
+            { "theme": "De la structure des entités aux propriétés physiques de la matière", "keywords": ["lewis", "électronégativité", "polarité", "polaire", "géométrie", "liaison hydrogène", "cohésion", "solubilité", "miscibilité"], "period": "Année" },
+            { "theme": "Propriétés physico-chimiques, synthèses et combustions d'espèces chimiques organiques", "keywords": ["groupe caractéristique", "groupes caractéristiques", "nomenclature", "chimie organique", "alcool", "aldéhyde", "cétone", "acide carboxylique", "combustion", "rendement d'une synthèse"], "period": "Année" },
+            { "theme": "Interactions fondamentales et introduction à la notion de champ", "keywords": ["coulomb", "gravitation", "champ électrique", "électrostatique", "lignes de champ"], "period": "Année" },
+            { "theme": "Description d'un fluide au repos", "keywords": ["fluide", "pression", "mariotte", "masse volumique", "force pressante"], "period": "Année" },
+            { "theme": "Mouvement d'un système", "keywords": ["deuxième loi de newton", "seconde loi de newton", "vecteur vitesse", "vecteurs vitesse", "principe d'inertie", "somme des forces", "chute libre"], "period": "Année" },
+            { "theme": "L'énergie : conversions et transferts", "keywords": ["énergie cinétique", "énergie potentielle", "énergie mécanique", "travail d'une force", "effet joule", "puissance électrique", "bilan énergétique"], "period": "Année" },
+            { "theme": "Ondes mécaniques", "keywords": ["onde mécanique", "ondes mécaniques", "onde progressive", "ondes progressives", "célérité", "longueur d'onde", "périodique", "sonore", "ultrason"], "period": "Année" },
+            { "theme": "La lumière : images et couleurs, modèles ondulatoire et particulaire", "keywords": ["lentille", "relation de conjugaison", "grandissement", "synthèse additive", "synthèse soustractive", "photon", "constante de planck", "photoélectrique"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "track": "specialite",
+          "specialty": "SVT",
+          "themes": [
+            { "theme": "Transmission, variation et expression du patrimoine génétique", "keywords": ["mitose", "méiose", "réplication", "mutation", "transcription", "traduction", "adn", "division cellulaire", "chromosome"], "period": "Année" },
+            { "theme": "Les enzymes, des biomolécules aux propriétés catalytiques", "keywords": ["enzyme", "enzymatique", "catalyse", "site actif", "substrat", "vitesse initiale", "dénaturation"], "period": "Année" },
+            { "theme": "La dynamique interne de la Terre", "keywords": ["lithosphère", "dorsale", "subduction", "sismique", "séisme", "tectonique des plaques", "manteau", "géotherm", "croûte", "structure du globe"], "period": "Année" },
+            { "theme": "Écosystèmes et services environnementaux", "keywords": ["écosystème", "services écosystémiques", "réseau trophique", "agrosystème", "interactions biotiques", "cycle de la matière", "ingénierie écologique"], "period": "Année" },
+            { "theme": "Variation génétique et santé", "keywords": ["mucoviscidose", "maladie génétique", "cancer", "oncogène", "antibiotique", "antibiorésistance", "sélection naturelle"], "period": "Année" },
+            { "theme": "Le fonctionnement du système immunitaire humain", "keywords": ["immunit", "innée", "inflammat", "lymphocyte", "anticorps", "vaccination", "phagocytose", "antigène"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "NSI",
+          "track": "specialite",
+          "specialty": "NSI",
+          "themes": [
+            { "theme": "Représentation des données : types et valeurs de base", "keywords": ["binaire", "hexadécimal", "complément à deux", "flottant", "booléen", "de vérité", "encodage", "unicode"], "period": "Année" },
+            { "theme": "Représentation des données : types construits", "keywords": ["tuple", "p-uplet", "tableau indexé", "tableaux", "listes", "dictionnaire", "en compréhension", "matrice"], "period": "Année" },
+            { "theme": "Traitement de données en tables", "keywords": ["csv", "données en table", "tri d'une table", "fusion de tables", "descripteur", "recherche dans une table"], "period": "Année" },
+            { "theme": "Interactions entre l'homme et la machine sur le Web", "keywords": ["html", "css", "javascript", "formulaire", "requête http", "méthode get", "méthode post", "client-serveur"], "period": "Année" },
+            { "theme": "Architectures matérielles et systèmes d'exploitation", "keywords": ["von neumann", "porte logique", "portes logiques", "circuit combinatoire", "système d'exploitation", "linux", "bit alterné", "tcp", "réseau", "ligne de commande"], "period": "Année" },
+            { "theme": "Langages et programmation", "keywords": ["spécification", "précondition", "assert", "jeu de test", "jeux de test", "docstring", "boucle", "while", "instruction conditionnelle"], "period": "Année" },
+            { "theme": "Algorithmique", "keywords": ["tri par insertion", "tri par sélection", "algorithmes de tri", "dichotom", "glouton", "plus proches voisins", "knn", "k-nn", "complexité", "invariant"], "period": "Année" },
+            { "theme": "Histoire de l'informatique", "keywords": ["turing", "histoire de l'informatique", "ada lovelace", "babbage", "eniac"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "SI",
+          "track": "specialite",
+          "specialty": "SI",
+          "themes": [
+            { "theme": "Innover : créativité et design de produits", "keywords": ["innovation technologique", "design produit", "cahier des charges fonctionnel", "démarche de projet", "créativité", "éco-conception", "prototype"], "period": "Année" },
+            { "theme": "Analyser les produits existants", "keywords": ["sysml", "diagramme de blocs", "chaîne de puissance", "chaîne d'information", "exigences", "cas d'utilisation", "architecture fonctionnelle"], "period": "Année" },
+            { "theme": "Modéliser et résoudre : mécanique", "keywords": ["statique", "pfs", "cinématique", "liaison", "moment d'une force", "actions mécaniques"], "period": "Année" },
+            { "theme": "Modéliser et résoudre : énergie et électricité", "keywords": ["loi d'ohm", "loi des mailles", "loi des nœuds", "pertes énergétiques", "rendement", "convertisseur", "moteur électrique"], "period": "Année" },
+            { "theme": "Expérimenter et simuler", "keywords": ["simulation numérique", "chaîne d'acquisition", "capteur", "écart modèle-réel", "modèle multiphysique", "protocole expérimental", "incertitude"], "period": "Année" },
+            { "theme": "Information et numérique : programmation et commande", "keywords": ["arduino", "microcontrôleur", "algorigramme", "diagramme d'états", "programmation python", "commande d'un système", "codage de l'information"], "period": "Année" },
+            { "theme": "Communiquer et conduire un projet", "keywords": ["revue de projet", "croquis", "carte mentale", "diagramme de gantt", "présentation orale", "mini-projet"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "SES",
+          "track": "specialite",
+          "specialty": "SES",
+          "themes": [
+            { "theme": "Marché concurrentiel", "keywords": ["marché concurrentiel", "offre et demande", "prix d'équilibre", "surplus", "élasticité", "preneur de prix", "courbe d'offre"], "period": "Année" },
+            { "theme": "Marchés imparfaitement concurrentiels", "keywords": ["imparfaitement", "monopole", "oligopole", "pouvoir de marché", "faiseur de prix", "entente", "cartel", "concurrence imparfaite", "dilemme du prisonnier"], "period": "Année" },
+            { "theme": "Défaillances du marché", "keywords": ["externalité", "bien commun", "biens communs", "bien collectif", "biens collectifs", "asymétrie d'information", "aléa moral", "sélection adverse", "défaillance"], "period": "Année" },
+            { "theme": "Financement des agents économiques", "keywords": ["financement", "se financent", "épargne", "taux d'intérêt", "autofinancement", "capacité de financement", "crédit", "marché financier", "marchés financiers"], "period": "Année" },
+            { "theme": "Monnaie et création monétaire", "keywords": ["monnaie", "création monétaire", "agrégats monétaires", "masse monétaire", "base monétaire", "banque centrale", "bce", "politique monétaire", "crédit bancaire", "refinancement"], "period": "Année" },
+            { "theme": "Socialisation et différences de comportement", "keywords": ["socialisation", "socialisation primaire", "socialisation secondaire", "instances de socialisation", "socialisation genrée", "normes et valeurs", "pluralité des influences"], "period": "Année" },
+            { "theme": "Construction et évolution des liens sociaux", "keywords": ["liens sociaux", "lien social", "solidarité mécanique", "solidarité organique", "sociabilité", "groupe social", "groupes sociaux", "isolement"], "period": "Année" },
+            { "theme": "Processus sociaux de la déviance", "keywords": ["déviance", "délinquance", "contrôle social", "stigmatisation", "étiquetage", "anomie", "entrepreneurs de morale"], "period": "Année" },
+            { "theme": "Formation et expression de l'opinion publique", "keywords": ["opinion publique", "sondage", "échantillon représentatif", "méthode des quotas", "espace public", "faire l'opinion"], "period": "Année" },
+            { "theme": "Le vote, affaire individuelle ou collective", "keywords": ["vote", "abstention", "participation électorale", "volatilité électorale", "comportement électoral", "vote sur enjeux", "clivage gauche-droite"], "period": "Année" },
+            { "theme": "Assurance, protection sociale et gestion des risques", "keywords": ["assurance", "protection sociale", "mutualisation", "sécurité sociale", "prévoyance", "gestion des risques", "aléa moral"], "period": "Année" },
+            { "theme": "Organisation et gouvernance des entreprises", "keywords": ["gouvernance", "gouvernées", "actionnaires", "parties prenantes", "société anonyme", "pouvoir dans l'entreprise", "dirigeants", "manager"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "HGGSP",
+          "track": "specialite",
+          "specialty": "HGGSP",
+          "themes": [
+            { "theme": "Comprendre un régime politique : la démocratie", "keywords": ["démocratie", "athènes", "démocratie directe", "démocratie représentative", "tocqueville", "benjamin constant", "chili", "transition démocratique"], "period": "Trimestre 1" },
+            { "theme": "Analyser les dynamiques des puissances internationales", "keywords": ["puissance", "soft power", "hard power", "empire ottoman", "la russie", "poutine", "francophonie", "gafam", "géants du numérique"], "period": "Trimestre 1" },
+            { "theme": "Étudier les divisions politiques du monde : les frontières", "keywords": ["frontière", "le limes", "limes romain", "conférence de berlin", "corée", "droit de la mer", "schengen", "germano-polonaise", "transfrontalier"], "period": "Trimestre 2" },
+            { "theme": "S'informer : un regard critique sur les sources et modes de communication", "keywords": ["s'informer", "information", "médias", "journalis", "réseaux sociaux", "la presse", "dreyfus", "imprimerie", "vietnam", "propagande"], "period": "Trimestre 2" },
+            { "theme": "Analyser les relations entre États et religions", "keywords": ["religion", "laïcité", "sécularisation", "charlemagne", "califat", "byzantin", "théocratie", "pakistan"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HLP",
+          "track": "specialite",
+          "specialty": "HLP",
+          "themes": [
+            { "theme": "Les pouvoirs de la parole : l'art de la parole", "keywords": ["pouvoirs de la parole", "rhétorique", "éloquence", "orateur", "cicéron", "art oratoire", "quintilien", "démosthène"], "period": "Année" },
+            { "theme": "Les pouvoirs de la parole : l'autorité de la parole", "keywords": ["autorité", "auctoritas", "pouvoirs de la parole", "parole politique", "discours politique", "persuasion", "démagogie", "gorgias", "sophiste", "bossuet"], "period": "Année" },
+            { "theme": "Les pouvoirs de la parole : les séductions de la parole", "keywords": ["pouvoirs de la parole", "séduction", "manipulation", "flatterie", "sophistique", "poésie lyrique", "éloge", "mensonge"], "period": "Année" },
+            { "theme": "Les représentations du monde : découverte du monde et pluralité des cultures", "keywords": ["représentations du monde", "découverte du monde", "des cannibales", "grandes découvertes", "nouveau monde", "valladolid", "las casas", "jean de léry", "altérité", "ethnocentrisme"], "period": "Année" },
+            { "theme": "Les représentations du monde : décrire, figurer, imaginer", "keywords": ["représentations du monde", "utopie", "imagination", "utopia", "voyage imaginaire", "thomas more", "robinson", "cosmographie"], "period": "Année" },
+            { "theme": "Les représentations du monde : l'homme et l'animal", "keywords": ["représentations du monde", "animal", "animal-machine", "descartes", "fable", "la fontaine", "animalité", "nature humaine"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "LLCER Anglais",
+          "track": "specialite",
+          "specialty": "LLCER Anglais",
+          "themes": [
+            { "theme": "Imaginaires : imagination créatrice et visionnaire", "keywords": ["imagination", "visionary", "romanticism", "romantic poets", "blake", "fantasy", "space odyssey", "artificial intelligence"], "period": "Année" },
+            { "theme": "Imaginaires : imaginaires effrayants", "keywords": ["gothic", "frankenstein", "horror", "monster", "usher", "tell-tale heart", "edgar allan poe", "frightening", "fear", "haunted"], "period": "Année" },
+            { "theme": "Imaginaires : utopies et dystopies", "keywords": ["utopia", "dystopia", "dystopie", "utopie", "orwell", "1984", "brave new world", "huxley", "fahrenheit", "bradbury"], "period": "Année" },
+            { "theme": "Rencontres : l'amour et l'amitié", "keywords": ["friendship", "love story", "love poem", "lovers", "pride and prejudice", "jane austen", "importance of being earnest", "sonnet", "shakespeare", "courtship"], "period": "Année" },
+            { "theme": "Rencontres : relation entre l'individu et le groupe", "keywords": ["individual", "the group", "belonging", "lonely hunter", "community", "conformity", "west side story", "outcast", "lord of the flies", "peer pressure"], "period": "Année" },
+            { "theme": "Rencontres : la confrontation à la différence", "keywords": ["difference", "otherness", "alterity", "racial prejudice", "racism", "segregation", "discrimination", "civil rights", "to kill a mockingbird", "stranger"], "period": "Année" }
+          ]
+        }
+      ]
+    },
+    {
+      "level": "Tle",
+      "cycle": 5,
+      "subjects": [
+        {
+          "name": "Philosophie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'art", "keywords": ["philosophie de l'art", "œuvre d'art", "oeuvre d'art", "l'art est", "beauté", "le beau", "esthétique", "le génie", "mimesis", "contemplation"], "period": "Année" },
+            { "theme": "Le bonheur", "keywords": ["bonheur", "désir", "plaisir", "épicure", "stoïcisme", "ataraxie"], "period": "Année" },
+            { "theme": "La conscience", "keywords": ["conscience", "cogito", "descartes", "introspection", "conscience de soi", "sujet pensant"], "period": "Année" },
+            { "theme": "Le devoir", "keywords": ["devoir moral", "par devoir", "impératif catégorique", "kant", "obligation morale", "morale", "moralité", "déontologie"], "period": "Année" },
+            { "theme": "L'État", "keywords": ["l'état", "souveraineté", "hobbes", "léviathan", "contrat social", "rousseau", "pouvoir politique"], "period": "Année" },
+            { "theme": "L'inconscient", "keywords": ["inconscient", "freud", "psychanalyse", "refoulement", "pulsion", "lapsus"], "period": "Année" },
+            { "theme": "La justice", "keywords": ["justice", "équité", "injustice", "droit naturel", "rawls", "loi juste"], "period": "Année" },
+            { "theme": "Le langage", "keywords": ["langage", "saussure", "signe linguistique", "parole", "langue et pensée", "arbitraire du signe"], "period": "Année" },
+            { "theme": "La liberté", "keywords": ["liberté", "libre arbitre", "déterminisme", "sartre", "spinoza", "servitude", "être libre"], "period": "Année" },
+            { "theme": "La nature", "keywords": ["état de nature", "nature humaine", "nature et culture", "dominer la nature", "rapport à la nature", "respecter la nature", "physis", "descola"], "period": "Année" },
+            { "theme": "La raison", "keywords": ["la raison", "rationnel", "rationalité", "rationalisme", "empirisme", "raisonnement", "la logique", "principe de non-contradiction", "leibniz"], "period": "Année" },
+            { "theme": "La religion", "keywords": ["religion", "religieux", "croyance", "le sacré", "foi", "existence de dieu", "athéisme", "spiritualité", "laïcité"], "period": "Année" },
+            { "theme": "La science", "keywords": ["la science", "les sciences", "scientificité", "théorie scientifique", "épistémologie", "méthode expérimentale", "popper", "falsifiabilité"], "period": "Année" },
+            { "theme": "La technique", "keywords": ["technè", "philosophie de la technique", "technologie", "progrès technique", "progrès technologique", "technoscience", "prométhée", "heidegger", "artifice"], "period": "Année" },
+            { "theme": "Le temps", "keywords": ["temps vécu", "rapport au temps", "le temps passe", "échapper au temps", "la durée", "bergson", "temporalité", "éternité", "saint augustin", "mémoire"], "period": "Année" },
+            { "theme": "Le travail", "keywords": ["le travail", "travail et liberté", "homo faber", "aliénation", "marx", "division du travail", "maître et esclave", "praxis", "loisir", "labeur"], "period": "Année" },
+            { "theme": "La vérité", "keywords": ["vérité", "certitude", "opinion", "doute méthodique", "scepticisme", "relativisme", "mensonge", "mentir", "nietzsche"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Histoire",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "L'impact de la crise de 1929 : déséquilibres économiques et sociaux", "keywords": ["1929", "krach", "grande dépression", "wall street", "new deal", "roosevelt", "front populaire"], "period": "Trimestre 1" },
+            { "theme": "Les régimes totalitaires", "keywords": ["totalitaire", "nazisme", "fascisme", "staline", "stalinisme", "hitler", "mussolini", "goulag", "propagande"], "period": "Trimestre 1" },
+            { "theme": "La Seconde Guerre mondiale", "keywords": ["seconde guerre", "2nde guerre", "2gm", "shoah", "génocide des juifs", "guerre d'anéantissement", "vichy", "collaboration", "résistance", "1939"], "period": "Trimestre 1" },
+            { "theme": "La fin de la Seconde Guerre mondiale et les débuts d'un nouvel ordre mondial", "keywords": ["nations unies", "nuremberg", "bretton woods", "plan marshall", "1945", "nouvel ordre mondial", "épuration", "israël", "coup de prague", "guerre froide"], "period": "Trimestre 1" },
+            { "theme": "Bipolarisation et émergence du tiers-monde", "keywords": ["guerre froide", "bipolarisation", "rideau de fer", "décolonisation", "tiers-monde", "bandung", "crise de cuba", "blocus de berlin", "crise de berlin"], "period": "Trimestre 2" },
+            { "theme": "La France : une nouvelle place dans le monde", "keywords": ["de gaulle", "guerre d'algérie", "indochine", "constitution de 1958", "ve république", "cinquième république", "traité de rome", "mendès france", "otan", "1958"], "period": "Trimestre 2" },
+            { "theme": "La modification des grands équilibres économiques et politiques mondiaux (1970-1991)", "keywords": ["choc pétrolier", "1973", "révolution iranienne", "thatcher", "reagan", "chute du mur", "perestroïka", "effondrement de l'urss", "gorbatchev", "1989"], "period": "Trimestre 2" },
+            { "theme": "Un tournant social, politique et culturel : la France de 1974 à 1988", "keywords": ["1974", "giscard", "mitterrand", "1981", "loi veil", "cohabitation", "chômage de masse", "ivg", "peine de mort", "sida"], "period": "Trimestre 2" },
+            { "theme": "Nouveaux rapports de puissance et enjeux mondiaux depuis les années 1990", "keywords": ["11 septembre 2001", "terrorisme", "hyperpuissance", "guerre du golfe", "ex-yougoslavie", "afghanistan", "multilatéralisme", "apartheid", "rwanda", "génocide des tutsi"], "period": "Trimestre 3" },
+            { "theme": "La construction européenne entre élargissement, approfondissement et remises en question", "keywords": ["construction européenne", "maastricht", "élargissement", "cee", "schengen", "traité de lisbonne", "brexit", "monnaie unique", "tunnel sous la manche"], "period": "Trimestre 3" },
+            { "theme": "La République française", "keywords": ["loi sur la parité", "parité hommes", "parité femmes", "pacs", "mariage pour tous", "décentralisation", "quinquennat", "révision constitutionnelle", "conseil constitutionnel", "laïcité"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Géographie",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Mers et océans : vecteurs essentiels de la mondialisation", "keywords": ["mers et océans", "maritimisation", "conteneur", "routes maritimes", "flux maritimes", "espaces maritimes", "détroit", "câbles sous-marins", "grands ports", "puissance maritime"], "period": "Trimestre 1" },
+            { "theme": "Mers et océans : entre appropriation, protection et liberté de circulation", "keywords": ["zee", "zone économique exclusive", "montego bay", "haute mer", "aire marine protégée", "piraterie", "frontière maritime"], "period": "Trimestre 1" },
+            { "theme": "Des territoires inégalement intégrés à la mondialisation", "keywords": ["inégalement intégrés", "métropolisation", "firmes transnationales", "centres d'impulsion", "périphéries", "attractivité", "rayonnement culturel", "rayonnement international", "soft power", "francophonie"], "period": "Trimestre 2" },
+            { "theme": "Coopérations, tensions et régulations aux échelles mondiale, régionale et locale", "keywords": ["régulation", "omc", "mercosur", "asean", "aceum", "coopération régionale", "accords régionaux"], "period": "Trimestre 2" },
+            { "theme": "L'Union européenne, un espace plus ou moins ouvert sur le monde", "keywords": ["union européenne", "northern range", "mégalopole européenne", "façade maritime", "espace schengen", "frontières de l'ue"], "period": "Trimestre 2" },
+            { "theme": "Des politiques européennes entre compétitivité et cohésion des territoires", "keywords": ["politique de cohésion", "fonds feder", "compétitivité", "transfrontalier", "eurorégion", "interreg", "cluster", "agglomération industrielle", "politique agricole commune"], "period": "Trimestre 3" },
+            { "theme": "La France et ses régions dans l'Union européenne et dans la mondialisation", "keywords": ["france dans la mondialisation", "régions françaises", "territoire français", "lignes de force", "recompositions territoriales", "pôle de compétitivité", "cluster", "inégalités territoriales", "outre-mer", "drom"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "EMC",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Les principes et les espaces du débat démocratique : culture du débat et opinion publique", "keywords": ["débat démocratique", "éthique de la discussion", "partis politiques", "société civile", "opinion publique", "sondage", "pluralisme"], "period": "Trimestre 1" },
+            { "theme": "Les principes et les espaces du débat démocratique : démocratie participative et société numérique", "keywords": ["démocratie participative", "convention citoyenne", "référendum", "pétition", "société numérique", "réseaux sociaux", "désinformation", "infox", "fake news", "ingérences étrangères"], "period": "Trimestre 2" },
+            { "theme": "La délibération dans les institutions nationales", "keywords": ["délibération", "parlement français", "vote de la loi", "assemblée nationale", "sénat", "légitimité", "décision majoritaire", "loi de finances", "fin de vie", "droits de l'opposition"], "period": "Trimestre 2" },
+            { "theme": "La délibération dans les institutions européennes et internationales", "keywords": ["droit européen", "parlement européen", "conseil de l'europe", "droit international", "nations unies", "conseil de sécurité", "cour européenne"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Enseignement scientifique",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Science, climat et société : l'atmosphère terrestre et la vie", "keywords": ["atmosphère", "dioxygène", "couche d'ozone", "photosynthèse", "stromatolithes", "oxydation du fer", "fer rubané"], "period": "Trimestre 1" },
+            { "theme": "Science, climat et société : complexité du système climatique et climat du futur", "keywords": ["climat", "effet de serre", "giec", "albédo", "rétroaction", "bilan radiatif", "température moyenne", "événements extrêmes", "océan puits de carbone"], "period": "Trimestre 1" },
+            { "theme": "Le futur des énergies : deux siècles d'énergie électrique ; conversion et transport de l'énergie électrique", "keywords": ["électricité", "induction", "alternateur", "photovoltaïque", "éolienne", "effet joule", "réseau électrique", "stockage de l'énergie", "semi-conducteur", "haute tension"], "period": "Trimestre 2" },
+            { "theme": "Le futur des énergies : énergie, choix de développement et futur climatique", "keywords": ["mix énergétique", "transition énergétique", "empreinte carbone", "nucléaire", "énergies renouvelables", "voiture électrique", "cycle du carbone", "combustibles fossiles", "hydrogène", "pile à combustible"], "period": "Trimestre 2" },
+            { "theme": "Une histoire du vivant : la biodiversité et son évolution", "keywords": ["biodiversité", "capture-recapture", "hardy-weinberg", "sélection naturelle", "fréquence allélique", "échantillonnage", "extinction", "une seule santé", "one health"], "period": "Trimestre 3" },
+            { "theme": "Une histoire du vivant : l'évolution comme grille de lecture du monde", "keywords": ["grille de lecture", "antibiorésistance", "résistance aux antibiotiques", "résistance des bactéries", "domestication", "coévolution", "structures anatomiques", "imperfection", "pression de sélection"], "period": "Trimestre 3" },
+            { "theme": "Une histoire du vivant : l'évolution humaine", "keywords": ["lignée humaine", "homo sapiens", "primates", "hominidés", "lucy", "toumaï", "néandertal", "phylogénie"], "period": "Trimestre 3" },
+            { "theme": "Une histoire du vivant : les modèles démographiques", "keywords": ["démographie", "malthus", "modèle démographique", "suite géométrique", "croissance exponentielle", "population mondiale"], "period": "Trimestre 3" },
+            { "theme": "Une histoire du vivant : de la machine de Turing à l'intelligence artificielle", "keywords": ["turing", "intelligence artificielle", "ia", "algorithme", "apprentissage automatique", "réseau de neurones", "numérisation", "inférence bayésienne", "biais algorithmique", "tableau de contingence"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "Anglais",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Identités et échanges", "keywords": ["identités et échanges", "identities", "identity", "migration", "immigration", "exile", "melting pot", "multicultural", "refugee", "diaspora"], "period": "Année" },
+            { "theme": "Espace privé et espace public", "keywords": ["espace privé", "espace public", "privacy", "surveillance", "private and public", "gender", "feminism", "women"], "period": "Année" },
+            { "theme": "Art et pouvoir", "keywords": ["art et pouvoir", "art and power", "propaganda", "censorship", "protest", "street art", "banksy", "mural"], "period": "Année" },
+            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["mondes virtuels", "virtual worlds", "citizenship", "social media", "fake news", "digital citizenship", "online identity"], "period": "Année" },
+            { "theme": "Fictions et réalités", "keywords": ["fictions et réalités", "fiction and reality", "dystopia", "utopia", "science fiction", "storytelling"], "period": "Année" },
+            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovations scientifiques", "scientific innovation", "bioethics", "artificial intelligence", "climate change", "cloning"], "period": "Année" },
+            { "theme": "Diversité et inclusion", "keywords": ["diversité et inclusion", "diversity", "inclusion", "civil rights", "segregation", "discrimination"], "period": "Année" },
+            { "theme": "Territoire et mémoire", "keywords": ["territoire et mémoire", "territory and memory", "memorial", "commemoration", "native americans", "colonial past"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Mathématiques",
+          "track": "specialite",
+          "specialty": "Mathématiques",
+          "themes": [
+            { "theme": "Suites et récurrence", "keywords": ["récurrence", "suites", "d'une suite", "suite géométrique", "suite arithmétique", "convergence", "majorée", "minorée", "monotone"], "period": "Trimestre 1" },
+            { "theme": "Limites de fonctions", "keywords": ["limite de fonction", "limites de fonctions", "limite d'une fonction", "limite en", "asymptote", "forme indéterminée", "croissance comparée", "croissances comparées", "théorème des gendarmes", "théorème de comparaison"], "period": "Trimestre 1" },
+            { "theme": "Dérivation, continuité et convexité", "keywords": ["dérivée", "dérivation", "continuité", "valeurs intermédiaires", "tvi", "composée", "convexité", "convexe", "concave", "point d'inflexion"], "period": "Trimestre 1" },
+            { "theme": "Combinatoire et dénombrement", "keywords": ["dénombrement", "combinatoire", "combinaison", "permutation", "factorielle", "coefficient binomial", "triangle de pascal", "k-uplet"], "period": "Trimestre 1" },
+            { "theme": "Fonction logarithme", "keywords": ["logarithme", "logarithme népérien", "logarithme décimal", "ln", "log"], "period": "Trimestre 2" },
+            { "theme": "Géométrie dans l'espace : vecteurs, droites, plans, orthogonalité", "keywords": ["dans l'espace", "de l'espace", "représentation paramétrique", "équation cartésienne", "vecteur normal", "projeté orthogonal", "orthogonalité", "coplanaire", "colinéaire"], "period": "Trimestre 2" },
+            { "theme": "Fonctions sinus et cosinus", "keywords": ["sinus", "cosinus", "trigonométrie", "cercle trigonométrique", "périodique", "radian"], "period": "Trimestre 2" },
+            { "theme": "Loi binomiale et succession d'épreuves indépendantes", "keywords": ["loi binomiale", "épreuves indépendantes", "succession d'épreuves", "schéma de bernoulli", "loi de bernoulli", "épreuve de bernoulli", "épreuves de bernoulli", "espérance"], "period": "Trimestre 2" },
+            { "theme": "Primitives et équations différentielles", "keywords": ["primitive", "équation différentielle", "y'=ay", "y' = ay+b", "solution particulière", "condition initiale"], "period": "Trimestre 3" },
+            { "theme": "Calcul intégral", "keywords": ["intégrale", "intégration", "intégration par parties", "aire sous la courbe", "valeur moyenne", "calcul d'aire"], "period": "Trimestre 3" },
+            { "theme": "Sommes de variables aléatoires, concentration et loi des grands nombres", "keywords": ["variable aléatoire", "bienaymé", "tchebychev", "inégalité de concentration", "loi des grands nombres", "variance", "écart type"], "period": "Trimestre 3" },
+            { "theme": "Algorithmique et programmation : listes en Python", "keywords": ["python", "algorithme", "liste en python", "compréhension de liste", "algorithme de seuil"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Physique-Chimie",
+          "track": "specialite",
+          "specialty": "Physique-Chimie",
+          "themes": [
+            { "theme": "Composition d'un système : méthodes physiques et chimiques", "keywords": ["titrage", "dosage", "spectrophotométrie", "beer-lambert", "conductimétrie", "absorbance", "équivalence", "spectroscopie"], "period": "Trimestre 1" },
+            { "theme": "Acides et bases, équilibres chimiques", "keywords": ["acide-base", "acide fort", "acide faible", "ph", "ka", "pka", "constante d'acidité", "tampon", "diagramme de prédominance", "quotient de réaction"], "period": "Trimestre 1" },
+            { "theme": "Évolution temporelle : cinétique et radioactivité", "keywords": ["cinétique", "vitesse de réaction", "catalyse", "temps de demi-réaction", "loi de vitesse", "radioacti", "décroissance", "désintégration", "demi-vie", "noyau"], "period": "Trimestre 1" },
+            { "theme": "Mouvement et lois de Newton", "keywords": ["deuxième loi", "2e loi", "loi de newton", "lois de newton", "champ uniforme", "champ électrique", "chute libre", "vecteur accélération", "repère de frenet", "centre de masse"], "period": "Trimestre 2" },
+            { "theme": "Mouvement des satellites et des planètes", "keywords": ["kepler", "satellite", "orbite", "gravitation", "mouvement circulaire", "géostationnaire", "période de révolution"], "period": "Trimestre 2" },
+            { "theme": "Piles, oxydoréduction et électrolyse", "keywords": ["pile électrochimique", "pile daniell", "oxydoréduction", "électrolyse", "oxydant", "réducteur", "capacité électrique", "sens d'évolution spontanée"], "period": "Trimestre 2" },
+            { "theme": "Stratégies de synthèse organique", "keywords": ["synthèse organique", "chimie organique", "rendement de synthèse", "groupe caractéristique", "nomenclature", "squelette carboné", "protection de fonction", "polymère", "estérification", "mécanisme réactionnel"], "period": "Trimestre 2" },
+            { "theme": "Ondes : diffraction, interférences, effet Doppler", "keywords": ["diffraction", "interférence", "doppler", "young", "intensité sonore", "décibel", "atténuation"], "period": "Trimestre 3" },
+            { "theme": "Former des images, lumière et photons", "keywords": ["lunette", "lentille", "afocal", "optique", "grossissement", "photoélectrique", "photon", "travail d'extraction", "photovoltaïque"], "period": "Trimestre 3" },
+            { "theme": "Dynamique d'un système électrique", "keywords": ["condensateur", "circuit rc", "dipôle rc", "constante de temps", "capteur capacitif", "régime transitoire"], "period": "Trimestre 3" },
+            { "theme": "Énergie : thermodynamique et transferts thermiques", "keywords": ["thermodynamique", "thermique", "premier principe", "énergie interne", "gaz parfait", "refroidissement", "thermostat", "bilan radiatif"], "period": "Trimestre 3" },
+            { "theme": "Écoulement d'un fluide", "keywords": ["fluide", "relation de bernoulli", "poussée d'archimède", "débit volumique", "venturi", "écoulement"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SVT",
+          "track": "specialite",
+          "specialty": "SVT",
+          "themes": [
+            { "theme": "Génétique et évolution : origine du génotype et brassage", "keywords": ["méiose", "brassage", "crossing-over", "génotype", "allèle", "test-cross", "haploïde", "diploïde"], "period": "Trimestre 1" },
+            { "theme": "Complexification et évolution des génomes", "keywords": ["hardy-weinberg", "dérive génétique", "sélection naturelle", "transfert horizontal", "endosymbiose", "spéciation", "duplication", "génome"], "period": "Trimestre 1" },
+            { "theme": "D'autres mécanismes contribuent à la diversité du vivant", "keywords": ["symbiose", "association symbiotique", "mycorhize", "lichen", "hybridation", "comportement social", "transmission culturelle", "chant des oiseaux", "diversification"], "period": "Trimestre 1" },
+            { "theme": "À la recherche du passé géologique : le temps et les roches, les traces du passé mouvementé de la Terre", "keywords": ["datation", "datation absolue", "datation relative", "radiochronologie", "stratigraphie", "chaîne de montagnes", "subduction", "collision"], "period": "Trimestre 2" },
+            { "theme": "Les climats de la Terre", "keywords": ["climat", "paléoclimat", "glaciation", "effet de serre", "isotope de l'oxygène", "carotte glaciaire", "réchauffement climatique", "giec"], "period": "Trimestre 2" },
+            { "theme": "Organisation et reproduction de la plante à fleurs", "keywords": ["vie fixée", "plante", "photosynthèse", "chlorophylle", "xylème", "phloème", "pollinisation", "fleur", "graine", "matière organique"], "period": "Trimestre 2" },
+            { "theme": "Domestication des plantes", "keywords": ["domestication", "plante domestiquée", "plante sauvage", "sélection variétale", "ogm", "amélioration des plantes"], "period": "Trimestre 2" },
+            { "theme": "Comportements, mouvement et système nerveux", "keywords": ["réflexe", "message nerveux", "neurone", "système nerveux", "synapse", "neurotransmetteur", "cortex moteur", "plasticité cérébrale", "potentiel d'action", "moelle épinière"], "period": "Trimestre 3" },
+            { "theme": "Produire le mouvement : contraction musculaire et énergie", "keywords": ["muscle", "musculaire", "sarcomère", "actine", "myosine", "atp", "respiration cellulaire", "fermentation", "mitochondrie", "glycolyse"], "period": "Trimestre 3" },
+            { "theme": "Comportements et stress", "keywords": ["stress", "corticotrope", "système limbique", "cortisol", "adrénaline", "hypothalamus", "hypophyse", "glucocorticoïde", "résilience"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "NSI",
+          "track": "specialite",
+          "specialty": "NSI",
+          "themes": [
+            { "theme": "Histoire de l'informatique", "keywords": ["histoire de l'informatique", "turing", "von neumann", "enigma", "lovelace", "babbage"], "period": "Année" },
+            { "theme": "Langages et programmation : récursivité, modularité, paradigmes", "keywords": ["récursivité", "récursif", "modularité", "paradigme", "calculabilité", "décidabilité", "problème de l'arrêt", "programmation fonctionnelle", "débogage", "tests unitaires"], "period": "Trimestre 1" },
+            { "theme": "Structures de données : POO, listes, piles, files", "keywords": ["programmation orientée objet", "poo", "attribut", "pile", "empiler", "file d'attente", "défiler", "chaînée"], "period": "Trimestre 1" },
+            { "theme": "Arbres et graphes", "keywords": ["arbre", "abr", "graphe", "parcours en largeur", "parcours en profondeur", "bfs", "dfs", "sommet", "liste d'adjacence", "matrice d'adjacence"], "period": "Trimestre 2" },
+            { "theme": "Bases de données", "keywords": ["base de données", "modèle relationnel", "sql", "requête", "clé primaire", "clé étrangère", "jointure", "sgbd"], "period": "Trimestre 2" },
+            { "theme": "Architectures matérielles, systèmes d'exploitation et réseaux", "keywords": ["processus", "ordonnancement", "interblocage", "système sur puce", "routage", "routeur", "rip", "ospf", "chiffrement", "tls"], "period": "Trimestre 2" },
+            { "theme": "Algorithmique avancée", "keywords": ["diviser pour régner", "tri fusion", "programmation dynamique", "rendu de monnaie", "boyer-moore", "recherche textuelle", "algorithmes sur les arbres"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "SI",
+          "track": "specialite",
+          "specialty": "SI",
+          "themes": [
+            { "theme": "Innover : créer des produits innovants", "keywords": ["innovation", "cahier des charges", "éco-conception", "prototype", "analyse fonctionnelle", "créativité"], "period": "Trimestre 1" },
+            { "theme": "Analyser les produits existants", "keywords": ["chaîne d'énergie", "chaîne d'information", "sysml", "diagramme de blocs", "analyse des écarts", "moteur", "puissance", "rendement", "convertisseur"], "period": "Trimestre 1" },
+            { "theme": "Modéliser et résoudre : mécanique", "keywords": ["pfs", "principe fondamental de la statique", "principe fondamental de la dynamique", "pfd", "cinématique", "torseur", "liaison mécanique", "moment d'inertie"], "period": "Trimestre 2" },
+            { "theme": "Modéliser et résoudre : systèmes asservis et électricité", "keywords": ["asservi", "boucle fermée", "correcteur", "pid", "schéma-bloc", "stabilité", "précision", "rapidité", "fonction de transfert", "hacheur"], "period": "Trimestre 2" },
+            { "theme": "Expérimenter et simuler", "keywords": ["capteur", "microcontrôleur", "acquisition", "protocole expérimental", "modèle multiphysique", "simulation numérique", "arduino"], "period": "Trimestre 3" },
+            { "theme": "Communiquer et projet", "keywords": ["projet 48h", "projet de 48 heures", "revue de projet", "diagramme de gantt", "carnet de bord", "croquis"], "period": "Trimestre 3" },
+            { "theme": "Sciences physiques (complément SI) : mesure et incertitudes", "keywords": ["incertitude", "incertitude-type", "incertitudes-types", "valeur de référence", "série de mesures", "histogramme"], "period": "Année" },
+            { "theme": "Sciences physiques (complément SI) : mouvement et interactions", "keywords": ["deuxième loi de newton", "2e loi", "centre de masse", "référentiel galiléen", "champ uniforme", "condensateur plan", "repère de frenet", "kepler", "satellite", "chute libre"], "period": "Année" },
+            { "theme": "Sciences physiques (complément SI) : l'énergie, conversions et transferts", "keywords": ["premier principe", "thermodynamique", "énergie interne", "transfert thermique", "capacité thermique", "flux thermique", "résistance thermique", "thermostat"], "period": "Année" },
+            { "theme": "Sciences physiques (complément SI) : ondes et signaux", "keywords": ["intensité sonore", "atténuation", "diffraction", "interférence", "doppler", "photon", "photoélectrique", "photovoltaïque"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "SES",
+          "track": "specialite",
+          "specialty": "SES",
+          "themes": [
+            { "theme": "Sources et défis de la croissance économique", "keywords": ["croissance économique", "productivité globale des facteurs", "pgf", "progrès technique", "innovation", "croissance endogène", "destruction créatrice", "droits de propriété", "soutenabilité", "capital naturel"], "period": "Année" },
+            { "theme": "Commerce international et internationalisation de la production", "keywords": ["commerce international", "avantage comparatif", "libre-échange", "libre echange", "protectionnisme", "multinationale", "fmn", "dipp", "mondialisation", "chaîne de valeur"], "period": "Année" },
+            { "theme": "Comment lutter contre le chômage ?", "keywords": ["chômage", "sous-emploi", "appariement", "salaire minimum", "smic", "flexibilité", "demande globale", "marché du travail"], "period": "Année" },
+            { "theme": "Crises financières et régulation du système financier", "keywords": ["crise financière", "crises financières", "bulle spéculative", "1929", "subprime", "crise de 2008", "accords de bâle", "régulation bancaire", "union bancaire", "aléa moral"], "period": "Année" },
+            { "theme": "Politiques économiques dans le cadre européen", "keywords": ["union européenne", "marché unique", "politique de la concurrence", "politique monétaire", "bce", "banque centrale européenne", "uem", "zone euro", "politique budgétaire", "pacte de stabilité"], "period": "Année" },
+            { "theme": "Structure de la société française actuelle", "keywords": ["structure sociale", "classe sociale", "classes sociales", "pcs", "csp", "stratification sociale", "moyennisation", "tertiarisation", "salarisation", "féminisation des emplois"], "period": "Année" },
+            { "theme": "Action de l'École sur les destins individuels et la société", "keywords": ["scolaire", "école", "diplôme", "bourdieu", "boudon", "massification", "démocratisation", "capital culturel", "socialisation familiale", "reproduction sociale"], "period": "Année" },
+            { "theme": "Mobilité sociale : caractéristiques et facteurs", "keywords": ["mobilité sociale", "table de mobilité", "mobilité intergénérationnelle", "mobilité structurelle", "déclassement", "fluidité sociale", "ascension sociale", "mobilité observée"], "period": "Année" },
+            { "theme": "Mutations du travail et de l'emploi", "keywords": ["taylorisme", "fordisme", "organisation du travail", "précarité", "qualité de l'emploi", "télétravail", "ubérisation", "polarisation de l'emploi"], "period": "Année" },
+            { "theme": "Engagement politique dans les sociétés démocratiques", "keywords": ["engagement politique", "action collective", "passager clandestin", "olson", "rétributions symboliques", "militantisme", "mouvements sociaux", "mouvement social", "syndicat", "grève"], "period": "Année" },
+            { "theme": "Inégalités et conceptions de la justice sociale", "keywords": ["justice sociale", "courbe de lorenz", "coefficient de gini", "rapport interdécile", "égalité des chances", "redistribution", "protection sociale", "égalitarisme"], "period": "Année" },
+            { "theme": "Quelle action publique pour l'environnement ?", "keywords": ["politique climatique", "problème public", "réglementation environnementale", "taxe carbone", "marché de quotas", "bien commun", "communs", "externalité", "cop21", "cop"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "HGGSP",
+          "track": "specialite",
+          "specialty": "HGGSP",
+          "themes": [
+            { "theme": "De nouveaux espaces de conquête", "keywords": ["conquête", "spatial", "spoutnik", "océan", "maritime", "zone économique exclusive", "zee", "chinois"], "period": "Trimestre 1" },
+            { "theme": "Faire la guerre, faire la paix : formes de conflits et modes de résolution", "keywords": ["clausewitz", "westphalie", "paix", "conflit", "golfe", "sdn", "onu", "terrorisme", "daech", "moyen-orient"], "period": "Trimestre 1" },
+            { "theme": "Histoire et mémoires", "keywords": ["mémoire", "génocide", "shoah", "tsiganes", "arménien", "rwanda", "gacaca", "tpir", "algérie", "nuremberg"], "period": "Trimestre 2" },
+            { "theme": "Identifier, protéger et valoriser le patrimoine", "keywords": ["patrimoine", "unesco", "patrimoine mondial", "patrimonialisation", "versailles", "restitution des biens", "notre-dame", "parthénon"], "period": "Trimestre 2" },
+            { "theme": "L'environnement, entre exploitation et protection", "keywords": ["environnement", "forêt", "climat", "giec", "colbert", "biodiversité", "parc national", "déforestation", "yellowstone"], "period": "Trimestre 3" },
+            { "theme": "L'enjeu de la connaissance", "keywords": ["société de la connaissance", "recherche scientifique", "alphabétisation", "projet manhattan", "renseignement", "cyber", "enigma", "marie curie"], "period": "Trimestre 3" }
+          ]
+        },
+        {
+          "name": "HLP",
+          "track": "specialite",
+          "specialty": "HLP",
+          "themes": [
+            { "theme": "La recherche de soi : éducation, transmission et émancipation", "keywords": ["éducation", "transmission", "émancipation", "apprentissage", "rousseau", "montaigne", "kant", "condorcet", "bildungsroman", "pédagogie"], "period": "Semestre 1" },
+            { "theme": "La recherche de soi : les expressions de la sensibilité", "keywords": ["sensibilité", "romantisme", "passions", "sublime", "mélancolie", "lyrisme", "rêverie", "spleen"], "period": "Semestre 1" },
+            { "theme": "La recherche de soi : les métamorphoses du moi", "keywords": ["métamorphoses du moi", "je est un autre", "rimbaud", "inconscient", "freud", "autobiographie", "proust", "nietzsche"], "period": "Semestre 1" },
+            { "theme": "L'Humanité en question : création, continuités et ruptures", "keywords": ["création artistique", "avant-garde", "surréalisme", "dada", "modernité", "héritage culturel", "réécriture", "manifeste"], "period": "Semestre 2" },
+            { "theme": "L'Humanité en question : histoire et violence", "keywords": ["violence", "guerre", "camps", "barbarie", "totalitarisme", "arendt", "banalité du mal", "primo levi", "antelme", "semprun"], "period": "Semestre 2" },
+            { "theme": "L'Humanité en question : l'humain et ses limites", "keywords": ["limites", "transhumanisme", "posthumain", "finitude", "bioéthique", "intelligence artificielle", "huxley", "frankenstein", "progrès", "dépassement de soi"], "period": "Semestre 2" }
+          ]
+        },
+        {
+          "name": "LLCER Anglais",
+          "track": "specialite",
+          "specialty": "LLCER Anglais",
+          "themes": [
+            { "theme": "Arts et débats d'idées", "keywords": ["protest", "activism", "civil rights", "satire", "censorship", "propaganda", "street art", "harlem renaissance"], "period": "Année" },
+            { "theme": "Expression et construction de soi", "keywords": ["expression des émotions", "mise en scène de soi", "of passage", "coming of age", "coming-of-age", "portrait", "memoir", "autobiograph", "bildungsroman", "identity"], "period": "Année" },
+            { "theme": "Voyages, territoires, frontières", "keywords": ["travel", "journey", "border", "road", "frontier", "territor", "migration", "exil", "diaspora", "american dream"], "period": "Année" },
+            { "theme": "Œuvres littéraires du programme limitatif 2026-2028", "keywords": ["americanah", "adichie", "handmaid", "atwood", "pride and prejudice", "moon palace", "boyhood", "caretaker", "god of small things", "brooklyn"], "period": "Année" },
+            { "theme": "Œuvres filmiques du programme limitatif 2026-2028", "keywords": ["much ado about nothing", "branagh", "the piano", "campion", "12 angry men", "lumet", "killers of the flower moon", "scorsese"], "period": "Année" }
           ]
         }
       ]
