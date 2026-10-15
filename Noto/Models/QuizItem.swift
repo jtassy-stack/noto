@@ -55,6 +55,10 @@ final class QuizItem {
     /// Links to the post-quiz recommendation.
     var oeuvreId: UUID?
     var oeuvreTitle: String?
+    /// celyn `answerOeuvreId`: the work behind the CORRECT choice (e.g. a
+    /// filmo / bridge quiz whose subject `oeuvreId` is another work). The
+    /// post-quiz recommendation prefers it over `oeuvreId` when present.
+    var answerOeuvreId: UUID?
     var imageUrl: String?
 
     // --- nōto-only ---
@@ -90,6 +94,7 @@ final class QuizItem {
         promotedFrom: String? = nil,
         oeuvreId: UUID? = nil,
         oeuvreTitle: String? = nil,
+        answerOeuvreId: UUID? = nil,
         imageUrl: String? = nil,
         format: QuizFormat = .mcq,
         level: String? = nil,
@@ -116,6 +121,7 @@ final class QuizItem {
         self.promotedFrom = promotedFrom
         self.oeuvreId = oeuvreId
         self.oeuvreTitle = oeuvreTitle
+        self.answerOeuvreId = answerOeuvreId
         self.imageUrl = imageUrl
         self.format = format
         self.level = level
