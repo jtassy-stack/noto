@@ -67,8 +67,10 @@ struct QuizSessionResult: Equatable, Sendable {
 /// attempt with `RewardPolicy`, updates `NotionMastery` through
 /// `SpacedRepetition` and saves a `QuizAttempt`.
 ///
-/// The minutes are only recorded: crediting / unlocking Screen Time is 3.4
-/// (`RewardUnlockService`), which alone decides against the class-hours lock.
+/// The minutes are recorded on the attempt, then handed to `onMinutesEarned`
+/// (3.4: `QuizView` passes `RewardUnlockService.credit`, which alone decides
+/// against the class-hours lock). Tests leave it nil, so no session ever
+/// touches the app group ledger.
 @MainActor
 @Observable
 final class QuizSession {
@@ -94,6 +96,7 @@ final class QuizSession {
     private let config: RewardConfig
     private let calendar: Calendar
     private let now: @Sendable () -> Date
+    private let onMinutesEarned: (@MainActor (Int, Date) -> Void)?
 
     /// - Parameters:
     ///   - seed: drives the draw among equally ranked items. Fixed in tests;
@@ -101,6 +104,9 @@ final class QuizSession {
     ///   - config: the parent's rules. Callers pass `RewardConfigStore.load()`
     ///     (app group) explicitly; the default is `.default` so no caller
     ///     silently reads the shared suite (test isolation).
+    ///   - onMinutesEarned: called once after the attempt is saved, with the
+    ///     minutes earned (> 0 only) and the finish date. Nil by default for
+    ///     the same isolation reason.
     init(
         child: Child,
         modelContext: ModelContext,
@@ -108,8 +114,10 @@ final class QuizSession {
         config: RewardConfig = .default,
         calendar: Calendar = .current,
         seed: UInt64 = UInt64.random(in: UInt64.min ... UInt64.max),
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil
     ) {
+        self.onMinutesEarned = onMinutesEarned
         self.child = child
         self.modelContext = modelContext
         self.config = config
@@ -240,6 +248,12 @@ final class QuizSession {
                                    xpEarned: thisAttempt.xpEarned,
                                    levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter))
         phase = .finished
+
+        // 3.4: credit the reward ledger (after the save, so a crash in the
+        // Screen Time path can never lose the attempt).
+        if decision.total > 0 {
+            onMinutesEarned?(decision.total, end)
+        }
     }
 
     /// One Leitner review per notion (never per question), all of its items

@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// End of a quiz: score, minutes added to the cagnotte or, when none, the
-/// reason in friendly child wording (tutoiement). Before 3.4 the minutes are
-/// only recorded: no wording here promises an unlock. XP and subject level-ups
+/// reason in friendly child wording (tutoiement). The wording stays neutral
+/// on unlocking: whether the minutes unlock now, wait for the end of class or
+/// for the daily budget is said on the home (`ChildHomeView`, 3.4), which
+/// knows the Screen Time setup. XP and subject level-ups
 /// (3.6) are shown when the quiz earned some.
 struct QuizResultView: View {
     let result: QuizSessionResult
