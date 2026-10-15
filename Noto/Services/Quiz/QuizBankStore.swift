@@ -124,8 +124,18 @@ enum QuizBankMapper {
 ///   advances to the cursor, or on the last page to the maximum `updatedAt`
 ///   of its items and removals, never backwards.
 ///
-/// TODO(3.2 bis): bundled offline bank (`Noto/Resources/questions/…`), the
-/// fallback when this store is empty. Needs a generated and reviewed bank first.
+/// - Offline fallback (plan §3.2 « banque embarquée »): `seedBundledIfNeeded`
+///   inserts the bundled snapshot (`Resources/questions/<grade>.json`, same
+///   ids / questionKeys as the server) when the level has no celyn item yet
+///   and celyn has never served a row for it (no high-water mark).
+///   It never touches the high-water mark or `lastSync`, so the next network
+///   sync still fetches everything and upserts the same rows. Seeded rows keep
+///   `sourceRef` = `celyn/bundle/<grade>` until the server serves them again.
+///   A sync that starts without a mark sets a per-grade "full sync pending"
+///   flag; the first run that drains the feed while it is set (the same run,
+///   or a later one resuming after a failure or the page cap) deletes the
+///   seeded rows never served (excluded since the snapshot: a full feed
+///   carries no `removed` list) and clears the flag.
 ///
 /// Main-actor bound like `FullSyncService`: it owns a main `ModelContext`;
 /// only the network await leaves the actor (the client is `Sendable`).
@@ -167,6 +177,10 @@ final class QuizBankStore {
 
     static func updatedSinceKey(grade: String) -> String { "quiz.bank.updatedSince.\(grade)" }
     static func lastSyncKey(grade: String) -> String { "quiz.bank.lastSync.\(grade)" }
+    /// Set when a sync starts with no high-water mark; cleared once a drained
+    /// run has pruned the seeded rows celyn did not serve. Survives a full
+    /// sync interrupted mid-feed, so the resumed (incremental) run prunes.
+    static func fullSyncPendingKey(grade: String) -> String { "quiz.bank.fullSyncPending.\(grade)" }
 
     func highWaterMark(grade: String) -> String? {
         defaults.string(forKey: Self.updatedSinceKey(grade: grade))
@@ -215,6 +229,9 @@ final class QuizBankStore {
         }
 
         var cursor = highWaterMark(grade: grade)
+        if cursor == nil {
+            defaults.set(true, forKey: Self.fullSyncPendingKey(grade: grade))
+        }
         var upserted = 0
         var dropped = 0
         var removed = 0
@@ -257,9 +274,95 @@ final class QuizBankStore {
             logger.info("Bank sync \(grade, privacy: .public): page cap reached, continuing next call")
             return .synced(upserted: upserted, dropped: dropped, removed: removed)
         }
+        // The full feed is now drained, possibly across several runs: every
+        // row it served was re-stamped `celyn/bank/…`. An empty full feed
+        // (celyn misconfigured / bank wiped: no bank row at all) leaves the
+        // offline snapshot alone rather than emptying the child's quiz.
+        if defaults.bool(forKey: Self.fullSyncPendingKey(grade: grade)), try hasBankItems(grade: grade) {
+            removed += try pruneUnservedBundled(grade: grade)
+            defaults.removeObject(forKey: Self.fullSyncPendingKey(grade: grade))
+        }
         defaults.set(now(), forKey: Self.lastSyncKey(grade: grade))
         logger.info("Bank sync \(grade, privacy: .public): \(upserted) upserted, \(dropped) dropped, \(removed) removed")
         return .synced(upserted: upserted, dropped: dropped, removed: removed)
+    }
+
+    // MARK: - Bundled offline bank
+
+    /// Seeds this level from the bundled snapshot when it has no celyn item
+    /// yet (first launch offline, celyn down, empty key on a fresh clone).
+    /// Returns the number of items inserted (0 when skipped).
+    @discardableResult
+    func seedBundledIfNeeded(level: String) throws -> Int {
+        try Self.seedBundledIfNeeded(level: level, in: modelContext, defaults: defaults, now: now())
+    }
+
+    /// Static form for callers that only hold a `ModelContext`
+    /// (`QuizSession.draw`): no network client is built.
+    ///
+    /// - Skips levels outside 6e → Tle, levels without a bundled file, any
+    ///   level that already has a `.celyn` item (synced or seeded): the
+    ///   server copy always wins and is never overwritten by the snapshot,
+    ///   and any level celyn has already served (a high-water mark is
+    ///   stored): a level emptied by server `removed` lists must stay empty,
+    ///   not be resurrected from the snapshot past the mark.
+    /// - Same DTO, mapper and structural checks as a network page; items keep
+    ///   celyn's ids / questionKeys, so the next sync upserts the same rows.
+    /// - Never writes the high-water mark nor `lastSync`: the next network
+    ///   sync is a full one.
+    /// - Synchronous on the main actor (no await), so it cannot interleave
+    ///   with a page apply of `sync(level:)`.
+    @discardableResult
+    static func seedBundledIfNeeded(
+        level: String, in modelContext: ModelContext, bundle: Bundle = .main,
+        defaults: UserDefaults = .standard, now: Date = Date()
+    ) throws -> Int {
+        let grade = CurriculumService.canonicalLevel(level)
+        guard CurriculumService.revisionLevels.contains(grade) else { return 0 }
+        guard defaults.string(forKey: updatedSinceKey(grade: grade)) == nil else { return 0 }
+        guard try !hasCelynItems(grade: grade, in: modelContext) else { return 0 }
+        guard let file = try BundledQuizBank.load(grade: grade, bundle: bundle) else { return 0 }
+        guard file.grade == grade else {
+            logger.warning("Bundled bank \(grade, privacy: .public) declares grade \(file.grade, privacy: .public): skipped")
+            return 0
+        }
+        let result = try applyPage(file.asPage, grade: grade, in: modelContext, fetchedAt: now,
+                                   sourceRef: BundledQuizBank.sourceRef(grade: grade))
+        logger.info("Seeded bundled bank \(grade, privacy: .public): \(result.upserted) items, \(result.dropped) dropped")
+        return result.upserted
+    }
+
+    /// Whether `grade` already holds a celyn item. `source` is filtered in
+    /// memory: enum comparisons in `#Predicate` are unreliable in SwiftData.
+    static func hasCelynItems(grade: String, in modelContext: ModelContext) throws -> Bool {
+        let wanted: String? = grade
+        let descriptor = FetchDescriptor<QuizItem>(predicate: #Predicate { $0.level == wanted })
+        return try modelContext.fetch(descriptor).contains { $0.source == .celyn }
+    }
+
+    /// Whether `grade` holds a row celyn served (`celyn/bank/<grade>`).
+    private func hasBankItems(grade: String) throws -> Bool {
+        let wanted: String? = grade
+        let ref: String? = QuizBankMapper.sourceRef(grade: grade)
+        var descriptor = FetchDescriptor<QuizItem>(predicate: #Predicate { $0.level == wanted && $0.sourceRef == ref })
+        descriptor.fetchLimit = 1
+        return try !modelContext.fetch(descriptor).isEmpty
+    }
+
+    /// After the full feed is drained (`fullSyncPendingKey` set): deletes the seeded rows celyn did not serve
+    /// (excluded since the snapshot was taken). A full feed carries no
+    /// `removed` list, and every served row was re-stamped `celyn/bank/…` by
+    /// `QuizBankMapper.apply`, so whatever still reads `celyn/bundle/…` is gone
+    /// server-side.
+    private func pruneUnservedBundled(grade: String) throws -> Int {
+        let wanted: String? = grade
+        let ref: String? = BundledQuizBank.sourceRef(grade: grade)
+        let descriptor = FetchDescriptor<QuizItem>(predicate: #Predicate { $0.level == wanted && $0.sourceRef == ref })
+        let stale = try modelContext.fetch(descriptor).filter { $0.source == .celyn }
+        guard !stale.isEmpty else { return 0 }
+        for item in stale { modelContext.delete(item) }
+        try modelContext.save()
+        return stale.count
     }
 
     // MARK: - Apply a page
@@ -267,7 +370,17 @@ final class QuizBankStore {
     /// Upserts the page's valid items and deletes the local items listed in
     /// `removed` (plus any stale local copy of a dropped item), in ONE save.
     private func apply(_ page: BankResponse, grade: String) throws -> (upserted: Int, dropped: Int, removed: Int) {
-        let fetchedAt = now()
+        try Self.applyPage(page, grade: grade, in: modelContext, fetchedAt: now())
+    }
+
+    /// Body of `apply`, static so the bundled seed (reachable from
+    /// `QuizSession.draw`, which only has a `ModelContext`) shares the exact
+    /// upsert / drop / single-save path without building a network client.
+    @discardableResult
+    static func applyPage(
+        _ page: BankResponse, grade: String, in modelContext: ModelContext, fetchedAt: Date,
+        sourceRef: String? = nil
+    ) throws -> (upserted: Int, dropped: Int, removed: Int) {
         var upserted = 0
         var dropped = 0
         var removed = 0
@@ -279,17 +392,19 @@ final class QuizBankStore {
                 // celyn changed this row and the mark moves past its new
                 // `updatedAt`: a local copy synced earlier would stay stale
                 // for good. Delete it (this grade's celyn items only).
-                if let existing = try fetchItem(id: dto.id), existing.source == .celyn, existing.level == grade {
+                if let existing = try fetchItem(id: dto.id, in: modelContext), existing.source == .celyn, existing.level == grade {
                     modelContext.delete(existing)
                     inserted.removeAll { $0 === existing }
                     removed += 1
                 }
                 continue
             }
-            if let existing = try fetchItem(id: dto.id) {
+            if let existing = try fetchItem(id: dto.id, in: modelContext) {
                 QuizBankMapper.apply(dto, to: existing, fetchedAt: fetchedAt)
+                if let sourceRef { existing.sourceRef = sourceRef }
             } else {
                 let item = QuizBankMapper.makeItem(from: dto, fetchedAt: fetchedAt)
+                if let sourceRef { item.sourceRef = sourceRef }
                 modelContext.insert(item)
                 inserted.append(item)
             }
@@ -301,7 +416,7 @@ final class QuizBankStore {
         // they did, the removal wins. Unknown ids (never synced, already
         // deleted) are ignored; only celyn bank items are ever deleted.
         for entry in page.removed {
-            guard let existing = try fetchItem(id: entry.id), existing.source == .celyn else { continue }
+            guard let existing = try fetchItem(id: entry.id, in: modelContext), existing.source == .celyn else { continue }
             modelContext.delete(existing)
             inserted.removeAll { $0 === existing }
             removed += 1
@@ -321,9 +436,55 @@ final class QuizBankStore {
         return (upserted, dropped, removed)
     }
 
-    private func fetchItem(id: UUID) throws -> QuizItem? {
+    private static func fetchItem(id: UUID, in modelContext: ModelContext) throws -> QuizItem? {
         var descriptor = FetchDescriptor<QuizItem>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         return try modelContext.fetch(descriptor).first
+    }
+}
+
+// MARK: - Bundled offline bank
+
+/// The programme bank snapshot shipped in the app (`Noto/Resources/questions/
+/// <grade>.json`): `{version, lastUpdated, source, grade, items}` where `items`
+/// are exactly celyn `BankQuizDto` rows (`GET /api/quiz/v2/bank` snapshot).
+/// Only questions: nothing about a child is in it or derived from it.
+enum BundledQuizBank {
+    static let subdirectory = "questions"
+
+    /// `QuizItem.sourceRef` of a seeded row until the server serves it again.
+    static func sourceRef(grade: String) -> String { "celyn/bundle/\(grade)" }
+
+    struct File: Decodable, Sendable {
+        let version: String
+        let lastUpdated: String?
+        let source: String?
+        let grade: String
+        let items: [BankQuizDto]
+
+        /// The snapshot as a final bank page (no removals, no cursor).
+        var asPage: BankResponse {
+            BankResponse(app: QuizAPIClient.app, grade: grade, count: items.count, items: items,
+                         removed: [], nextUpdatedSince: nil)
+        }
+    }
+
+    /// XcodeGen adds `Resources/questions` as a group, so the files usually
+    /// land flat at the bundle root; a folder reference would keep the
+    /// subdirectory. Both are tried (same pattern as `ENTRegistry`).
+    static func url(grade: String, bundle: Bundle = .main) -> URL? {
+        bundle.url(forResource: grade, withExtension: "json", subdirectory: subdirectory)
+            ?? bundle.url(forResource: grade, withExtension: "json")
+    }
+
+    /// nil when no file ships for `grade` (canonical level); throws when the
+    /// file exists but does not decode.
+    static func load(grade: String, bundle: Bundle = .main) throws -> File? {
+        guard let url = url(grade: grade, bundle: bundle) else { return nil }
+        return try decode(Data(contentsOf: url))
+    }
+
+    static func decode(_ data: Data) throws -> File {
+        try JSONDecoder().decode(File.self, from: data)
     }
 }
