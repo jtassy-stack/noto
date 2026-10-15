@@ -406,6 +406,42 @@ struct QuizBankStoreTests {
         #expect(QuizStubProtocol.requests.isEmpty)
     }
 
+    // MARK: Concurrency & page cap (Codex #47)
+
+    @Test("two syncs of one grade share a single run (no stale page applied)")
+    func concurrentSameGradeShareOneRun() async throws {
+        QuizStubProtocol.install { _ in .json(QuizBankFixtures.page(items: [QuizBankFixtures.item()])) }
+        defer { QuizStubProtocol.reset() }
+        let store = makeStore()
+        async let first = store.sync(level: "6e")
+        async let second = store.sync(level: "6e", force: true)
+        let (a, b) = try await (first, second)
+        #expect(a == b)
+        #expect(QuizStubProtocol.requests.count == 1)
+        #expect(try items().count == 1)
+    }
+
+    @Test("a sync cut by the page cap is not throttled; the next call resumes")
+    func cappedSyncNotThrottled() async throws {
+        let counter = PageCounter()
+        QuizStubProtocol.install { _ in
+            let n = counter.next()
+            let cursor = String(format: "2026-10-15T10:%02d:%02d.000Z", n / 60, n % 60)
+            return .json(QuizBankFixtures.page(items: [], next: cursor))
+        }
+        defer { QuizStubProtocol.reset() }
+        let store = makeStore()
+        _ = try await store.sync(level: "6e")
+        #expect(QuizStubProtocol.requests.count == QuizBankStore.maxPages)
+        #expect(store.lastSync(grade: "6e") == nil)
+        let mark = store.highWaterMark(grade: "6e")
+        #expect(mark != nil)
+
+        QuizStubProtocol.install { _ in .json(QuizBankFixtures.page(items: [])) }
+        #expect(try await store.sync(level: "6e") == .synced(upserted: 0, dropped: 0))
+        #expect(store.lastSync(grade: "6e") != nil)
+    }
+
     // MARK: Offline-first
 
     @Test("network failure keeps local items, the mark and the throttle untouched")
@@ -456,4 +492,15 @@ struct QuizBankStoreTests {
         #expect(QuizStubProtocol.requests.last?.queryMap["updatedSince"] == "2026-10-15T10:00:00.000Z")
     }
 }
+}
+
+/// Thread-safe page counter for the stub handler (runs off the main actor).
+private final class PageCounter: @unchecked Sendable {
+    private var value = 0
+    private let lock = NSLock()
+    func next() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        value += 1
+        return value
+    }
 }

@@ -193,6 +193,23 @@ final class QuizBankStore {
         guard CurriculumService.revisionLevels.contains(grade) else {
             return .unsupportedLevel(grade)
         }
+        // One sync per grade at a time: a second caller (automatic + forced
+        // refresh, two siblings in the same grade) joins the run in flight
+        // instead of fetching from the same cursor and applying an older page
+        // over a newer one (or re-inserting an item the other run removed).
+        if let running = inFlight[grade] {
+            return try await running.value
+        }
+        let task = Task { @MainActor in try await self.runSync(grade: grade, force: force) }
+        inFlight[grade] = task
+        defer { inFlight[grade] = nil }
+        return try await task.value
+    }
+
+    /// Per-grade in-flight sync (see `sync(level:force:)`).
+    private var inFlight: [String: Task<Outcome, any Error>] = [:]
+
+    private func runSync(grade: String, force: Bool) async throws -> Outcome {
         if !force, let last = lastSync(grade: grade), now().timeIntervalSince(last) < Self.minInterval {
             return .throttled
         }
@@ -201,6 +218,7 @@ final class QuizBankStore {
         var upserted = 0
         var dropped = 0
         var removed = 0
+        var reachedEnd = false
         for _ in 0..<Self.maxPages {
             let page = try await client.bank(grade: grade, limit: Self.pageLimit, updatedSince: cursor)
             let result = try apply(page, grade: grade)
@@ -226,9 +244,19 @@ final class QuizBankStore {
             }
             // Only a null cursor ends the feed (a short page may be non-final).
             // A server repeating the same cursor would otherwise loop.
-            guard page.nextUpdatedSince != nil, cursor != previous else { break }
+            guard page.nextUpdatedSince != nil, cursor != previous else {
+                reachedEnd = true
+                break
+            }
         }
 
+        // Stamp the throttle only when the feed was drained. A run cut by
+        // `maxPages` with rows still pending must not block the next call
+        // for 12 h: it resumes from the saved mark instead.
+        guard reachedEnd else {
+            logger.info("Bank sync \(grade, privacy: .public): page cap reached, continuing next call")
+            return .synced(upserted: upserted, dropped: dropped, removed: removed)
+        }
         defaults.set(now(), forKey: Self.lastSyncKey(grade: grade))
         logger.info("Bank sync \(grade, privacy: .public): \(upserted) upserted, \(dropped) dropped, \(removed) removed")
         return .synced(upserted: upserted, dropped: dropped, removed: removed)
