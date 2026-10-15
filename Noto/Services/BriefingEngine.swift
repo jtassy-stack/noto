@@ -95,13 +95,16 @@ final class BriefingEngine: ObservableObject {
             }
         }
 
-        // 6. Generate text summary (build items on MainActor, summarize async)
+        // 6. Sort cards by priority. Published before the summary: on iOS 26
+        //    the summary may wait on the on-device model (up to 8 s).
+        cards = newCards.sorted { $0.priority > $1.priority }
+        // The feed (HomeView spinner) waits on the cards only, never on the model.
+        isLoading = false
+
+        // 7. Generate text summary (build items on MainActor, summarize async)
         let items = TextSummarizer.buildBriefingItems(for: child)
             + TextSummarizer.buildDeviceLevelItems()
         briefingText = await TextSummarizer.summarize(briefingItems: items)
-
-        // 7. Sort cards by priority
-        cards = newCards.sorted { $0.priority > $1.priority }
     }
 
     /// Build aggregated family briefing.
@@ -186,6 +189,10 @@ final class BriefingEngine: ObservableObject {
             }
         }
 
+        // Cards first: the summary may wait on the on-device model (iOS 26).
+        cards = allCards.sorted { $0.priority > $1.priority }
+        isLoading = false
+
         // Generate combined summary
         var allItems: [BriefingItem] = []
         for child in children {
@@ -193,8 +200,6 @@ final class BriefingEngine: ObservableObject {
         }
         allItems.append(contentsOf: TextSummarizer.buildDeviceLevelItems())
         briefingText = await TextSummarizer.summarize(briefingItems: allItems)
-
-        cards = allCards.sorted { $0.priority > $1.priority }
     }
 
     // MARK: - Card Builders

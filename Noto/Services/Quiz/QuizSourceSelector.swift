@@ -16,6 +16,15 @@ struct QuizPlanSlot: Sendable, Equatable {
     let homeworkKey: String?
     /// `NotionKey` of the slot's notion, when it has a theme.
     let notionKey: String?
+
+    /// Homework slot (due within the 72 h window), the only kind 3.3 may
+    /// fill with an on-device generated question.
+    var isHomework: Bool {
+        switch origin {
+        case .homeworkTomorrow, .homeworkToday, .homeworkLater: true
+        case .dueNotion, .programme: false
+        }
+    }
 }
 
 struct QuizPlan: Sendable, Equatable {

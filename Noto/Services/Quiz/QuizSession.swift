@@ -40,6 +40,9 @@ struct QuizQuestion: Identifiable, Equatable, Sendable {
     let notionKey: String?
     /// `QuizItem.difficulty` (1…3), for the XP bonus (`Gamification`).
     var difficulty: Int = 1
+    /// Generated on device from the child's homework (3.3, `QuizGenerator`).
+    /// Ephemeral: no `QuizItem` row backs it. Scored like any other question.
+    var isGenerated = false
 }
 
 /// Outcome of a finished quiz, for `QuizResultView`.
@@ -107,6 +110,9 @@ final class QuizSession {
     ///   - onMinutesEarned: called once after the attempt is saved, with the
     ///     minutes earned (> 0 only) and the finish date. Nil by default for
     ///     the same isolation reason.
+    ///   - generated: on-device questions keyed by `HomeworkSnapshot.dedupKey`
+    ///     (`QuizSession.make`), used only for homework slots the bank cannot
+    ///     fill. Empty by default: the synchronous init never generates.
     init(
         child: Child,
         modelContext: ModelContext,
@@ -115,7 +121,8 @@ final class QuizSession {
         calendar: Calendar = .current,
         seed: UInt64 = UInt64.random(in: UInt64.min ... UInt64.max),
         now: @escaping @Sendable () -> Date = { Date() },
-        onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil
+        onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil,
+        generated: [String: QuizQuestion] = [:]
     ) {
         self.onMinutesEarned = onMinutesEarned
         self.child = child
@@ -126,10 +133,69 @@ final class QuizSession {
         let start = now()
         self.startedAt = start
         let drawn = Self.draw(for: child, in: modelContext, curriculum: curriculum, calendar: calendar,
-                              seed: seed, now: start)
+                              seed: seed, now: start, generated: generated)
         self.questions = drawn
         self.answers = Array(repeating: -1, count: drawn.count)
         self.phase = drawn.isEmpty ? .empty : .inProgress
+    }
+
+    /// 3.3: like `init`, but first asks `generator` (on device) for a
+    /// question on each homework slot (due ≤ 72 h) that has no bank item,
+    /// within `generationTimeout` for the whole quiz. Any failure, refusal,
+    /// rejected output or timeout falls back silently to the bank /
+    /// programme draw. No network call on this path. Nothing is generated
+    /// unless the bank alone already draws `config.minQuestionCount`
+    /// questions (with no reviewed item the quiz stays `.empty`): generation
+    /// completes a bank quiz, it never replaces the bank, and it can never
+    /// turn a thin bank's `.tooShort` quiz into one that earns minutes.
+    static func make(
+        child: Child,
+        modelContext: ModelContext,
+        curriculum: CurriculumSnapshot = .bundled,
+        config: RewardConfig = .default,
+        calendar: Calendar = .current,
+        seed: UInt64 = UInt64.random(in: UInt64.min ... UInt64.max),
+        now: @escaping @Sendable () -> Date = { Date() },
+        onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil,
+        generator: (any QuizGenerating)?,
+        generationTimeout: Duration = QuizGenerator.defaultTimeout
+    ) async -> QuizSession {
+        var generated: [String: QuizQuestion] = [:]
+        if let generator {
+            let requests = generationRequests(for: child, in: modelContext, curriculum: curriculum,
+                                              calendar: calendar, seed: seed, now: now(),
+                                              minBankQuestions: config.minQuestionCount)
+            if !requests.isEmpty {
+                generator.prewarm()
+                generated = await QuizGenerator.questions(for: requests, using: generator,
+                                                          timeout: generationTimeout)
+            }
+        }
+        return QuizSession(child: child, modelContext: modelContext, curriculum: curriculum, config: config,
+                           calendar: calendar, seed: seed, now: now, onMinutesEarned: onMinutesEarned,
+                           generated: generated)
+    }
+
+    /// Generation requests for the homework slots the bank cannot fill, in
+    /// slot order (tomorrow first), at most `QuizGenerator.maxGeneratedPerQuiz`.
+    /// Empty when the bank-only draw has fewer than `minBankQuestions`.
+    static func generationRequests(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
+                                   calendar: Calendar, seed: UInt64, now: Date,
+                                   minBankQuestions: Int = 1) -> [QuizGenerationRequest] {
+        let selection = select(for: child, in: context, curriculum: curriculum, calendar: calendar,
+                               seed: seed, now: now, generated: [:])
+        guard !selection.unmatchedHomework.isEmpty,
+              selection.questions.count >= max(1, minBankQuestions) else { return [] }
+        let level = CurriculumService.canonicalLevel(child.grade)
+        let homework = child.homework.map { HomeworkSnapshot($0, calendar: calendar) }
+        return selection.unmatchedHomework.prefix(QuizGenerator.maxGeneratedPerQuiz).compactMap { gap in
+            guard let key = gap.slot.homeworkKey,
+                  let snapshot = homework.first(where: { $0.dedupKey == key }),
+                  !snapshot.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            return QuizGenerationRequest(level: level, slot: gap.slot, homework: snapshot,
+                                         bankAnswers: gap.bankAnswers, calendar: calendar)
+        }
     }
 
     // MARK: - Playing
@@ -316,15 +382,38 @@ final class QuizSession {
     /// Picks the questions:
     /// 1. `QuizSourceSelector` plans the slots (homework ≤ 72 h, due notions,
     ///    programme). One item per slot, matched on subject + theme (subject
-    ///    only when the slot has no theme).
+    ///    only when the slot has no theme). A homework slot with no bank item
+    ///    takes its on-device question from `generated` when there is one
+    ///    (3.3, at most `QuizGenerator.maxGeneratedPerQuiz`).
     /// 2. Remaining places are topped up from the rest of the level's bank.
     /// Within each pool, items never played in a passed attempt come first
     /// (a thin bank would otherwise make every quiz an identical replay), and
     /// ties are broken by the seeded shuffle.
     static func draw(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
-                     calendar: Calendar, seed: UInt64, now: Date) -> [QuizQuestion] {
+                     calendar: Calendar, seed: UInt64, now: Date,
+                     generated: [String: QuizQuestion] = [:]) -> [QuizQuestion] {
+        select(for: child, in: context, curriculum: curriculum, calendar: calendar, seed: seed, now: now,
+               generated: generated).questions
+    }
+
+    /// A homework slot no bank item could fill.
+    struct HomeworkGap: Equatable {
+        let slot: QuizPlanSlot
+        /// Right answers of the bank items of the slot's level / subject /
+        /// theme (already used ones included), for `QuizGenerationValidator`.
+        let bankAnswers: [String]
+    }
+
+    private struct Selection {
+        var questions: [QuizQuestion] = []
+        var unmatchedHomework: [HomeworkGap] = []
+    }
+
+    private static func select(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
+                               calendar: Calendar, seed: UInt64, now: Date,
+                               generated: [String: QuizQuestion]) -> Selection {
         let level = CurriculumService.canonicalLevel(child.grade)
-        guard CurriculumService.revisionLevels.contains(level) else { return [] }
+        guard CurriculumService.revisionLevels.contains(level) else { return Selection() }
         var items = availableItems(level: level, in: context, now: now)
         if items.isEmpty {
             // Offline fallback: the home seeds on appear, but a quiz opened
@@ -334,7 +423,7 @@ final class QuizSession {
                 items = availableItems(level: level, in: context, now: now)
             }
         }
-        guard !items.isEmpty else { return [] }
+        guard !items.isEmpty else { return Selection() }
 
         let history = child.quizAttempts.map { AttemptSnapshot($0) }
         let playedKeys = Set(history.filter(\.passed).flatMap(\.questionKeys))
@@ -353,29 +442,42 @@ final class QuizSession {
             maxSlots: questionCount, currentPeriod: nil
         )
 
-        var picked: [QuizItem] = []
+        var selection = Selection()
         var usedKeys = Set<String>()
-        for slot in plan.slots where picked.count < questionCount {
+        var generatedCount = 0
+        for slot in plan.slots where selection.questions.count < questionCount {
             if let item = ordered.first(where: { !usedKeys.contains($0.questionKey) && matches($0, slot) }) {
-                picked.append(item)
+                selection.questions.append(question(from: item, level: level))
                 usedKeys.insert(item.questionKey)
+                continue
+            }
+            guard slot.isHomework, let key = slot.homeworkKey else { continue }
+            if let question = generated[key], generatedCount < QuizGenerator.maxGeneratedPerQuiz,
+               !usedKeys.contains(question.questionKey) {
+                selection.questions.append(question)
+                usedKeys.insert(question.questionKey)
+                generatedCount += 1
+            } else {
+                let answers = ordered.filter { matches($0, slot) }.map { $0.choices[$0.answerIndex] }
+                selection.unmatchedHomework.append(HomeworkGap(slot: slot, bankAnswers: answers))
             }
         }
-        for item in ordered where picked.count < questionCount && !usedKeys.contains(item.questionKey) {
-            picked.append(item)
+        for item in ordered where selection.questions.count < questionCount && !usedKeys.contains(item.questionKey) {
+            selection.questions.append(question(from: item, level: level))
             usedKeys.insert(item.questionKey)
         }
+        return selection
+    }
 
-        return picked.map { item in
-            let notionKey: String? = {
-                guard let subject = item.subject, let theme = item.theme, !theme.isEmpty else { return nil }
-                return NotionKey.make(level: level, subject: subject, theme: theme)
-            }()
-            return QuizQuestion(id: item.id, questionKey: item.questionKey, question: item.question,
-                                choices: item.choices, answerIndex: item.answerIndex,
-                                explanation: item.explanation, subject: item.subject, theme: item.theme,
-                                notionKey: notionKey, difficulty: item.difficulty)
-        }
+    private static func question(from item: QuizItem, level: String) -> QuizQuestion {
+        let notionKey: String? = {
+            guard let subject = item.subject, let theme = item.theme, !theme.isEmpty else { return nil }
+            return NotionKey.make(level: level, subject: subject, theme: theme)
+        }()
+        return QuizQuestion(id: item.id, questionKey: item.questionKey, question: item.question,
+                            choices: item.choices, answerIndex: item.answerIndex,
+                            explanation: item.explanation, subject: item.subject, theme: item.theme,
+                            notionKey: notionKey, difficulty: item.difficulty)
     }
 
     /// Subject equality is folded and alias-aware (a homework slot keeps the
