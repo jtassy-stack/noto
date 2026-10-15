@@ -114,6 +114,10 @@ enum RewardUnlockOutcome: Equatable, Sendable {
     case budgetNotSpent
     /// No schedule slot could be freed (20-schedule limit).
     case noRoom
+    /// iOS < 17.4: DeviceActivityEvent cannot ignore usage from before the
+    /// unlock (`includesPastActivity`), so earlier use in the interval could
+    /// re-lock the apps at once. Minutes stay pending, nothing is unlocked.
+    case unsupportedOS
     case failed(String)
     case unlocked(RewardActivity, merged: [String])
 }
@@ -148,6 +152,7 @@ enum RewardEngine {
         center: DeviceActivityCenter = DeviceActivityCenter(),
         store: ManagedSettingsStore = ManagedSettingsStore()
     ) -> RewardUnlockOutcome {
+        guard #available(iOS 17.4, *) else { return .unsupportedOS }
         var ledger = RewardLedgerStore.load(defaults: defaults, now: now, calendar: calendar)
         if ledger.rollOver(now: now, calendar: calendar) {
             RewardLedgerStore.save(ledger, defaults: defaults)
@@ -243,6 +248,8 @@ enum RewardEngine {
                                        categories: selection.categoryTokens,
                                        threshold: threshold, includesPastActivity: false)
         }
+        // Unreachable: `unlockPending` refuses to register rewards below
+        // iOS 17.4 (past usage would satisfy the threshold at once).
         return DeviceActivityEvent(applications: selection.applicationTokens,
                                    categories: selection.categoryTokens,
                                    threshold: threshold)

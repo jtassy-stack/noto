@@ -229,9 +229,11 @@ final class QuizSession {
         // quiz still tells us what the child knows).
         updateMastery(at: end)
 
+        var saved = true
         do {
             try modelContext.save()
         } catch {
+            saved = false
             logger.error("Saving quiz attempt failed: \(error.localizedDescription, privacy: .public)")
         }
 
@@ -249,9 +251,10 @@ final class QuizSession {
                                    levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter))
         phase = .finished
 
-        // 3.4: credit the reward ledger (after the save, so a crash in the
-        // Screen Time path can never lose the attempt).
-        if decision.total > 0 {
+        // 3.4: credit the reward ledger only once the attempt is persisted —
+        // an unsaved attempt is missing from the history RewardPolicy uses for
+        // replay / tier / cap checks, so a retry could be credited again.
+        if saved, decision.total > 0 {
             onMinutesEarned?(decision.total, end)
         }
     }
