@@ -123,6 +123,19 @@ struct QuizGenerationValidatorTests {
         #expect(V.rejection(for: fine, request: request) == nil)
     }
 
+    @Test("an invented proper noun as the FIRST word is still checked (Codex #52)")
+    func sentenceInitialProperNoun() {
+        let invented = GenFixtures.candidate("Germinal a été écrit par quel auteur ?",
+                                             choices: ["Maupassant", "Zola", "Hugo", "Balzac"], answer: 0,
+                                             explanation: "Maupassant est l'auteur à lire.")
+        #expect(V.rejection(for: invented, request: GenFixtures.request()) == .ungroundedStem)
+        // A normal question opener stays exempt.
+        let normal = GenFixtures.candidate("Quel auteur a écrit Le Horla ?",
+                                           choices: ["Maupassant", "Zola", "Hugo", "Balzac"], answer: 0,
+                                           explanation: "Le Horla est une nouvelle de Maupassant.")
+        #expect(V.rejection(for: normal, request: GenFixtures.request()) == nil)
+    }
+
     @Test("a wrong answer that is also in the homework is ambiguous")
     func ambiguousDistractor() {
         let c = GenFixtures.candidate(choices: ["Maupassant", "Horla", "Hugo", "Balzac"], answer: 0)
@@ -257,7 +270,7 @@ struct QuizGenerationValidatorTests {
     func cap() {
         let authors = ["Maupassant", "Horla", "fantastique", "nouvelle", "marques"]
         let candidates = authors.enumerated().map { index, answer in
-            GenFixtures.candidate("Question \(index) ?", choices: [answer, "Zola", "Hugo", "Balzac"])
+            GenFixtures.candidate("Quelle est la réponse \(index) ?", choices: [answer, "Zola", "Hugo", "Balzac"])
         }
         let three = V.validate(candidates, request: GenFixtures.request(), maxCount: 10)
         #expect(three.accepted.count == 3)
@@ -372,7 +385,7 @@ struct QuizGeneratorOrchestrationTests {
 /// A different grounded question per homework key.
 private struct DistinctStub: QuizGenerating {
     func generate(_ request: QuizGenerationRequest) async -> [QuizCandidate]? {
-        [GenFixtures.candidate("Question pour \(request.homeworkKey) ?")]
+        [GenFixtures.candidate("Quel mot du devoir \(request.homeworkKey) dois-tu connaître ?")]
     }
 }
 

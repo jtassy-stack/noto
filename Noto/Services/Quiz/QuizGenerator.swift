@@ -298,13 +298,28 @@ enum QuizGenerationValidator {
         (" " + normalizedText + " ").contains(" " + normalizedWords + " ")
     }
 
-    /// Every capitalised word of the stem past the first one (a name, a
-    /// title, a place: what a made-up fact hangs on) is in the homework text
-    /// or in a bank answer. Words under 3 letters are ignored (« L' », « A »).
+    /// Sentence-opening words a question may start with in French. Only
+    /// these are exempt from the capitalisation check as the first word: an
+    /// unknown first word (« Germinal a été écrit par… ») is a proper noun
+    /// and must be grounded like any other.
+    static let questionOpeners: Set<String> = [
+        "quel", "quelle", "quels", "quelles", "qui", "que", "quoi", "ou", "comment", "combien",
+        "pourquoi", "quand", "lequel", "laquelle", "lesquels", "lesquelles", "dans", "selon",
+        "en", "a", "au", "aux", "le", "la", "les", "un", "une", "des", "de", "du", "est",
+        "parmi", "pour", "avec", "sur", "d", "l", "qu", "c", "ce", "cette", "ces", "on", "tu",
+    ]
+
+    /// Every capitalised word of the stem (a name, a title, a place: what a
+    /// made-up fact hangs on) is in the homework text or in a bank answer.
+    /// The first word is exempt only when it is a known question opener.
+    /// Words under 3 letters are ignored (« L' », « A »).
     static func isStemGrounded(_ question: String, request: QuizGenerationRequest) -> Bool {
         let homework = QuizKey.normalizeName(request.homeworkText)
         let bank = request.bankAnswers.map(QuizKey.normalizeName)
-        let words = question.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).dropFirst()
+        var words = question.split(whereSeparator: { !$0.isLetter && !$0.isNumber })[...]
+        if let first = words.first, questionOpeners.contains(QuizKey.normalizeName(String(first))) {
+            words = words.dropFirst()
+        }
         for word in words where word.count >= 3 && (word.first?.isUppercase ?? false) {
             let folded = QuizKey.normalizeName(String(word))
             guard !folded.isEmpty else { continue }
