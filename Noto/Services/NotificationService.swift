@@ -105,6 +105,25 @@ final class NotificationService: ObservableObject {
         UserDefaults.standard.set(existing, forKey: "notified_carnets")
     }
 
+    // MARK: - Weekly revision summary (3.7)
+
+    /// Keeps the weekly « Révisions » notification in line with the toggle,
+    /// the device mode and the permission. Never asks for permission (the
+    /// Notifications section of Réglages owns that flow); idempotent (fixed
+    /// identifier, re-adding replaces), so it is safe on every foreground.
+    /// See `WeeklyRevisionNotification` for why the body is generic.
+    func syncWeeklyRevisionSummary(childNames: [String], enabled: Bool,
+                                   mode: DeviceMode = DeviceMode.current) async {
+        let center = UNUserNotificationCenter.current()
+        let status = await authorizationStatus()
+        guard WeeklyRevisionNotification.shouldSchedule(enabled: enabled, mode: mode,
+                                                        childNames: childNames, status: status) else {
+            center.removePendingNotificationRequests(withIdentifiers: [WeeklyRevisionNotification.identifier])
+            return
+        }
+        try? await center.add(WeeklyRevisionNotification.makeRequest(childNames: childNames))
+    }
+
     // MARK: - Cancel
 
     /// Annule toutes les notifications en attente pour un enfant donné.
@@ -115,5 +134,73 @@ final class NotificationService: ObservableObject {
             .filter { $0.identifier.hasPrefix("homework.\(childName).") || $0.identifier.hasPrefix("difficulty.\(childName).") }
             .map(\.identifier)
         center.removePendingNotificationRequests(withIdentifiers: toRemove)
+    }
+}
+
+// MARK: - Weekly revision notification (pure builder)
+
+/// Sunday 19:00 local notification for the weekly revision summary.
+///
+/// Approach (simplest correct one, no push server, no background task):
+/// a single repeating `UNCalendarNotificationTrigger` (weekday 1 = Sunday in
+/// the Gregorian calendar, 19:00) with a **generic** body. Its content cannot
+/// be computed at delivery time: the app does not run then, and nōto has no
+/// background refresh (`BGAppRefreshTask` was rejected, see
+/// `ClassScheduleShieldService`). The figures and the adjustment suggestion
+/// (`RevisionSummary`, `RevisionSuggestion`) are computed live when the parent
+/// opens Réglages › Révisions.
+///
+/// Scheduled only when: the parent toggle is on, the device is in parent mode
+/// (the copy addresses the parent; a child must not receive « Votre
+/// enfant… » on their own phone), at least one child on this device revised in
+/// the last 30 days, and notifications are authorized (or provisional).
+///
+/// V1 limitation: quizzes are only played in child mode (`ChildHomeView`) and
+/// attempts are not synced, so no device meets both conditions yet; the
+/// Réglages toggle is hidden until it can (`SettingsView.weeklyRevisionsAvailable`).
+enum WeeklyRevisionNotification {
+    static let identifier = "revisions.weekly"
+    static let enabledKey = "notif_weekly_revisions"
+    /// Gregorian weekday: 1 = Sunday.
+    static let weekday = 1
+    static let hour = 19
+
+    static func dateComponents() -> DateComponents {
+        var components = DateComponents()
+        components.weekday = weekday
+        components.hour = hour
+        components.minute = 0
+        return components
+    }
+
+    static func shouldSchedule(enabled: Bool, mode: DeviceMode, childNames: [String],
+                               status: UNAuthorizationStatus) -> Bool {
+        guard enabled, mode == .parent, !childNames.isEmpty else { return false }
+        return status == .authorized || status == .provisional
+    }
+
+    /// Parent tone (vouvoiement), no figures (see the type comment).
+    static func content(childNames: [String]) -> (title: String, body: String) {
+        let names = childNames.filter { !$0.isEmpty }
+        let who: String
+        switch names.count {
+        case 0: who = "de votre enfant"
+        case 1: who = "de \(names[0])"
+        default: who = "de " + names.dropLast().joined(separator: ", ") + " et " + names[names.count - 1]
+        }
+        return ("Bilan hebdo des révisions",
+                "Le bilan de la semaine \(who) est prêt, avec une suggestion de réglage si besoin : "
+                    + "Réglages › Révisions.")
+    }
+
+    static func makeRequest(childNames: [String]) -> UNNotificationRequest {
+        let text = content(childNames: childNames)
+        let content = UNMutableNotificationContent()
+        content.title = text.title
+        content.body = text.body
+        content.sound = .default
+        content.threadIdentifier = "revisions.weekly"
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents(), repeats: true)
+        return UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
     }
 }

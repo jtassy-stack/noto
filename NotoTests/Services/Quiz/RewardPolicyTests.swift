@@ -264,7 +264,7 @@ struct RewardPolicyTests {
     }
 
     @Test("no bonus on a denied quiz", arguments: [
-        RewardDenial.belowThreshold, .tooFast, .identicalReplay, .tiersExhausted, .capReached,
+        RewardDenial.belowThreshold, .tooFast, .identicalReplay, .tiersExhausted, .capReached, .tooShort,
     ])
     func noBonusWhenDenied(denial: RewardDenial) {
         var scored = self.attempt()
@@ -277,6 +277,7 @@ struct RewardPolicyTests {
         case .tiersExhausted: history = successes([10, 5, 5])
         case .capReached: config.dailyCap = 10; history = successes([10])
         case .emptyQuiz: scored = self.attempt(correct: 0, total: 0)
+        case .tooShort: scored = self.attempt(correct: 3, total: 3, keys: ["k1", "k2", "k3"])
         }
         let d = evaluate(scored, history: history, homework: controleTomorrow, config: config)
         #expect(d.denial == denial)
@@ -327,10 +328,60 @@ struct RewardPolicyTests {
 
     @Test("countsAsSuccess per denial", arguments: [
         (RewardDenial.emptyQuiz, false), (.belowThreshold, false), (.tooFast, false),
-        (.identicalReplay, false), (.tiersExhausted, true), (.capReached, true),
+        (.identicalReplay, false), (.tiersExhausted, true), (.capReached, true), (.tooShort, false),
     ])
     func countsAsSuccess(denial: RewardDenial, expected: Bool) {
         #expect(denial.countsAsSuccess == expected)
         #expect(RewardDecision.denied(denial).countsAsSuccess == expected)
+    }
+
+    // MARK: 1b. Minimum quiz length (3.7)
+
+    @Test("fewer questions than minQuestionCount: tooShort, even when all right")
+    func tooShort() {
+        let short = attempt(correct: 3, total: 3, keys: ["k1", "k2", "k3"])
+        let d = evaluate(short)
+        #expect(d == .denied(.tooShort))
+        #expect(!d.countsAsSuccess)
+    }
+
+    @Test("tooShort wins over the threshold (a 1/2 quiz is short, not failed)")
+    func tooShortBeforeThreshold() {
+        #expect(evaluate(attempt(correct: 1, total: 2, keys: ["k1", "k2"])).denial == .tooShort)
+    }
+
+    @Test("a lowered minimum lets a 3-question quiz earn its tier")
+    func loweredMinimum() {
+        var config = RewardConfig.default
+        config.minQuestionCount = 3
+        let d = evaluate(attempt(correct: 3, total: 3, keys: ["k1", "k2", "k3"]), config: config)
+        #expect(d.denial == nil)
+        #expect(d.base == 10)
+    }
+
+    @Test("a config saved before minQuestionCount existed decodes with the default")
+    func decodesWithoutMinQuestionCount() throws {
+        let json = #"{"tiers":[8,4],"passThreshold":0.6,"dailyCap":30,"examEveBonus":3,"#
+            + #""examEveBonusEnabled":false,"minDurationSec":20,"replayWindow":"sameDay"}"#
+        let config = try JSONDecoder().decode(RewardConfig.self, from: Data(json.utf8))
+        #expect(config.tiers == [8, 4])
+        #expect(config.passThreshold == 0.6)
+        #expect(config.examEveBonusEnabled == false)
+        #expect(config.replayWindow == .sameDay)
+        #expect(config.minQuestionCount == 5)
+    }
+
+    @Test("sanitized clamps out-of-range values")
+    func sanitized() {
+        let wild = RewardConfig(tiers: [-5, 99], passThreshold: 3, dailyCap: -1, examEveBonus: 40,
+                                minDurationSec: -3, minQuestionCount: 50).sanitized()
+        #expect(wild.tiers == [0, 30])
+        #expect(wild.passThreshold == 1)
+        #expect(wild.dailyCap == 0)
+        #expect(wild.examEveBonus == 15)
+        #expect(wild.minDurationSec == 0)
+        #expect(wild.minQuestionCount == 5)
+        #expect(RewardConfig(tiers: []).sanitized().tiers == [10, 5, 5])
+        #expect(RewardConfig.default.sanitized() == .default)
     }
 }

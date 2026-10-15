@@ -65,10 +65,13 @@ struct QuizSessionTests {
         }
     }
 
-    private func makeSession(_ child: Child, seed: UInt64 = 7) -> QuizSession {
+    /// `config` is always explicit (the init default is `.default`; only
+    /// `QuizView` reads the app group, which the test host shares with the
+    /// app installed on the simulator).
+    private func makeSession(_ child: Child, seed: UInt64 = 7, config: RewardConfig = .default) -> QuizSession {
         let clock = self.clock
         return QuizSession(child: child, modelContext: context, curriculum: QuizCurriculumFixtures.curriculum,
-                           calendar: QuizClock.calendar, seed: seed, now: { clock.now })
+                           config: config, calendar: QuizClock.calendar, seed: seed, now: { clock.now })
     }
 
     /// Answers every question (right unless its index is in `wrong`), then
@@ -306,6 +309,63 @@ struct QuizSessionTests {
         #expect(try attempts().first?.denialReason == RewardDenial.tooFast.rawValue)
     }
 
+    // MARK: Parent config (3.7)
+
+    @Test("a thin bank draws fewer questions than the minimum: tooShort, progress still recorded")
+    func tooShortQuiz() throws {
+        let child = makeChild()
+        for theme in [Self.moliere, Self.pythagore, Self.revolution] { addItem(theme) }
+        try context.save()
+
+        let session = makeSession(child)
+        #expect(session.questions.count == 3)
+        play(session)
+
+        let result = try #require(session.result)
+        #expect(result.decision.denial == .tooShort)
+        #expect(result.minutesEarned == 0)
+        #expect(result.minQuestionCount == 5)
+        #expect(result.xpEarned > 0)
+        let attempt = try #require(try attempts().first)
+        #expect(attempt.denialReason == RewardDenial.tooShort.rawValue)
+        #expect(attempt.minutesEarned == 0)
+        #expect(try masteries().count == 3)
+    }
+
+    @Test("the session scores with the config it is given (minimum 3, cap 8)")
+    func readsConfig() throws {
+        let child = makeChild()
+        for theme in [Self.moliere, Self.pythagore, Self.revolution] { addItem(theme) }
+        try context.save()
+
+        var config = RewardConfig.default
+        config.minQuestionCount = 3
+        config.dailyCap = 8
+        let session = makeSession(child, config: config)
+        play(session)
+        #expect(session.result?.decision.denial == nil)
+        #expect(session.result?.minutesEarned == 8)
+        #expect(session.result?.minQuestionCount == 3)
+    }
+
+    @Test("a stored config round-trips into the session")
+    func storedConfig() throws {
+        let suite = "QuizSessionTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        var stored = RewardConfig.default
+        stored.passThreshold = 0.6
+        RewardConfigStore.save(stored, defaults: defaults)
+
+        let child = makeChild()
+        addPlannedBank()
+        try context.save()
+        let session = makeSession(child, config: RewardConfigStore.load(defaults: defaults))
+        play(session, wrong: [0, 1])   // 3/5: passes at 3/5
+        #expect(session.result?.decision.denial == nil)
+        #expect(session.result?.requiredCorrect == 3)
+    }
+
     @Test("second passed quiz of the day earns the second tier (5 min)")
     func secondTier() throws {
         let child = makeChild()
@@ -447,6 +507,7 @@ struct QuizStreakTests {
 struct QuizResultCopyTests {
     @Test("every denial has child-addressed copy with no unlock promise", arguments: [
         RewardDenial.belowThreshold, .tooFast, .identicalReplay, .tiersExhausted, .capReached, .emptyQuiz,
+        .tooShort,
     ])
     @MainActor
     func copy(denial: RewardDenial) {
@@ -458,6 +519,17 @@ struct QuizResultCopyTests {
         #expect(!text.contains("vous"))
         #expect(!text.contains("votre"))
         if denial == .belowThreshold { #expect(text.contains("4 bonnes réponses")) }
+    }
+
+    @Test("too short: says how many questions were played and how many are needed")
+    @MainActor
+    func tooShortCopy() {
+        let result = QuizSessionResult(correctCount: 2, totalCount: 2, durationSec: 40,
+                                       decision: .denied(.tooShort), requiredCorrect: 2, minQuestionCount: 5)
+        let text = QuizResultView.message(for: result)
+        #expect(text.contains("2 questions"))
+        #expect(text.contains("il en faut 5"))
+        #expect(QuizResultView.title(for: result) == "Sans faute, bravo !")
     }
 
     @Test("capped successes are celebrated, not framed as failures")

@@ -103,6 +103,7 @@ struct QuizModelPersistenceTests {
     @Test("AttemptSnapshot.passed follows the stored denial", arguments: [
         (nil as String?, 5, true), ("capReached", 5, true), ("tiersExhausted", 5, true),
         ("tooFast", 5, false), ("identicalReplay", 5, false), ("belowThreshold", 5, false),
+        ("tooShort", 5, false),
         (nil as String?, 0, false), ("not-a-denial", 5, true),
     ])
     func attemptSnapshot(denial: String?, total: Int, passed: Bool) {

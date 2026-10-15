@@ -145,8 +145,8 @@ struct BundledQuizBankTests {
         let child = Child(firstName: "Léa", level: .college, grade: "6ème", schoolType: .pronote,
                           establishment: "Collège Test")
         context.insert(child)
-        let session = QuizSession(child: child, modelContext: context, calendar: QuizClock.calendar,
-                                  seed: 42, now: { QuizClock.now })
+        let session = QuizSession(child: child, modelContext: context, config: .default,
+                                  calendar: QuizClock.calendar, seed: 42, now: { QuizClock.now })
         #expect(session.phase == .inProgress)
         #expect(session.questions.count == QuizSession.questionCount)
         #expect(try items(level: "6e").count == (try bundled("6e").items.count))

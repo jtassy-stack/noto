@@ -340,7 +340,7 @@ struct HomeView: View {
             wellbeingSignal = card.wellbeing
             showWellbeingSheet = true
 
-        case .screenTime:
+        case .screenTime, .revisions:
             NotificationCenter.default.post(name: .navigateToSettings, object: nil)
 
         case .meetingAgenda:

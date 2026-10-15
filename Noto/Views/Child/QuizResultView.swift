@@ -141,6 +141,10 @@ struct QuizResultView: View {
             return "Ta cagnotte du jour est pleine. Tes révisions comptent quand même pour ta série !"
         case .emptyQuiz:
             return "Il n'y avait pas de question cette fois."
+        case .tooShort:
+            return "Ce quiz était un peu court (\(result.totalCount) question\(result.totalCount > 1 ? "s" : "")) : "
+                + "il en faut \(result.minQuestionCount) pour gagner des minutes. Ce que tu as revu compte quand même, "
+                + "et d'autres questions arrivent bientôt."
         case nil:
             return "Pas de minutes cette fois."
         }
