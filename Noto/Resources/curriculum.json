@@ -835,6 +835,31 @@
             { "theme": "Créer et recréer", "keywords": ["artist", "artwork", "art", "film", "creativity", "remake", "adaptation", "street art", "museum", "remix"], "period": "Année" },
             { "theme": "Les pays du Commonwealth : héritages, unité, diversité", "keywords": ["commonwealth", "india", "australia", "canada", "south africa", "british empire", "colonial", "independence", "aboriginal"], "period": "Année" }
           ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Représentation de soi et rapport à autrui", "keywords": ["autorretrato", "retrato", "autoportrait", "selfi", "pertenencia", "appartenance", "prejuicio", "identidad", "frida kahlo"], "period": "Année" },
+            { "theme": "Vivre entre générations", "keywords": ["generacion", "generation", "intergeneracional", "abuelo", "abuela", "edadismo", "personas mayores", "vejez", "familia"], "period": "Année" },
+            { "theme": "Le passé dans le présent", "keywords": ["patrimonio", "herencia", "dia de los muertos", "dia de muertos", "semana santa", "san fermin", "fallas", "recit national", "bolivar", "hispanidad"], "period": "Année" },
+            { "theme": "Défis et transitions", "keywords": ["turismo", "surtourisme", "indignados", "cambio climatico", "sostenible", "ciudad del futuro", "globalizacion", "transicion", "compromiso"], "period": "Année" },
+            { "theme": "Créer et recréer", "keywords": ["leyenda", "cuentos", "mitos", "reinterpretacion", "detournement", "don juan", "equipo cronica", "pasarela", "alta costura", "industria textil"], "period": "Année" },
+            { "theme": "L'Espagne au-delà des clichés", "keywords": ["estereotipo", "cliche", "topicos", "pandereta", "flamenco", "madrid", "movida", "sorolla", "pesca", "litoral"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EPS",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "CA1 — Réaliser une performance motrice maximale mesurable à une échéance donnée", "keywords": ["athlé", "demi-fond", "haies", "relais", "javelot", "saut en hauteur", "triple saut", "natation vitesse"], "period": "Année" },
+            { "theme": "CA2 — Adapter son déplacement à des environnements variés et/ou incertains", "keywords": ["escalade", "orientation", "sauvetage", "vtt", "course tout terrain", "ski", "snowboard"], "period": "Année" },
+            { "theme": "CA3 — Réaliser une prestation corporelle destinée à être vue et appréciée", "keywords": ["danse", "cirque", "jonglage", "acrosport", "gymnastique", "gym", "agrès", "chorégraphie"], "period": "Année" },
+            { "theme": "CA4 — Conduire et maîtriser un affrontement collectif ou interindividuel pour gagner", "keywords": ["badminton", "tennis", "boxe", "judo", "basket", "handball", "football", "rugby", "volley"], "period": "Année" },
+            { "theme": "CA5 — Réaliser et orienter son activité physique pour développer ses ressources et s'entretenir", "keywords": ["course en durée", "muscul", "natation", "step", "yoga", "training", "relaxation"], "period": "Année" }
+          ]
         }
       ]
     },
@@ -914,14 +939,37 @@
           "track": "tronc_commun",
           "specialty": null,
           "themes": [
-            { "theme": "Identités et échanges", "keywords": ["identities", "exchanges", "identité", "migration", "exile", "melting pot", "globali", "american dream", "ellis island"], "period": "Année" },
-            { "theme": "Espace privé et espace public", "keywords": ["private space", "public space", "privacy", "espace privé", "espace public", "surveillance", "gender roles"], "period": "Année" },
-            { "theme": "Art et pouvoir", "keywords": ["art and power", "propaganda", "censorship", "protest song", "street art", "banksy", "propagande", "censure"], "period": "Année" },
-            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["mondes virtuels", "social media", "social network", "réseaux sociaux", "fake news", "cyberbullying", "screen addiction", "online privacy"], "period": "Année" },
-            { "theme": "Fictions et réalités", "keywords": ["dystopia", "utopia", "dystopie", "science fiction", "sci-fi", "orwell", "1984", "fictions et réalités", "fake or real", "hoax"], "period": "Année" },
-            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovations scientifiques", "artificial intelligence", "bioethics", "genetic", "gmo", "cloning", "clone", "robot", "climate change"], "period": "Année" },
-            { "theme": "Diversité et inclusion", "keywords": ["diversity", "inclusion", "civil rights", "segregation", "racism", "minorit", "black lives matter", "discrimination", "rosa parks", "martin luther king"], "period": "Année" },
-            { "theme": "Territoire et mémoire", "keywords": ["territor", "memory", "memorial", "commemoration", "native american", "colonial", "heritage", "mémoire"], "period": "Année" }
+            { "theme": "Identités et échanges", "keywords": ["migration", "windrush", "borders", "frontière", "identity", "identité", "canada", "northern ireland", "irlande du nord", "melting pot"], "period": "Année" },
+            { "theme": "Diversité et inclusion", "keywords": ["diversit", "inclusion", "discrimination", "supreme court", "cour suprême", "affirmative action", "housing", "logement", "first nations", "peuples premiers"], "period": "Année" },
+            { "theme": "Art et pouvoir", "keywords": ["propaganda", "propagande", "caricature", "cartoon", "photojournalism", "street art", "banksy", "mural", "artist", "resistance"], "period": "Année" },
+            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["ethics", "éthique", "space race", "conquête spatiale", "renewable", "energy", "énergie", "industri", "eugenic", "transhuman"], "period": "Année" },
+            { "theme": "L'être humain et la nature", "keywords": ["national park", "parc national", "wilderness", "climate change", "changement climatique", "hurricane", "ouragan", "extreme weather", "environment", "environnement"], "period": "Année" },
+            { "theme": "Les aires anglophones américaines", "keywords": ["caribbean", "caraïbes", "puerto rico", "porto rico", "jamaica", "jamaïque", "vancouver", "seattle", "latino", "americas"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Identités et échanges", "keywords": ["migracion", "migration", "migrant", "exilio", "frontera", "frontiere", "viaje", "erasmus", "camino de santiago", "ceuta"], "period": "Année" },
+            { "theme": "Diversité et inclusion", "keywords": ["diversidad", "diversite", "inclusion", "discriminacion", "minorias", "indigena", "catalan", "euskera", "cooficial", "pluralidad linguistica"], "period": "Année" },
+            { "theme": "Art et pouvoir", "keywords": ["muralismo", "diego rivera", "propaganda", "censura", "censure", "victor jara", "arte comprometido", "artiste engage", "guernica"], "period": "Année" },
+            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["inteligencia artificial", "teletrabajo", "ramon y cajal", "neurociencia", "cirugia estetica", "robotica", "innovacion", "bioetica", "piel que habito"], "period": "Année" },
+            { "theme": "L'être humain et la nature", "keywords": ["naturaleza", "medio ambiente", "deforestacion", "amazonia", "biodiversidad", "sequia", "mineria", "litio", "ecologia"], "period": "Année" },
+            { "theme": "L'espace andin, la colonne vertébrale de l'Amérique du sud", "keywords": ["andino", "andina", "pays andins", "cordillera", "machu picchu", "quechua", "peru", "perou", "bolivia", "bolivie"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EPS",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "CA1 — Réaliser une performance motrice maximale mesurable à une échéance donnée", "keywords": ["athlé", "demi-fond", "haies", "relais", "javelot", "saut en hauteur", "triple saut", "natation vitesse"], "period": "Année" },
+            { "theme": "CA2 — Adapter son déplacement à des environnements variés et/ou incertains", "keywords": ["escalade", "orientation", "sauvetage", "vtt", "course tout terrain", "ski", "snowboard"], "period": "Année" },
+            { "theme": "CA3 — Réaliser une prestation corporelle destinée à être vue et appréciée", "keywords": ["danse", "cirque", "jonglage", "acrosport", "gymnastique", "gym", "agrès", "chorégraphie"], "period": "Année" },
+            { "theme": "CA4 — Conduire et maîtriser un affrontement collectif ou interindividuel pour gagner", "keywords": ["badminton", "tennis", "boxe", "judo", "basket", "handball", "football", "rugby", "volley"], "period": "Année" },
+            { "theme": "CA5 — Réaliser et orienter son activité physique pour développer ses ressources et s'entretenir", "keywords": ["course en durée", "muscul", "natation", "step", "yoga", "training", "relaxation"], "period": "Année" }
           ]
         },
         {
@@ -1153,14 +1201,37 @@
           "track": "tronc_commun",
           "specialty": null,
           "themes": [
-            { "theme": "Identités et échanges", "keywords": ["identités et échanges", "identities", "identity", "migration", "immigration", "exile", "melting pot", "multicultural", "refugee", "diaspora"], "period": "Année" },
-            { "theme": "Espace privé et espace public", "keywords": ["espace privé", "espace public", "privacy", "surveillance", "private and public", "gender", "feminism", "women"], "period": "Année" },
-            { "theme": "Art et pouvoir", "keywords": ["art et pouvoir", "art and power", "propaganda", "censorship", "protest", "street art", "banksy", "mural"], "period": "Année" },
-            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["mondes virtuels", "virtual worlds", "citizenship", "social media", "fake news", "digital citizenship", "online identity"], "period": "Année" },
-            { "theme": "Fictions et réalités", "keywords": ["fictions et réalités", "fiction and reality", "dystopia", "utopia", "science fiction", "storytelling"], "period": "Année" },
-            { "theme": "Innovations scientifiques et responsabilité", "keywords": ["innovations scientifiques", "scientific innovation", "bioethics", "artificial intelligence", "climate change", "cloning"], "period": "Année" },
-            { "theme": "Diversité et inclusion", "keywords": ["diversité et inclusion", "diversity", "inclusion", "civil rights", "segregation", "discrimination"], "period": "Année" },
-            { "theme": "Territoire et mémoire", "keywords": ["territoire et mémoire", "territory and memory", "memorial", "commemoration", "native americans", "colonial past"], "period": "Année" }
+            { "theme": "Espace privé et espace public", "keywords": ["privacy", "vie privée", "public space", "espace public", "salem", "witch hunt", "chasse aux sorcières", "religion", "abortion", "avortement"], "period": "Année" },
+            { "theme": "Territoire et mémoire", "keywords": ["memory", "mémoire", "slavery", "esclavage", "coloni", "commonwealth", "commemoration", "memorial", "remembrance", "indigenous"], "period": "Année" },
+            { "theme": "Fictions et réalités", "keywords": ["utopi", "fiction", "american dream", "rêve américain", "orwell", "class system", "social class", "huxley"], "period": "Année" },
+            { "theme": "Enjeux et formes de la communication", "keywords": ["global english", "babel", "anglophonie", "conspiracy", "complotisme", "fake news", "churchill", "political speech", "discours politique", "censorship"], "period": "Année" },
+            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["social media", "réseaux sociaux", "video game", "jeu vidéo", "soft power", "artificial intelligence", "intelligence artificielle", "ia", "surveillance", "citizenship"], "period": "Année" },
+            { "theme": "Le Royaume-Uni et ses nations", "keywords": ["united kingdom", "royaume", "scotland", "écosse", "glasgow", "edinburgh", "édimbourg", "ireland", "irlande", "bbc"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "Espagnol",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "Espace privé et espace public", "keywords": ["espacio publico", "espacio privado", "intimidad", "vida privada", "feminismo", "derechos de la mujer", "sufragio", "campoamor", "igualdad", "barrio"], "period": "Année" },
+            { "theme": "Territoire et mémoire", "keywords": ["memoria historica", "guerra civil", "franquismo", "dictadura", "desaparecidos", "espana vaciada", "mar de plastico", "paisaje", "exilio republicano"], "period": "Année" },
+            { "theme": "Fictions et réalités", "keywords": ["realismo magico", "ficcion", "distopia", "mundos imaginarios", "novela historica", "garcia marquez", "laberinto del fauno", "esquivel"], "period": "Année" },
+            { "theme": "Enjeux et formes de la communication", "keywords": ["publicidad", "publicite", "anuncio", "eslogan", "discurso politico", "traduccion automatica", "traduction automatique", "traductor", "doblaje", "comunicacion"], "period": "Année" },
+            { "theme": "Citoyenneté et mondes virtuels", "keywords": ["redes sociales", "reseaux sociaux", "desinformacion", "noticias falsas", "fake news", "ciudadania", "virtual", "brecha digital", "activismo"], "period": "Année" },
+            { "theme": "La richesse des métissages dans le monde hispanique", "keywords": ["mestizaje", "metissage", "mudejar", "andalus", "sincretismo", "santeria", "chicano", "spanglish", "arabismos", "son cubano"], "period": "Année" }
+          ]
+        },
+        {
+          "name": "EPS",
+          "track": "tronc_commun",
+          "specialty": null,
+          "themes": [
+            { "theme": "CA1 — Réaliser une performance motrice maximale mesurable à une échéance donnée", "keywords": ["athlé", "demi-fond", "haies", "relais", "javelot", "saut en hauteur", "triple saut", "natation vitesse"], "period": "Année" },
+            { "theme": "CA2 — Adapter son déplacement à des environnements variés et/ou incertains", "keywords": ["escalade", "orientation", "sauvetage", "vtt", "course tout terrain", "ski", "snowboard"], "period": "Année" },
+            { "theme": "CA3 — Réaliser une prestation corporelle destinée à être vue et appréciée", "keywords": ["danse", "cirque", "jonglage", "acrosport", "gymnastique", "gym", "agrès", "chorégraphie"], "period": "Année" },
+            { "theme": "CA4 — Conduire et maîtriser un affrontement collectif ou interindividuel pour gagner", "keywords": ["badminton", "tennis", "boxe", "judo", "basket", "handball", "football", "rugby", "volley"], "period": "Année" },
+            { "theme": "CA5 — Réaliser et orienter son activité physique pour développer ses ressources et s'entretenir", "keywords": ["course en durée", "muscul", "natation", "step", "yoga", "training", "relaxation"], "period": "Année" }
           ]
         },
         {
