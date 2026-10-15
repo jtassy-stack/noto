@@ -60,6 +60,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     needs: secrets
+    permissions:
+      contents: read
+      id-token: write   # Infisical OIDC
 
     steps:
       - name: Checkout
@@ -81,20 +84,30 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      # Build-time secret → Config.xcconfig (gitignored) → Info.plist.
-      # Rotating a key = `gh secret set <NAME>`, no code change.
-      - name: Write Config.xcconfig from secrets
-        env:
-          DIRECTORY_API_KEY: ${{ secrets.DIRECTORY_API_KEY }}
-          CULTURE_API_KEY: ${{ secrets.CULTURE_API_KEY }}
+      # Build-time keys come from Infisical (project "noto", env prod) via a
+      # GitHub OIDC machine identity: no GitHub secret to manage, rotation
+      # happens in Infisical only. The identity id is a repo *variable*.
+      - name: Fetch API keys from Infisical
+        if: vars.INFISICAL_IDENTITY_ID != ''
+        uses: Infisical/secrets-action@v1.0.18
+        with:
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          oidc-audience: https://eu.infisical.com   # must match the identity's bound audience
+          domain: https://eu.infisical.com
+          env-slug: prod
+          project-slug: noto-ios
+          export-type: env
+          secret-path: /
+
+      - name: Write Config.xcconfig
         run: |
-          # Simulator build only: an empty key compiles fine (clients log and
-          # fall back), so fork PRs without secrets still build. Deploy is strict.
+          ci_scripts/write-xcconfig.sh --from-env
+          # Simulator build only: empty keys compile fine (clients log and
+          # fall back), so fork PRs — which get no OIDC identity — still build.
           if [ -z "$DIRECTORY_API_KEY" ] || [ -z "$CULTURE_API_KEY" ]; then
-            echo "::warning::DIRECTORY_API_KEY / CULTURE_API_KEY secrets not set — building with empty keys"
+            echo "::warning::API keys empty — Infisical identity not configured (vars.INFISICAL_IDENTITY_ID)"
           fi
-          printf 'DIRECTORY_API_KEY = %s\nCULTURE_API_KEY = %s\n' \
-            "$DIRECTORY_API_KEY" "$CULTURE_API_KEY" > Config.xcconfig
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -163,6 +176,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 40
     needs: build
+    permissions:
+      contents: read
+      id-token: write   # Infisical OIDC
     # Opt-in gate (asc-kit rule 4): a plain push to master no longer uploads —
     # only a commit whose TITLE starts with [testflight]/[tf], or a manual
     # workflow_dispatch. startsWith, not contains: a commit that merely
@@ -213,18 +229,28 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      # Build-time secret → Config.xcconfig (gitignored) → Info.plist.
-      # Rotating a key = `gh secret set <NAME>`, no code change.
-      - name: Write Config.xcconfig from secrets
-        env:
-          DIRECTORY_API_KEY: ${{ secrets.DIRECTORY_API_KEY }}
-          CULTURE_API_KEY: ${{ secrets.CULTURE_API_KEY }}
+      # Build-time keys come from Infisical (project "noto", env prod) via a
+      # GitHub OIDC machine identity: no GitHub secret to manage, rotation
+      # happens in Infisical only. The identity id is a repo *variable*.
+      - name: Fetch API keys from Infisical
+        if: vars.INFISICAL_IDENTITY_ID != ''
+        uses: Infisical/secrets-action@v1.0.18
+        with:
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          oidc-audience: https://eu.infisical.com   # must match the identity's bound audience
+          domain: https://eu.infisical.com
+          env-slug: prod
+          project-slug: noto-ios
+          export-type: env
+          secret-path: /
+
+      - name: Write Config.xcconfig
         run: |
+          ci_scripts/write-xcconfig.sh --from-env
           if [ -z "$DIRECTORY_API_KEY" ] || [ -z "$CULTURE_API_KEY" ]; then
-            echo "::error::DIRECTORY_API_KEY / CULTURE_API_KEY secrets are not set"; exit 1
+            echo "::error::API keys missing — Infisical identity not configured (vars.INFISICAL_IDENTITY_ID)"; exit 1
           fi
-          printf 'DIRECTORY_API_KEY = %s\nCULTURE_API_KEY = %s\n' \
-            "$DIRECTORY_API_KEY" "$CULTURE_API_KEY" > Config.xcconfig
 
       - name: Generate Xcode project
         run: xcodegen generate

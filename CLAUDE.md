@@ -4,7 +4,7 @@
 
 - **NEVER transit credentials through a proxy or third-party server**
 - **NEVER store credentials on a server** — only in iOS Keychain via `KeychainService`
-- **NEVER hard-code API keys in source** — build-time keys (celyn directory + culture-api) live in `Config.xcconfig` (gitignored, see `Config.example.xcconfig`) → Info.plist → client. CI writes the file from GitHub secrets. `gitleaks` runs in CI and as a pre-commit hook (`git config core.hooksPath .githooks`)
+- **NEVER hard-code API keys in source** — build-time keys (celyn directory + culture-api) live in **Infisical** (org "PMF consulting", EU, project `noto` / slug `noto-ios`, envs `dev` + `prod`). `ci_scripts/write-xcconfig.sh` pulls them into `Config.xcconfig` (gitignored), optionally included by the committed `Config.base.xcconfig` → Info.plist → client. Empty keys on a fresh clone, never a build break. CI fetches them via a GitHub OIDC machine identity (`vars.INFISICAL_IDENTITY_ID`), no GitHub secret. Rotate keys in Infisical only. `gitleaks` runs in CI and as a pre-commit hook (`git config core.hooksPath .githooks`)
 - **Photos of children** must go phone ↔ school server ONLY, never through any third party
 - **Notifications** are local-first: background fetch + local notification, no push server
 - Before implementing any feature, evaluate privacy impact FIRST
@@ -94,8 +94,9 @@
 ## XcodeGen Workflow
 
 ```bash
-# Once per clone — build-time API keys (never committed):
-cp Config.example.xcconfig Config.xcconfig   # then fill in the real keys
+# Once per clone — build-time API keys (never committed), pulled from Infisical:
+infisical login                    # once per machine
+ci_scripts/write-xcconfig.sh       # writes Config.xcconfig from env "dev"
 
 # After editing project.yml:
 xcodegen generate

@@ -23,10 +23,10 @@ regexes = [
   '''noto_test_key''',
   '''your_celyn_(directory|culture)_key''',
 ]
+# No path-wide exemption for the xcconfig files: only the placeholder
+# values above are allowed, so a real key pasted into Config.example.xcconfig
+# (or a force-added Config.xcconfig) is still caught.
 paths = [
-  '''Config\.example\.xcconfig''',
-  # Local secrets file (gitignored) — `gitleaks dir` still walks it.
-  '''^Config\.xcconfig$''',
   # Vendored esbuild bundle of @niicojs/pawnote: crypto code, no secrets.
   '''Noto/Resources/pawnote-bundle\.js''',
 ]
