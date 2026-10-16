@@ -275,9 +275,9 @@ Mode parent / mode enfant (`DeviceMode`), onboarding (choix d'établissement via
 
 | Phase | Dépend de | Livrable | Statut |
 |---|---|---|---|
-| 1 Hygiène | — | clé retirée, CI secrets, CLAUDE.md | à faire |
-| 2 Programme | 1 | curriculum 6e → Tle | à faire |
-| 3 Révisions iOS | 2 | quiz + récompense + enfant/parent sur TestFlight | à faire |
+| 1 Hygiène | — | clé retirée, CI secrets, CLAUDE.md | fait : PR #42, suivis CI gitleaks #43 et #44 (fusionnées le 15/10/2026) |
+| 2 Programme | 1 | curriculum 6e → Tle | fait : PR #45 (fusionnée le 15/10/2026) |
+| 3 Révisions iOS | 2 | quiz + récompense + enfant/parent sur TestFlight | livrée, **à valider sur iPhone réel** : 3.1 #46, 3.2 #47, 3.5 #48, 3.6 #49, 3.7 #50, 3.4 #51, 3.3 #52 (fusionnées les 15 et 16/10/2026). Reste : parcours appareil (`docs/PHASE3_DEVICE_CHECKLIST.md`), TestFlight (`/asc-ship`), décisions ouvertes (`docs/PHASE3_DECISIONS.md`) |
 | 4 KMP kit | 1 | noto-school-kit (privé) | à faire |
 | 5 MCP | 4 | serveur MCP local | à faire |
 | 6 Open source | 4, 5, avis juridique | repo public | à faire |
