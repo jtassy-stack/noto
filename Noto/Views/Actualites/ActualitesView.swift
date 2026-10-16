@@ -623,17 +623,19 @@ private struct SourceBadge: View {
 
     private var label: String {
         switch source {
-        case .ent:     return "ENT"
-        case .imap:    return imapProviderID == "monlycee" ? "MonLycée" : "IMAP"
-        case .pronote: return "Pronote"
+        case .ent:      return "ENT"
+        case .imap:     return imapProviderID == "monlycee" ? "MonLycée" : "IMAP"
+        case .monlycee: return "MonLycée"
+        case .pronote:  return "Pronote"
         }
     }
 
     private var color: Color {
         switch source {
-        case .ent:     return NotoTheme.Colors.ent
-        case .imap:    return NotoTheme.Colors.pronote
-        case .pronote: return NotoTheme.Colors.pronote
+        case .ent:      return NotoTheme.Colors.ent
+        case .imap:     return NotoTheme.Colors.pronote
+        case .monlycee: return NotoTheme.Colors.pronote
+        case .pronote:  return NotoTheme.Colors.pronote
         }
     }
 

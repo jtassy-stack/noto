@@ -74,10 +74,21 @@ final class Homework {
 
 // MARK: - Message
 
+/// Persisted on `Message` by raw value. Appending a case is additive for
+/// SwiftData's lightweight migration (no `NotoSchemaV1` change); renaming
+/// or removing one would strand existing rows and needs the V2 freeze
+/// described in `NotoSchemaV1`.
 enum MessageSource: String, Codable {
     case pronote
     case ent
     case imap
+    /// Mail fetched from monlycee.net's own webmail API with the ENT SSO
+    /// session (`MonLyceeMailService`) — distinct from `.imap` (the manual
+    /// "Connecter une boîte mail" flow, which also supports monlycee.net but
+    /// requires re-entering credentials). Webmail ids and IMAP UIDs are
+    /// different namespaces; cross-channel dedupe is
+    /// `MonLyceeMailService.isDuplicate`.
+    case monlycee
 }
 
 enum MessageKind: String, Codable {
