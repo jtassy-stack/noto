@@ -163,22 +163,18 @@ struct ENTLoginView: View {
         }
         #endif
 
-        // Store logbook + news + mail for ENT data sync
-        for (key, udKey) in [("logbook", "monlycee_logbook"), ("news", "monlycee_news"), ("zimbraMail", "monlycee_zimbra_mail")] {
+        // Store logbook + news for ENT data sync. Mail is no longer captured
+        // here (the login JS always returned `zimbraMail: null`); it goes
+        // through `MonLyceeMailService` instead. Purge the legacy key so no
+        // stale mail payload lingers in UserDefaults.
+        UserDefaults.standard.removeObject(forKey: "monlycee_zimbra_mail")
+        for (key, udKey) in [("logbook", "monlycee_logbook"), ("news", "monlycee_news")] {
             if let obj = json[key], !(obj is NSNull),
                let data = try? JSONSerialization.data(withJSONObject: obj),
                let str = String(data: data, encoding: .utf8) {
                 UserDefaults.standard.set(str, forKey: udKey)
             }
         }
-
-        #if DEBUG
-        if let mail = json["zimbraMail"] as? [String: Any] {
-            NSLog("[noto] Zimbra mail response keys: \(mail.keys.sorted())")
-        } else {
-            NSLog("[noto] Zimbra mail: nil")
-        }
-        #endif
 
         NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(hasPronote)")
 
@@ -211,24 +207,16 @@ struct ENTLoginView: View {
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
 
+        // Transfer session cookies to HTTPCookieStorage regardless of whether
+        // Pronote SSO succeeded — the monlycee.net mail API call below (and
+        // establishPronoteSession's own pawnote fetch) both need them there.
+        await transferMonlyceeCookies()
+
         // If Pronote SSO succeeded, store the HTML and attempt to get a refresh token
         if hasPronote, let html = pronoteHTML, let url = pronoteURL {
             UserDefaults.standard.set(html, forKey: "monlycee_pronote_html")
             UserDefaults.standard.set(url, forKey: "monlycee_pronote_url")
-
-            // Attempt to establish a pawnote session via CAS cookies
-            // (also transfers WKWebView cookies → HTTPCookieStorage.shared)
             await establishPronoteSession(pronoteURL: url)
-        } else {
-            // Transfer cookies even without Pronote, so Zimbra URLSession call works
-            let cookies = await withCheckedContinuation { continuation in
-                WKWebsiteDataStore.default().httpCookieStore.getAllCookies {
-                    continuation.resume(returning: $0)
-                }
-            }
-            for cookie in cookies where cookie.domain.contains("monlycee") {
-                HTTPCookieStorage.shared.setCookie(cookie)
-            }
         }
 
         // Immediately sync data from the logbook we captured
@@ -237,9 +225,33 @@ struct ENTLoginView: View {
             syncService.syncFromStoredLogbook(for: child)
         }
 
+        // Mail via the SSO session cookies — skipped when the parent
+        // already connected the monlycee.net inbox over IMAP, so the two
+        // mechanisms never double-fetch the same inbox.
+        if provider == .monlycee, MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
+            for child in family.children where child.entProvider == provider {
+                await MonLyceeMailService.sync(child: child, modelContext: modelContext)
+            }
+        }
+
         onDismissAll?() ?? dismiss()
 
         isLoading = false
+    }
+
+    /// Transfers monlycee.net cookies (session + CSRF) from the SSO
+    /// WKWebView into `HTTPCookieStorage.shared`, where `URLSession.shared`
+    /// (and pawnote's own fetch) picks them up automatically.
+    @MainActor
+    private func transferMonlyceeCookies() async {
+        let cookies = await withCheckedContinuation { continuation in
+            WKWebsiteDataStore.default().httpCookieStore.getAllCookies {
+                continuation.resume(returning: $0)
+            }
+        }
+        for cookie in cookies where MonLyceeWebmailClient.isMonLyceeDomain(cookie.domain) {
+            HTTPCookieStorage.shared.setCookie(cookie)
+        }
     }
 
     // MARK: - PCN Web Login Success
