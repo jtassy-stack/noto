@@ -76,6 +76,7 @@
 - `Insights/` — `InsightsView`: trends, strengths/weaknesses, weighted averages
 - `Discover/` — `DiscoverView`: grade-filtered culture-api recommendations with curriculum tag badges
 - `AddChild/` — child onboarding flow (QR scan + Keychain storage)
+- `Child/` — `DeviceMode.child` app (tutoiement): `ChildHomeView` (cagnotte, série, « Réviser », EDT, Réglages behind `ParentGateView`), `QuizView`, `QuizResultView`, `SubjectPathView`; quiz logic in `Services/Quiz/QuizSession.swift`
 
 ## Pronote Protocol
 
