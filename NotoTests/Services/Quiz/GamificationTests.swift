@@ -740,7 +740,7 @@ struct GamificationPersistenceTests {
     private func play(_ child: Child, wrong: Set<Int> = [], seconds: TimeInterval = 60) -> QuizSession {
         let clock = self.clock
         let session = QuizSession(child: child, modelContext: context, curriculum: QuizCurriculumFixtures.curriculum,
-                                  calendar: paris, seed: 7, now: { clock.now })
+                                  config: .default, calendar: paris, seed: 7, now: { clock.now })
         for index in session.questions.indices {
             let q = session.questions[index]
             session.answer(wrong.contains(index) ? (q.answerIndex + 1) % 4 : q.answerIndex)

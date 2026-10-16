@@ -50,6 +50,9 @@ struct QuizSessionResult: Equatable, Sendable {
     let decision: RewardDecision
     /// Right answers needed to earn minutes (`RewardConfig.passThreshold`).
     let requiredCorrect: Int
+    /// Questions a quiz needs to earn minutes (`RewardConfig.minQuestionCount`),
+    /// for the `.tooShort` message.
+    var minQuestionCount: Int = RewardConfig.default.minQuestionCount
     /// XP of this quiz (`Gamification` table; 0 when a farming guard caught
     /// it: too fast, or an identical replay of any earlier attempt).
     var xpEarned: Int = 0
@@ -95,7 +98,9 @@ final class QuizSession {
     /// - Parameters:
     ///   - seed: drives the draw among equally ranked items. Fixed in tests;
     ///     random by default so two quizzes in a row differ.
-    ///   - config: `RewardConfig.default` until the parent editor (3.7).
+    ///   - config: the parent's rules. Callers pass `RewardConfigStore.load()`
+    ///     (app group) explicitly; the default is `.default` so no caller
+    ///     silently reads the shared suite (test isolation).
     init(
         child: Child,
         modelContext: ModelContext,
@@ -231,6 +236,7 @@ final class QuizSession {
         result = QuizSessionResult(correctCount: correct, totalCount: questions.count,
                                    durationSec: duration, decision: decision,
                                    requiredCorrect: max(0, required),
+                                   minQuestionCount: config.minQuestionCount,
                                    xpEarned: thisAttempt.xpEarned,
                                    levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter))
         phase = .finished

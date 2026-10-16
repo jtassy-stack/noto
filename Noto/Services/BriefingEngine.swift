@@ -279,6 +279,17 @@ final class BriefingEngine: ObservableObject {
             ))
         }
 
+        // Révisions (3.7), parent tone; nil when the child has not revised on
+        // this device lately, or nothing worth saying yet today.
+        // Inert in V1: this briefing renders in parent mode (MainTabView), but
+        // quizzes are only played in child mode and attempts never leave that
+        // device, so `RevisionSummary.isActive` is false here and the card is
+        // always nil. Kept wired for the parent↔child data path; do not
+        // present it as a working feature until that exists.
+        if let revision = Self.revisionCard(for: child, now: now) {
+            cards.append(revision)
+        }
+
         // Insights (difficulties, strengths, trends)
         for insight in child.insights {
             let (icon, priority): (String, BriefingPriority) = switch insight.type {
@@ -300,6 +311,20 @@ final class BriefingEngine: ObservableObject {
         }
 
         return cards
+    }
+
+    /// « Révisions » card (`RevisionBriefingItem` rules). Taps route to
+    /// Réglages, where the Révisions screen lives.
+    static func revisionCard(for child: Child, now: Date, calendar: Calendar = .current) -> BriefingCard? {
+        guard let item = RevisionReportStore.briefingItem(for: child, now: now, calendar: calendar) else { return nil }
+        return BriefingCard(
+            type: .revisions,
+            childName: child.firstName,
+            title: item.title,
+            subtitle: item.subtitle,
+            priority: item.priority,
+            icon: "brain.head.profile"
+        )
     }
 
     private func formatTime(_ date: Date) -> String {
@@ -410,4 +435,7 @@ enum BriefingCardType {
     /// (see MeetingNote.swift / MeetingExtractionService). Taps route to
     /// `MeetingsListView` rather than a SwiftData detail.
     case meetingAgenda
+    /// Revision activity of the day (quizzes, notions), parent tone (3.7).
+    /// Taps route to Réglages › Révisions.
+    case revisions
 }

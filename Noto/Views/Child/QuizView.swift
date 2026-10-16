@@ -45,10 +45,12 @@ struct QuizView: View {
     }
 
     private func startSession() {
+        // The parent's rules, read once per quiz from the app group.
+        let config = RewardConfigStore.load()
         if let seed {
-            session = QuizSession(child: child, modelContext: modelContext, seed: seed)
+            session = QuizSession(child: child, modelContext: modelContext, config: config, seed: seed)
         } else {
-            session = QuizSession(child: child, modelContext: modelContext)
+            session = QuizSession(child: child, modelContext: modelContext, config: config)
         }
     }
 

@@ -34,6 +34,8 @@ struct SettingsView: View {
     @State private var disconnectError: String?
     @State private var showScreenTime = false
     @State private var showConnectionHealthcheck = false
+    @State private var showRevisions = false
+    @State private var showRevisionSettings = false
     @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
 
     @AppStorage("notif_homework") private var notifHomework: Bool = true
@@ -41,9 +43,22 @@ struct SettingsView: View {
     @AppStorage("notif_carnet") private var notifCarnet: Bool = true
     @AppStorage("notif_grade_threshold") private var gradeThreshold: Double = 10.0
     @AppStorage("notif_absence") private var notifAbsence: Bool = true
+    @AppStorage(WeeklyRevisionNotification.enabledKey) private var notifWeeklyRevisions: Bool = true
 
     private var family: Family? { families.first }
     private var children: [Child] { family?.children ?? [] }
+
+    /// The weekly summary only schedules on a parent-mode device holding
+    /// revision data (`WeeklyRevisionNotification.shouldSchedule`). Quizzes are
+    /// played in child mode and nothing syncs attempts across devices (V1), so
+    /// today this hides the toggle everywhere instead of showing an « on »
+    /// switch that never delivers. It reappears once a data path exists.
+    @State private var weeklyRevisionsAvailable = false
+
+    private func refreshWeeklyRevisionsAvailability() {
+        weeklyRevisionsAvailable = DeviceMode.current == .parent
+            && !RevisionReportStore.activeChildNames(children).isEmpty
+    }
 
     private var whitelistCountLabel: String {
         guard !imapConfigs.isEmpty else { return "—" }
@@ -101,6 +116,7 @@ struct SettingsView: View {
                         mailboxSection
                     }
                     notificationsSection
+                    revisionsSection
                     screenTimeSection
                     appearanceSection
                     aboutSection
@@ -143,8 +159,18 @@ struct SettingsView: View {
             .sheet(isPresented: $showScreenTime, onDismiss: { screenTimeManager.refresh() }) {
                 ScreenTimeView()
             }
+            .sheet(isPresented: $showRevisions) {
+                RevisionsView()
+            }
+            .sheet(isPresented: $showRevisionSettings) {
+                RevisionSettingsView()
+            }
+            .onChange(of: notifWeeklyRevisions) { _, _ in
+                Task { await RevisionReportStore.syncWeeklyNotification(children: children) }
+            }
             .task {
                 await refreshAuthStatus()
+                refreshWeeklyRevisionsAvailability()
                 refreshIMAP()
             }
             // Defence-in-depth: IMAP state also changes via the setup
@@ -303,6 +329,15 @@ struct SettingsView: View {
                     isOn: $notifAbsence,
                     disabled: notifAuthStatus == .denied
                 )
+                if weeklyRevisionsAvailable {
+                    SettingsDivider()
+                    ToggleRow(
+                        title: "Bilan hebdo des révisions",
+                        subtitle: "Dimanche à 19h00, sur cet appareil en mode parent",
+                        isOn: $notifWeeklyRevisions,
+                        disabled: notifAuthStatus == .denied
+                    )
+                }
                 SettingsDivider()
                 GradeThresholdRow(
                     threshold: $gradeThreshold,
@@ -324,6 +359,32 @@ struct SettingsView: View {
             }
             .notoCard()
         }
+    }
+
+    /// Révisions (3.7): the parent's view of the quizzes and the reward
+    /// rules. In child mode the whole of Réglages is behind the parent PIN.
+    private var revisionsSection: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Révisions")
+                .sectionLabelStyle()
+                .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            VStack(spacing: 0) {
+                InfoRow(label: "Révisions", value: revisionsRowValue, chevron: true,
+                        action: { showRevisions = true })
+                SettingsDivider()
+                InfoRow(label: "Révisions & récompenses", value: "", chevron: true,
+                        action: { showRevisionSettings = true })
+            }
+            .notoCard()
+        }
+    }
+
+    /// « 3 quiz cette semaine » across the children of this device.
+    private var revisionsRowValue: String {
+        let count = children.reduce(0) { $0 + RevisionReportStore.summary(for: $1).quizzes7d }
+        guard count > 0 else { return "" }
+        return count == 1 ? "1 quiz cette semaine" : "\(count) quiz cette semaine"
     }
 
     private var screenTimeSection: some View {

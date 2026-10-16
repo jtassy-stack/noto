@@ -49,13 +49,19 @@ struct MasterySnapshot: Sendable, Equatable {
     /// badge stays earned (3.6). Nil when never mastered, or mastered before
     /// the field existed.
     let masteredAt: Date?
+    /// Mirrors `NotionMastery.lastReviewedAt` (parent Révisions screen and
+    /// briefing, 3.7). Not carried by `SpacedRepetition.review`, which only
+    /// schedules; `NotionMastery.apply` stamps it.
+    let lastReviewedAt: Date?
 
-    init(notionKey: String, leitnerBox: Int, nextReview: Date, streakCorrect: Int, masteredAt: Date? = nil) {
+    init(notionKey: String, leitnerBox: Int, nextReview: Date, streakCorrect: Int, masteredAt: Date? = nil,
+         lastReviewedAt: Date? = nil) {
         self.notionKey = notionKey
         self.leitnerBox = leitnerBox
         self.nextReview = nextReview
         self.streakCorrect = streakCorrect
         self.masteredAt = masteredAt
+        self.lastReviewedAt = lastReviewedAt
     }
 }
 
@@ -80,13 +86,17 @@ struct AttemptSnapshot: Sendable, Equatable {
     /// none) and XP of each question, in play order. Empty before 3.6.
     let itemSubjects: [String]
     let itemXP: [Int]
+    /// Mirrors `QuizAttempt.denialReason` (nil = credited, or unknown raw
+    /// value). For the parent screens (3.7); `RewardPolicy` ignores it.
+    let denial: RewardDenial?
 
     /// XP of the whole attempt (`Gamification`).
     var xpEarned: Int { itemXP.reduce(0) { $0 + max(0, $1) } }
 
     init(date: Date, questionKeys: [String], correctCount: Int, totalCount: Int,
          durationSec: Int, minutesEarned: Int = 0, passed: Bool = false, bonusApplied: Bool = false,
-         bonusMinutes: Int = 0, itemSubjects: [String] = [], itemXP: [Int] = []) {
+         bonusMinutes: Int = 0, itemSubjects: [String] = [], itemXP: [Int] = [],
+         denial: RewardDenial? = nil) {
         self.date = date
         self.questionKeys = questionKeys
         self.correctCount = correctCount
@@ -98,6 +108,7 @@ struct AttemptSnapshot: Sendable, Equatable {
         self.bonusMinutes = bonusMinutes
         self.itemSubjects = itemSubjects
         self.itemXP = itemXP
+        self.denial = denial
     }
 }
 
@@ -191,7 +202,7 @@ extension MasterySnapshot {
     @MainActor init(_ mastery: NotionMastery) {
         self.init(notionKey: mastery.notionKey, leitnerBox: mastery.leitnerBox,
                   nextReview: mastery.nextReview, streakCorrect: mastery.streakCorrect,
-                  masteredAt: mastery.masteredAt)
+                  masteredAt: mastery.masteredAt, lastReviewedAt: mastery.lastReviewedAt)
     }
 }
 
@@ -206,7 +217,7 @@ extension AttemptSnapshot {
                   durationSec: attempt.durationSec, minutesEarned: attempt.minutesEarned,
                   passed: passed, bonusApplied: attempt.bonusApplied,
                   bonusMinutes: attempt.bonusMinutes,
-                  itemSubjects: attempt.itemSubjects, itemXP: attempt.itemXP)
+                  itemSubjects: attempt.itemSubjects, itemXP: attempt.itemXP, denial: denial)
     }
 }
 

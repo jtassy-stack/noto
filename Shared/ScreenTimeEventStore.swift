@@ -9,6 +9,7 @@ enum ScreenTimeEventStore {
     static let thresholdHoursKey = "noto_screentime_threshold_hours"
     static let linkedChildIDKey = "noto_screentime_linked_child_id"
     static let watchedSelectionKey = "noto_screentime_watched_selection"
+    static let alwaysAllowedSelectionKey = "noto_screentime_always_allowed_selection"
     static let classLockEnabledKey = "noto_screentime_classlock_enabled"
     static let classLockActivityNamesKey = "noto_screentime_classlock_activity_names"
     static let classLockLastSyncKey = "noto_screentime_classlock_last_sync"
@@ -189,6 +190,34 @@ enum ScreenTimeEventStore {
     static func loadWatchedSelection() -> FamilyActivitySelection {
         guard let defaults = UserDefaults(suiteName: appGroupID),
               let data = defaults.data(forKey: watchedSelectionKey) else {
+            return FamilyActivitySelection()
+        }
+        return (try? JSONDecoder().decode(FamilyActivitySelection.self, from: data)) ?? FamilyActivitySelection()
+    }
+
+    // MARK: - Always-allowed apps
+    //
+    // Apps the parent wants usable whatever the budget (guided setup, 3.7):
+    // school apps, maps, music… Persisted only for now: nothing reads it
+    // until the reward mechanism (3.4), which must never shield these. It
+    // does not change the class-time lock (that lock keeps its own
+    // exceptions, see ClassScheduleShieldService).
+
+    static func storeAlwaysAllowedSelection(_ selection: FamilyActivitySelection) {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            NSLog("[noto][error] ScreenTimeEventStore: UserDefaults(suiteName:) returned nil in storeAlwaysAllowedSelection")
+            return
+        }
+        do {
+            defaults.set(try JSONEncoder().encode(selection), forKey: alwaysAllowedSelectionKey)
+        } catch {
+            NSLog("[noto][error] ScreenTimeEventStore: encode failed in storeAlwaysAllowedSelection — %@", error.localizedDescription)
+        }
+    }
+
+    static func loadAlwaysAllowedSelection() -> FamilyActivitySelection {
+        guard let defaults = UserDefaults(suiteName: appGroupID),
+              let data = defaults.data(forKey: alwaysAllowedSelectionKey) else {
             return FamilyActivitySelection()
         }
         return (try? JSONDecoder().decode(FamilyActivitySelection.self, from: data)) ?? FamilyActivitySelection()

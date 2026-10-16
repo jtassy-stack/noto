@@ -18,6 +18,7 @@ struct ScreenTimeView: View {
     @State private var classLockError: Error? = nil
     @State private var classLockLastSync: Date? = ScreenTimeEventStore.loadClassLockLastSync()
     @State private var isSyncingClassLock = false
+    @State private var showOnboarding = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -86,6 +87,12 @@ struct ScreenTimeView: View {
         .familyActivityPicker(isPresented: $showPicker, selection: $selection)
         .onChange(of: selection) { updateWatchedSelection() }
 #endif
+        .sheet(isPresented: $showOnboarding) {
+            ScreenTimeOnboardingView(
+                suggestedProfile: linkedChild.flatMap { ScreenTimeAgeProfile.suggested(forGrade: $0.grade) },
+                onApplied: reloadAfterOnboarding
+            )
+        }
         .alert("Impossible d'activer la surveillance", isPresented: Binding(
             get: { monitoringError != nil },
             set: { if !$0 { monitoringError = nil } }
@@ -147,8 +154,56 @@ struct ScreenTimeView: View {
         }
     }
 
+    /// Entry to the guided setup (3.7): age profile and repères that
+    /// pre-fill the budget, the reward rules and the app selections.
+    private var guidedSetupCard: some View {
+        Button { showOnboarding = true } label: {
+            HStack(spacing: NotoTheme.Spacing.md) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 22))
+                    .foregroundStyle(NotoTheme.Colors.brand)
+                    .frame(width: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Configuration guidée")
+                        .font(NotoTheme.Typography.signalTitle)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text(guidedSetupSubtitle)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .opacity(0.5)
+            }
+            .padding(NotoTheme.Spacing.md)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .notoCard()
+    }
+
+    private var guidedSetupSubtitle: String {
+        if let plan = ScreenTimePlanStore.load() {
+            return "Profil \(plan.profile.label) appliqué · toucher pour ajuster"
+        }
+        return "Profil d'âge, apps de loisirs, budget, minutes à gagner par les révisions, nuit et repas"
+    }
+
+    /// The guided setup wrote the selection / budget / monitoring state.
+    private func reloadAfterOnboarding() {
+        selection = ScreenTimeEventStore.loadWatchedSelection()
+        restrictionsApplied = !selection.applications.isEmpty || !selection.categories.isEmpty
+        thresholdHours = ScreenTimeEventStore.loadThreshold()
+        monitoringEnabled = ScreenTimeMonitorService.shared.isMonitoring
+    }
+
     private var approvedSection: some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            guidedSetupCard
+
             Text("Restrictions actives")
                 .sectionLabelStyle()
                 .padding(.horizontal, NotoTheme.Spacing.xs)
