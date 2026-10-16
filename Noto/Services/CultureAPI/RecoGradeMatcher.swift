@@ -25,8 +25,17 @@ enum RecoGradeMatcher {
         let trimmed = childGrade.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let code = CurriculumService.apiGrade(for: trimmed).lowercased()
-        return code.isEmpty ? nil : code
+        // `apiGrade` passes unrecognised labels through (the "?" placeholder
+        // from ENTLoginView, raw connector class names): only a real
+        // culture-api level code may become a grade filter or a match key.
+        return supportedGradeCodes.contains(code) ? code : nil
     }
+
+    /// Level codes culture-api understands, lowercased.
+    static let supportedGradeCodes: Set<String> = [
+        "ps", "ms", "gs", "cp", "ce1", "ce2", "cm1", "cm2",
+        "6eme", "5eme", "4eme", "3eme", "2nde", "1ere", "terminale",
+    ]
 
     /// Level part of a tag (`"terminale"` for `"terminale-philosophie"`),
     /// lowercased, or nil for a malformed tag.

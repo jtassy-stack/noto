@@ -101,6 +101,12 @@ struct RecoGradeMatcherTests {
         #expect(RecoGradeMatcher.badgeTags(Self.allLevelTags, linkedLevel: "   ").isEmpty)
         #expect(RecoGradeMatcher.gradeCode(for: "") == nil)
         #expect(RecoGradeMatcher.gradeCode(for: nil) == nil)
+        #expect(RecoGradeMatcher.gradeCode(for: "?") == nil)
+        #expect(RecoGradeMatcher.gradeCode(for: "Groupe B") == nil)
+        #expect(RecoGradeMatcher.gradeCode(for: "2nde") == "2nde")
+        #expect(RecoGradeMatcher.gradeCode(for: "Tle") == "terminale")
+        #expect(RecoGradeMatcher.isForChildLevel(tags: ["3eme-histoire"], childGrade: "?"))
+        #expect(RecoGradeMatcher.badgeTags(["3eme-histoire"], linkedLevel: "?").isEmpty)
         // Cannot judge → the (grade-filtered) result stays attributed.
         #expect(RecoGradeMatcher.isForChildLevel(tags: ["CE2-francais"], childGrade: ""))
     }
