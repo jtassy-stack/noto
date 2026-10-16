@@ -49,6 +49,35 @@ enum MailboxRouting {
         }
     }
 
+    /// Whether a lane may keep an account's rows under `assignment` — the
+    /// lane being a child (`childID`) or the parent lane (`nil`).
+    ///
+    /// Deliberately independent of `target`'s `defaultChildren`: Actualités
+    /// narrows "Tous les enfants" to Pronote children while École uses
+    /// every child, and reconciliation must not ping-pong between the two.
+    /// Any child is a legitimate home under "Tous"; only the parent lane is
+    /// stale there.
+    static func laneAccepts(
+        _ assignment: MailboxAssignment,
+        childID: String?,
+        allChildIDs: [String]
+    ) -> Bool {
+        switch assignment.resolved(childIDs: allChildIDs) {
+        case .allChildren: return childID != nil
+        case .child(let id): return childID == id
+        case .parent: return childID == nil
+        }
+    }
+
+    /// Stored rows can only be traced back to an account through their
+    /// `imapProvider` tag, which is per provider, not per account. Moving
+    /// rows between lanes is only safe when exactly one configured account
+    /// uses that provider — two Gmail boxes with different assignments are
+    /// indistinguishable once stored.
+    static func canReconcile(providerID: String, configs: [IMAPServerConfig]) -> Bool {
+        configs.filter { $0.providerID == providerID }.count == 1
+    }
+
     /// Accounts that pointed at `removedChildID` fall back to "Tous les
     /// enfants". Order and every other field are preserved.
     static func repairingOrphans(

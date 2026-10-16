@@ -329,4 +329,174 @@ struct MailboxAssignmentTests {
         #expect(imapCount(f.gaston) == 1)
         #expect(imapCount(f.joseph) == 0)
     }
+
+    // MARK: - Reassignment (TestFlight: « Tous » → « Parent » duplicated every mail)
+
+    @Test("laneAccepts: Tous = any child, one child = that child, Parent = parent lane only")
+    func laneAcceptsRules() {
+        let all = ids
+        #expect(MailboxRouting.laneAccepts(.allChildren, childID: "joseph", allChildIDs: all))
+        #expect(!MailboxRouting.laneAccepts(.allChildren, childID: nil, allChildIDs: all))
+        #expect(MailboxRouting.laneAccepts(.child(id: "joseph"), childID: "joseph", allChildIDs: all))
+        #expect(!MailboxRouting.laneAccepts(.child(id: "joseph"), childID: "gaston", allChildIDs: all))
+        #expect(!MailboxRouting.laneAccepts(.child(id: "joseph"), childID: nil, allChildIDs: all))
+        #expect(MailboxRouting.laneAccepts(.parent, childID: nil, allChildIDs: all))
+        #expect(!MailboxRouting.laneAccepts(.parent, childID: "gaston", allChildIDs: all))
+        // Dangling child id resolves to Tous.
+        #expect(MailboxRouting.laneAccepts(.child(id: "removed"), childID: "gaston", allChildIDs: all))
+    }
+
+    @Test("canReconcile only when the provider identifies a single account")
+    func canReconcileRule() {
+        let a = account(.allChildren, username: "a@monlycee.net")
+        let b = account(.parent, username: "b@monlycee.net")
+        let gmail = IMAPServerConfig(host: "imap.gmail.com", port: 993, username: "p@gmail.com",
+                                     password: "x", providerID: "gmail")
+        #expect(MailboxRouting.canReconcile(providerID: "monlycee", configs: [a, gmail]))
+        #expect(!MailboxRouting.canReconcile(providerID: "monlycee", configs: [a, b, gmail]))
+    }
+
+    @Test("isSameMail: UID when both carry one, composite otherwise, never across providers")
+    func isSameMailRule() {
+        func row(_ uid: String?, provider: String? = "monlycee", subject: String = "S") -> Message {
+            Message(sender: "a@lycee.fr", subject: subject, body: "", date: .now, source: .imap,
+                    imapUID: uid, imapProvider: provider)
+        }
+        #expect(IMAPSyncService.isSameMail(row("1"), row("1")))
+        #expect(!IMAPSyncService.isSameMail(row("1"), row("2")))
+        #expect(!IMAPSyncService.isSameMail(row("1"), row("1", provider: "gmail")))
+        #expect(IMAPSyncService.isSameMail(row(nil), row("1")))
+        #expect(!IMAPSyncService.isSameMail(row(nil), row("1", subject: "Autre")))
+    }
+
+    private func sync(_ f: Fixture, _ configs: [IMAPServerConfig],
+                      defaultChildren: [Child]? = nil,
+                      fetched: [IMAPMessageInfo]? = nil) async {
+        let service = IMAPSyncService(modelContext: f.ctx)
+        let rows = fetched ?? batch
+        _ = await service.syncAccounts(configs, children: [f.gaston, f.joseph],
+                                       defaultChildren: defaultChildren, family: f.family,
+                                       fetch: { _ in rows })
+    }
+
+    @Test("Tous → Parent: mail moves to the parent lane once, read state kept, no child copy left")
+    func allChildrenToParentMoves() async throws {
+        let f = try makeFixture()
+        var config = account(.allChildren)
+        await sync(f, [config])
+        #expect(imapCount(f.gaston) == 1 && imapCount(f.joseph) == 1)
+        f.gaston.messages.first { $0.source == .imap }?.read = true
+
+        config.assignment = .parent
+        await sync(f, [config])
+        #expect(f.family.messages.count == 1)
+        #expect(f.family.messages.first?.read == true)
+        #expect(imapCount(f.gaston) == 0)
+        #expect(imapCount(f.joseph) == 0)
+        try f.ctx.save()
+        let all = try f.ctx.fetch(FetchDescriptor<Message>())
+        #expect(all.count == 1)
+    }
+
+    @Test("Tous → one child: the sibling's stale copy is removed, no reinsert")
+    func allChildrenToOneChild() async throws {
+        let f = try makeFixture()
+        var config = account(.allChildren)
+        await sync(f, [config])
+        config.assignment = .child(id: MailboxRouting.childKey(f.joseph))
+        await sync(f, [config])
+        #expect(imapCount(f.joseph) == 1)
+        #expect(imapCount(f.gaston) == 0)
+        #expect(f.family.messages.isEmpty)
+    }
+
+    @Test("Parent → Tous: the parent row moves to a child, the others get theirs")
+    func parentToAllChildren() async throws {
+        let f = try makeFixture()
+        var config = account(.parent)
+        await sync(f, [config])
+        config.assignment = .allChildren
+        await sync(f, [config])
+        #expect(f.family.messages.isEmpty)
+        #expect(imapCount(f.gaston) == 1)
+        #expect(imapCount(f.joseph) == 1)
+    }
+
+    @Test("rows outside the fetched page also follow the new assignment")
+    func reconcileCoversOlderRows() async throws {
+        let f = try makeFixture()
+        var config = account(.allChildren)
+        await sync(f, [config])
+        config.assignment = .parent
+        await sync(f, [config], fetched: [])
+        #expect(f.family.messages.count == 1)
+        #expect(imapCount(f.gaston) == 0 && imapCount(f.joseph) == 0)
+    }
+
+    @Test("Tous with a narrower default pool never evicts the other children's rows")
+    func allChildrenDoesNotPingPong() async throws {
+        let f = try makeFixture()
+        let config = account(.allChildren)
+        await sync(f, [config])                                   // École: every child
+        await sync(f, [config], defaultChildren: [f.gaston])      // Actualités: Pronote pool
+        #expect(imapCount(f.gaston) == 1)
+        #expect(imapCount(f.joseph) == 1)
+    }
+
+    @Test("Pronote / SSO rows and other providers are never moved")
+    func reconcileScope() async throws {
+        let f = try makeFixture()
+        let pronote = Message(sender: "prof@lycee.fr", subject: "Devoir", body: "", date: .now, source: .pronote)
+        pronote.child = f.gaston
+        f.ctx.insert(pronote)
+        let gmailRow = Message(sender: "a@lycee.fr", subject: "G", body: "", date: .now, source: .imap,
+                               imapUID: "9", imapProvider: "gmail")
+        gmailRow.child = f.gaston
+        f.ctx.insert(gmailRow)
+
+        await sync(f, [account(.parent)])
+        #expect(f.gaston.messages.contains { $0 === pronote })
+        #expect(f.gaston.messages.contains { $0 === gmailRow })
+        #expect(f.family.messages.count == 1)
+    }
+
+    @Test("two accounts on the same provider: no reconciliation, the sibling box is untouched")
+    func ambiguousProviderSkipsReconcile() async throws {
+        let f = try makeFixture()
+        let a = account(.child(id: MailboxRouting.childKey(f.gaston)), username: "a@monlycee.net")
+        let b = account(.parent, username: "b@monlycee.net")
+        let service = IMAPSyncService(modelContext: f.ctx)
+        // Twice: the second pass is where an unguarded reconcile would move
+        // each box's rows into the other's lane.
+        for _ in 0..<2 {
+            _ = await service.syncAccounts(
+                [a, b], children: [f.gaston, f.joseph], family: f.family,
+                fetch: { config in
+                    [IMAPMessageInfo(uid: config.username == "a@monlycee.net" ? 1 : 2,
+                                     subject: config.username, from: "x@lycee.fr",
+                                     date: .now, body: "", isRead: false)]
+                }
+            )
+        }
+        #expect(f.gaston.messages.first?.subject == "a@monlycee.net")
+        #expect(f.family.messages.first?.subject == "b@monlycee.net")
+        #expect(imapCount(f.gaston) == 1)
+        #expect(f.family.messages.count == 1)
+    }
+
+    // MARK: - Parent lane vs. SSO channel
+
+    @Test("a monlycée box set to Parent skips mail the SSO channel stored on a child")
+    func parentLaneSkipsSSORowsOnChildren() async throws {
+        let f = try makeFixture()
+        let info = batch[0]
+        let sso = Message(sender: info.from, subject: info.subject, body: "", date: info.date,
+                          source: .monlycee, imapUID: "777", imapProvider: MonLyceeMailService.providerTag)
+        sso.child = f.joseph
+        f.ctx.insert(sso)
+
+        await sync(f, [account(.parent)])
+        #expect(f.family.messages.isEmpty)
+        #expect(f.joseph.messages.count == 1)
+    }
 }

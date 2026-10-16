@@ -20,6 +20,10 @@ import SwiftData
 ///   - Each account's `MailboxAssignment` decides where its mail lands
 ///     (`MailboxRouting.target`): every child, one child, or the parent
 ///     lane (`Family.messages`, whitelist = union of the family's schools).
+///   - Changing an account's assignment moves its stored rows to the
+///     new lane (`reconcile`) rather than importing the inbox again.
+///   - The SSO dedupe of the parent lane scans every child, since
+///     `.monlycee` rows always sit on a child.
 ///
 /// Threading contract
 /// ------------------
@@ -73,6 +77,16 @@ struct IMAPSyncService {
             if case .children(let kids) = target, kids.isEmpty { continue }
             if case .parent = target, family == nil { continue }
 
+            // The assignment may have changed since the last sync (e.g.
+            // « Tous les enfants » → « Parent » in Réglages): move the rows
+            // stored under the old assignment to where they now belong, so
+            // the import below dedupes against them instead of inserting
+            // every mail a second time. Runs before the fetch — it needs no
+            // network, and a wrong password must not leave stale copies.
+            if MailboxRouting.canReconcile(providerID: config.providerID, configs: configs) {
+                reconcile(config: config, target: target, children: children, family: family)
+            }
+
             let fetched: [IMAPMessageInfo]
             do {
                 fetched = try await fetch(config)
@@ -124,6 +138,7 @@ struct IMAPSyncService {
     ) throws {
         try process(
             existing: child.messages,
+            ssoCandidates: child.messages,
             whitelistChildren: [child],
             attach: { $0.child = child },
             config: config,
@@ -142,8 +157,13 @@ struct IMAPSyncService {
         fetched: [IMAPMessageInfo],
         directorySchools: [String: DirectorySchool] = [:]
     ) throws {
+        // SSO rows (`MonLyceeMailService`, source `.monlycee`) are always
+        // attached to a child, never to the family: the parent lane must
+        // look there too, or a monlycee.net box set to « Parent » re-imports
+        // every mail the SSO channel already stored.
         try process(
             existing: family.messages,
+            ssoCandidates: family.messages + family.children.flatMap(\.messages),
             whitelistChildren: family.children,
             attach: { $0.family = family },
             config: config,
@@ -155,6 +175,7 @@ struct IMAPSyncService {
     @MainActor
     private func process(
         existing: [Message],
+        ssoCandidates: [Message],
         whitelistChildren: [Child],
         attach: (Message) -> Void,
         config: IMAPServerConfig,
@@ -223,7 +244,7 @@ struct IMAPSyncService {
             // (`MonLyceeMailService`, source `.monlycee`) before the parent
             // connected it over IMAP. Webmail ids and IMAP UIDs differ, so
             // only the composite match can tell.
-            if Self.ssoMatch(in: existing, info: info, providerID: config.providerID) != nil {
+            if Self.ssoMatch(in: ssoCandidates, info: info, providerID: config.providerID) != nil {
                 continue
             }
 
@@ -250,6 +271,108 @@ struct IMAPSyncService {
         // microsecond-precise) is indirectly identifying under RGPD.
         NSLog("[noto] IMAP sync: provider=%@ assignment=%@ fetched=%d kept=%d dropped=%d",
               config.providerID, config.assignment.kind, fetched.count, keptCount, droppedCount)
+    }
+
+    // MARK: - Assignment reconciliation
+
+    /// Moves this account's stored rows out of lanes its assignment no
+    /// longer covers (`MailboxRouting.laneAccepts`) into a target lane that
+    /// lacks them; a row every target lane already holds is deleted. Read
+    /// state travels with the moved row.
+    ///
+    /// Scope: `source == .imap` rows tagged with this account's provider.
+    /// Legacy rows without a provider tag and every other source (Pronote,
+    /// ENT, the `.monlycee` SSO channel) are never touched. The caller only
+    /// runs this when the provider identifies the account unambiguously
+    /// (`MailboxRouting.canReconcile`).
+    @MainActor
+    func reconcile(
+        config: IMAPServerConfig,
+        target: MailboxRouting.Target<Child>,
+        children: [Child],
+        family: Family?
+    ) {
+        let ids = children.map(MailboxRouting.childKey)
+        let owned: (Message) -> Bool = {
+            $0.source == .imap && $0.imapProvider == config.providerID
+        }
+
+        var stale: [Message] = []
+        if let family,
+           !MailboxRouting.laneAccepts(config.assignment, childID: nil, allChildIDs: ids) {
+            stale += family.messages.filter(owned)
+        }
+        for child in children
+        where !MailboxRouting.laneAccepts(config.assignment, childID: MailboxRouting.childKey(child), allChildIDs: ids) {
+            stale += child.messages.filter(owned)
+        }
+        guard !stale.isEmpty else { return }
+
+        // Destination lanes, in target order. Rows are read live so a row
+        // moved in earlier counts for the next one.
+        let destinations: [Lane]
+        switch target {
+        case .children(let kids):
+            destinations = kids.map { Lane.child($0) }
+        case .parent:
+            guard let family else { return }
+            destinations = [Lane.family(family)]
+        }
+
+        var moved = 0
+        var deleted = 0
+        for row in stale {
+            if let destination = destinations.first(where: { lane in
+                !lane.rows.contains { Self.isSameMail($0, row) }
+            }) {
+                destination.attach(row)
+                moved += 1
+            } else {
+                // Detach first so both lanes' arrays drop it right away,
+                // before the context processes the deletion.
+                row.child = nil
+                row.family = nil
+                modelContext.delete(row)
+                deleted += 1
+            }
+        }
+        // Counts only — no child name, sender or subject (RGPD).
+        NSLog("[noto] IMAP reassignment: provider=%@ assignment=%@ moved=%d deleted=%d",
+              config.providerID, config.assignment.kind, moved, deleted)
+    }
+
+    /// A place a message can live: one child, or the parent lane.
+    private enum Lane {
+        case child(Child)
+        case family(Family)
+
+        var rows: [Message] {
+            switch self {
+            case .child(let child): return child.messages
+            case .family(let family): return family.messages
+            }
+        }
+
+        func attach(_ message: Message) {
+            switch self {
+            case .child(let child):
+                message.family = nil
+                message.child = child
+            case .family(let family):
+                message.child = nil
+                message.family = family
+            }
+        }
+    }
+
+    /// Same stored mail from the same provider: UID when both rows carry
+    /// one, else the legacy (sender, subject, same day) composite.
+    static func isSameMail(_ a: Message, _ b: Message) -> Bool {
+        guard a.imapProvider == b.imapProvider else { return false }
+        if let ua = a.imapUID, let ub = b.imapUID { return ua == ub }
+        return a.sender == b.sender
+            && a.subject == b.subject
+            && Calendar.current.isDate(a.date, inSameDayAs: b.date)
     }
 
     // MARK: - Dedupe helpers
