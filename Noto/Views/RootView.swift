@@ -138,6 +138,9 @@ struct RootView: View {
             }
         }
         .task {
+            // Reward minutes first: local only, no network.
+            refreshRewards()
+
             // Attempt silent reconnect on every launch using stored refresh tokens.
             // Runs in background — UI is not blocked.
             await PronoteAutoConnect.autoConnect(modelContext: modelContext)
@@ -156,6 +159,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             clearClassLockIfNeeded()
+            refreshRewards()
             // Weekly revision summary (3.7): local, idempotent, never prompts.
             Task { await RevisionReportStore.syncWeeklyNotification(children: family?.children ?? []) }
             // Retry a pending first sync on foreground, throttled by the
@@ -174,5 +178,16 @@ struct RootView: View {
               let linkedID = ScreenTimeEventStore.loadLinkedChildID(),
               let child = family?.children.first(where: { "\($0.id)" == linkedID }) else { return }
         ClassScheduleShieldService.clearIfOutsideClassHours(schedule: child.schedule)
+    }
+
+    /// Reward minutes (3.4): midnight leftovers, reserve released after
+    /// class, pending minutes unlocked, defensive re-lock. A no-op without
+    /// Screen Time authorization or watched apps. Same child resolution as
+    /// `ChildHomeView` (linked child, else the first one).
+    private func refreshRewards() {
+        let children = family?.children ?? []
+        let linkedID = ScreenTimeEventStore.loadLinkedChildID()
+        let child = children.first(where: { "\($0.id)" == linkedID }) ?? children.first
+        RewardUnlockService.foregroundRefresh(schedule: child?.schedule ?? [])
     }
 }

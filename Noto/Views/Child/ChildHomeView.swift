@@ -11,8 +11,11 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "ChildHomeView"
 /// gate. Every string here addresses the child (tutoiement, CLAUDE.md
 /// exception for `DeviceMode.child`).
 ///
-/// The cagnotte shows minutes earned from `QuizAttempt` only: crediting and
-/// unlocking Screen Time is 3.4, so nothing here promises an unlock.
+/// The cagnotte shows minutes earned from `QuizAttempt`. Since 3.4 a line
+/// under it says what the minutes do (« Tes N min sont débloquées », « Tes
+/// minutes t'attendent après les cours »…), read from the reward ledger
+/// (`RewardUnlockService.status`), and only when Screen Time is authorized
+/// with watched apps; otherwise the neutral wording stays.
 ///
 /// Gamification (3.6): the série with its monthly jokers, the « Mes badges »
 /// link (earned badges only), the optional culture question of the day
@@ -32,6 +35,7 @@ struct ChildHomeView: View {
     @State private var showSettings = false
     @State private var showQuiz = false
     @State private var cultureQuestion: DailyCultureQuestion?
+    @State private var rewardStatus: RewardStatus = .neutral
     /// Device day the home was last refreshed for. Bumped on return to the
     /// foreground and at midnight, so a home left mounted overnight reloads
     /// the culture question and re-renders the série for the new day.
@@ -105,7 +109,10 @@ struct ChildHomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .fullScreenCover(isPresented: $showQuiz, onDismiss: { recordDueJokers() }) {
+            .fullScreenCover(isPresented: $showQuiz, onDismiss: {
+                recordDueJokers()
+                refreshRewardStatus()
+            }) {
                 if let child {
                     QuizView(child: child)
                 }
@@ -113,6 +120,7 @@ struct ChildHomeView: View {
         }
         .onAppear {
             screenTimeManager.refresh()
+            refreshRewardStatus()
         }
         .task(id: child?.persistentModelID) {
             recordDueJokers()
@@ -123,7 +131,10 @@ struct ChildHomeView: View {
             await loadCultureQuestion()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshDay() }
+            if phase == .active {
+                refreshDay()
+                refreshRewardStatus()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             refreshDay()
@@ -162,6 +173,13 @@ struct ChildHomeView: View {
     private func recordDueJokers() {
         guard let child, !ProcessInfo.processInfo.isRunningForPreviews else { return }
         GamificationStore.recordDueJokers(for: child, in: modelContext, now: Date(), calendar: .current)
+    }
+
+    /// Reward wording, re-read on appear, foreground and after a quiz (the
+    /// extension updates the ledger in the background).
+    private func refreshRewardStatus() {
+        guard !ProcessInfo.processInfo.isRunningForPreviews else { return }
+        rewardStatus = RewardUnlockService.status(schedule: child?.schedule ?? [])
     }
 
     /// Re-keys the day-bound tasks when the device day changed.
@@ -245,6 +263,10 @@ struct ChildHomeView: View {
             cardsLayout {
                 cagnotteCard(minutes: minutes)
                 streakCard(streak)
+            }
+
+            if let text = Self.rewardStatusText(rewardStatus) {
+                rewardStatusCard(text)
             }
 
             if FamilyChallengeSettings.isEnabled() {
@@ -378,6 +400,48 @@ struct ChildHomeView: View {
         .notoCard()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Ta cagnotte : \(minutes) minutes gagnées aujourd'hui")
+    }
+
+    /// Child wording for the reward state, nil = keep the neutral cagnotte
+    /// line only (no Screen Time setup, or nothing owed today).
+    static func rewardStatusText(_ status: RewardStatus) -> (title: String, detail: String?)? {
+        switch status {
+        case .neutral:
+            return nil
+        case .unlocked(let minutes):
+            return ("Tes \(minutes) min sont débloquées",
+                    "Tes applis sont ouvertes, profites-en !")
+        case .afterClass:
+            return ("Tes minutes t'attendent après les cours", nil)
+        case .waitingForBudget(let minutes):
+            return ("Tes \(minutes) min t'attendent",
+                    "Elles s'ajoutent quand ton temps d'écran du jour est fini.")
+        }
+    }
+
+    private func rewardStatusCard(_ text: (title: String, detail: String?)) -> some View {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
+            Image(systemName: rewardStatus == .afterClass ? "clock" : "lock.open.fill")
+                .foregroundStyle(NotoTheme.Colors.success)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text.title)
+                    .font(ChildStyle.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = text.detail {
+                    Text(detail)
+                        .font(ChildStyle.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(NotoTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .notoCard()
+        .accessibilityElement(children: .combine)
     }
 
     private func streakCard(_ streak: StreakStatus) -> some View {

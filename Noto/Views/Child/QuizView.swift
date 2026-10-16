@@ -47,10 +47,18 @@ struct QuizView: View {
     private func startSession() {
         // The parent's rules, read once per quiz from the app group.
         let config = RewardConfigStore.load()
+        // 3.4: minutes earned go to the reward ledger, then unlock (or wait
+        // in the reserve during a class block).
+        let child = self.child
+        let credit: @MainActor (Int, Date) -> Void = { minutes, date in
+            RewardUnlockService.credit(minutes: minutes, at: date, schedule: child.schedule)
+        }
         if let seed {
-            session = QuizSession(child: child, modelContext: modelContext, config: config, seed: seed)
+            session = QuizSession(child: child, modelContext: modelContext, config: config, seed: seed,
+                                  onMinutesEarned: credit)
         } else {
-            session = QuizSession(child: child, modelContext: modelContext, config: config)
+            session = QuizSession(child: child, modelContext: modelContext, config: config,
+                                  onMinutesEarned: credit)
         }
     }
 

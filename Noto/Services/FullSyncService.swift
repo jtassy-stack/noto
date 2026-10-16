@@ -41,6 +41,7 @@ final class FullSyncService {
     @discardableResult
     func sync(children targetChildren: [Child]) async -> FullSyncResult {
         var result = FullSyncResult()
+        let startedAt = Date.now
         // Children with a direct Pronote bridge connection (QR code login)
         let directPronoteChildren = targetChildren.filter(\.isDirectPronote)
         // Children from MonLycée (have entProvider) — sync via logbook
@@ -135,8 +136,40 @@ final class FullSyncService {
             result.errors.append(contentsOf: await syncSkolengoChildren(skolengoChildren))
         }
 
+        resyncClassLockIfNeeded(children: targetChildren, startedAt: startedAt)
+
         SyncCoordinator.shared.finishedSync(errors: result.joinedErrors)
         return result
+    }
+
+    /// A fresh timetable re-registers the class-time lock (nothing else does
+    /// in the background) and the class windows the reward gate reads.
+    /// Failures keep the previous registration (logged, not surfaced: the
+    /// parent's « Actualiser » shows them).
+    ///
+    /// `lastSyncedAt` is also stamped when the timetable category failed
+    /// (other categories succeeded, or the old data was preserved), so the
+    /// resync also needs lessons in this week's window: an empty or old-only
+    /// timetable never re-registers (`sync` itself also refuses to drop every
+    /// registered block).
+    private func resyncClassLockIfNeeded(children: [Child], startedAt: Date) {
+        let linkedID = ScreenTimeEventStore.loadLinkedChildID()
+        guard ClassScheduleShieldService.shouldResyncAfterSchoolSync(
+            classLockEnabled: ScreenTimeEventStore.isClassLockEnabled(),
+            linkedChildID: linkedID,
+            syncedChildren: children.map { (id: "\($0.id)", lastSyncedAt: $0.lastSyncedAt) },
+            syncStartedAt: startedAt
+        ), let child = children.first(where: { "\($0.id)" == linkedID }) else { return }
+        guard ClassScheduleShieldService.hasLessonsInWindow(child.schedule) else {
+            logger.info("Class lock resync skipped: no lesson this week in the synced timetable")
+            return
+        }
+        do {
+            try ClassScheduleShieldService.sync(schedule: child.schedule)
+            logger.info("Class lock resynced after school sync")
+        } catch {
+            logger.error("Class lock resync failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - ENT / PCN

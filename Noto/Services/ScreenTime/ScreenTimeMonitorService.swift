@@ -17,7 +17,7 @@ final class ScreenTimeMonitorService: Sendable {
     static let shared = ScreenTimeMonitorService()
 
     private let center = DeviceActivityCenter()
-    private let activityName = DeviceActivityName("noto.screentime.daily")
+    private let activityName = DeviceActivityName(RewardConstants.appLimitActivityName)
     private let eventName = DeviceActivityEvent.Name("noto.screentime.threshold")
 
     /// Starts (or restarts) monitoring for the given apps/categories with a
@@ -48,6 +48,9 @@ final class ScreenTimeMonitorService: Sendable {
             throw error
         }
         ScreenTimeEventStore.storeThreshold(hours: thresholdHours)
+        // A (re)registration lifts the budget shield (`intervalDidStart`):
+        // the budget counts as spent again only after a new threshold event.
+        RewardBudget.markAppLimitRegistered()
     }
 
     func stopMonitoring() {

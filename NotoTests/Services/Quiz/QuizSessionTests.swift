@@ -401,6 +401,36 @@ struct QuizSessionTests {
         #expect(forCalcul.first?.nextReview == QuizClock.date(day: 4))
     }
 
+    @Test("3.4 hook: a passed quiz credits its minutes once, after the save; a failed one never")
+    func creditHook() throws {
+        let child = makeChild()
+        addPlannedBank()
+        try context.save()
+
+        final class Calls { var values: [(Int, Date)] = [] }
+        let calls = Calls()
+        let clock = self.clock
+        let context = self.context
+        let session = QuizSession(child: child, modelContext: context, curriculum: QuizCurriculumFixtures.curriculum,
+                                  config: .default, calendar: QuizClock.calendar, seed: 7, now: { clock.now },
+                                  onMinutesEarned: { minutes, date in
+                                      // The attempt is already saved when the ledger is credited.
+                                      let saved = (try? context.fetch(FetchDescriptor<QuizAttempt>()).count) ?? 0
+                                      #expect(saved == 1)
+                                      calls.values.append((minutes, date))
+                                  })
+        play(session)
+        session.advance()
+        #expect(calls.values.count == 1)
+        #expect(calls.values.first?.0 == 10)
+        #expect(calls.values.first?.1 == clock.now)
+
+        let failed = QuizSession(child: child, modelContext: context, curriculum: QuizCurriculumFixtures.curriculum,
+                                 config: .default, calendar: QuizClock.calendar, seed: 8, now: { clock.now },
+                                 onMinutesEarned: { _, _ in Issue.record("no credit for a failed quiz") })
+        play(failed, wrong: [0, 1, 2])
+    }
+
     @Test("finish runs once")
     func finishOnce() throws {
         let child = makeChild()
