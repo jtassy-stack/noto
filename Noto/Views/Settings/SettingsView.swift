@@ -91,13 +91,6 @@ struct SettingsView: View {
         return formatter.localizedString(for: date, relativeTo: .now)
     }
 
-    /// Comma-separated first names of children whose mail is synced via IMAP.
-    /// Since the account is global, this is always all configured children.
-    private var imapCoveredChildrenLabel: String {
-        guard !children.isEmpty else { return "—" }
-        return children.map { $0.firstName }.joined(separator: ", ")
-    }
-
     // MARK: Body
 
     var body: some View {
@@ -261,7 +254,12 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 ForEach(Array(imapConfigs.enumerated()), id: \.element.id) { index, config in
                     if index > 0 { SettingsDivider() }
-                    IMAPAccountRow(config: config, onDisconnect: { disconnectIMAP(id: config.id) })
+                    IMAPAccountRow(
+                        config: config,
+                        children: children,
+                        onAssign: { reassignIMAP(id: config.id, to: $0) },
+                        onDisconnect: { disconnectIMAP(id: config.id) }
+                    )
                 }
                 SettingsDivider()
                 InfoRow(
@@ -535,8 +533,28 @@ struct SettingsView: View {
                 NSLog("[noto][warn] disconnect(child:) Skolengo Keychain delete failed: \(error.localizedDescription)")
             }
         }
+        // Captured before the delete: a mailbox assigned to this child
+        // falls back to "Tous les enfants" (sync/UI also resolve a dangling
+        // id that way; this keeps the Keychain blob truthful).
+        let childKey = MailboxRouting.childKey(child)
         modelContext.delete(child)
         try? modelContext.save()
+        do {
+            try IMAPService.reassignOrphans(removedChildID: childKey)
+        } catch {
+            NSLog("[noto][warn] reassignOrphans failed: \(error.localizedDescription)")
+        }
+        imapConfigs = IMAPService.loadConfigs()
+    }
+
+    private func reassignIMAP(id: UUID, to assignment: MailboxAssignment) {
+        do {
+            try IMAPService.updateAssignment(id: id, to: assignment)
+        } catch {
+            NSLog("[noto][warn] reassignIMAP failed: \(error.localizedDescription)")
+            disconnectError = "Impossible de modifier ce compte. Vérifiez que votre iPhone est déverrouillé et réessayez."
+        }
+        imapConfigs = IMAPService.loadConfigs()
     }
 
     private func disconnectIMAP(id: UUID) {
@@ -575,7 +593,21 @@ struct SettingsView: View {
 
 private struct IMAPAccountRow: View {
     let config: IMAPServerConfig
+    let children: [Child]
+    let onAssign: (MailboxAssignment) -> Void
     let onDisconnect: () -> Void
+
+    /// The assignment as the sync applies it (dangling child → Tous).
+    private var effectiveAssignment: MailboxAssignment {
+        config.assignment.resolved(childIDs: children.map(MailboxRouting.childKey))
+    }
+
+    private var assignmentLabel: String {
+        MailboxRouting.label(
+            for: config.assignment,
+            children: children.map { (id: MailboxRouting.childKey($0), firstName: $0.firstName) }
+        )
+    }
 
     var body: some View {
         HStack(spacing: NotoTheme.Spacing.sm) {
@@ -588,6 +620,33 @@ private struct IMAPAccountRow: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
             Spacer()
+            Menu {
+                ForEach(MailboxAssignmentOption.options(for: children), id: \.assignment) { option in
+                    Button {
+                        onAssign(option.assignment)
+                    } label: {
+                        if option.assignment == effectiveAssignment {
+                            Label(option.label, systemImage: "checkmark")
+                        } else {
+                            Text(option.label)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(assignmentLabel)
+                        .font(NotoTheme.Typography.caption)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(NotoTheme.Colors.cobalt)
+                .padding(.horizontal, NotoTheme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(NotoTheme.Colors.cobalt.opacity(0.1))
+                .clipShape(Capsule())
+            }
+            .accessibilityLabel("Ces mails concernent : \(assignmentLabel)")
             Button(role: .destructive, action: onDisconnect) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(NotoTheme.Colors.textSecondary.opacity(0.5))

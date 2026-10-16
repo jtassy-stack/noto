@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Syncs IMAP inbox messages into SwiftData Message objects for a given child.
+/// Syncs IMAP inbox messages into SwiftData Message objects.
 ///
 /// Invariants:
 ///   - New inserts carry `source == .imap` and stamp `imapProvider`
@@ -17,70 +17,97 @@ import SwiftData
 ///     construction a school-parent channel, and filtering would
 ///     silently drop legitimate senders outside the known school
 ///     domain.
+///   - Each account's `MailboxAssignment` decides where its mail lands
+///     (`MailboxRouting.target`): every child, one child, or the parent
+///     lane (`Family.messages`, whitelist = union of the family's schools).
 ///
 /// Threading contract
 /// ------------------
-/// `sync(for:directorySchools:)` does NOT require the caller to be on the
-/// main actor.  The expensive network I/O (`IMAPService.fetchInbox`) runs
-/// on whatever cooperative thread the Swift runtime assigns; only
-/// `process(child:config:fetched:directorySchools:)` — which touches
-/// SwiftData — must be called on the MainActor and is annotated
-/// accordingly.  Callers that are already on the main actor can call
-/// `sync` directly; the compiler will hop off automatically for the
-/// nonisolated part.
+/// `syncAccounts` runs on the main actor but hops the expensive network
+/// I/O (`fetch`, `IMAPService.fetchInbox` in production) off it; only the
+/// SwiftData writes in `process` touch the main actor.
 struct IMAPSyncService {
     let modelContext: ModelContext
 
-    /// Full sync: load config, fetch remote inbox off the main actor,
-    /// then process the results back on the main actor.
+    /// Outcome of a multi-account sync. Errors carry the account username
+    /// (the parent's own address, shown back to them) — never a child name.
+    struct AccountsResult {
+        var anySuccess = false
+        var errors: [(account: String, detail: String)] = []
+    }
+
+    /// Fetches every account ONCE and replays it against the targets its
+    /// assignment resolves to.
     ///
-    /// The network fetch (`IMAPService.fetchInbox`) is intentionally
-    /// called from a nonisolated context so it never blocks the main
-    /// thread while opening the TCP connection, logging in, and
-    /// streaming message headers.  SwiftData writes happen only after
-    /// the fetch completes and we're back on the main actor via
-    /// `processOnMain`.
-    ///
-    /// Network + Keychain side effects live here; the pure logic is in
-    /// `process(child:config:fetched:directorySchools:)` so tests can
-    /// exercise the whitelist / bypass / dedupe branches without a live
-    /// server.
+    /// - Parameters:
+    ///   - children: every child of the family (explicit assignments are
+    ///     matched here, regardless of school type).
+    ///   - defaultChildren: who receives an `.allChildren` account; `nil`
+    ///     means `children`.
+    ///   - family: parent lane owner; parent-assigned accounts are skipped
+    ///     when nil.
+    ///   - fetch: injectable for tests — production uses `IMAPService.fetchInbox`.
     @MainActor
-    func sync(
-        for child: Child,
-        directorySchools: [String: DirectorySchool] = [:]
-    ) async throws {
-        guard let config = IMAPService.loadConfig() else {
-            throw IMAPSyncError.noCredentials
+    func syncAccounts(
+        _ configs: [IMAPServerConfig],
+        children: [Child],
+        defaultChildren: [Child]? = nil,
+        family: Family?,
+        directorySchools: [String: DirectorySchool] = [:],
+        fetch: @escaping @Sendable (IMAPServerConfig) async throws -> [IMAPMessageInfo] = { config in
+            try await Task.detached(priority: .userInitiated) {
+                try await IMAPService.fetchInbox(config: config)
+            }.value
         }
+    ) async -> AccountsResult {
+        var result = AccountsResult()
 
-        // Fetch off the main actor — this is the expensive network hop.
-        let fetched = try await Task.detached(priority: .userInitiated) {
-            try await IMAPService.fetchInbox(config: config)
-        }.value
+        for config in configs {
+            let target = MailboxRouting.target(
+                for: config.assignment,
+                children: children,
+                defaultChildren: defaultChildren,
+                key: MailboxRouting.childKey
+            )
+            // Nothing to replay against — don't open a connection.
+            if case .children(let kids) = target, kids.isEmpty { continue }
+            if case .parent = target, family == nil { continue }
 
-        // Write results back on the main actor where SwiftData lives.
-        try await processOnMain(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+            let fetched: [IMAPMessageInfo]
+            do {
+                fetched = try await fetch(config)
+            } catch {
+                NSLog("[noto][error] IMAP fetch failed (provider=%@): %@",
+                      config.providerID, error.localizedDescription)
+                result.errors.append((config.username, error.localizedDescription))
+                continue
+            }
+
+            switch target {
+            case .children(let kids):
+                for child in kids {
+                    do {
+                        try process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
+                        result.anySuccess = true
+                    } catch {
+                        result.errors.append((config.username, error.localizedDescription))
+                    }
+                }
+            case .parent:
+                guard let family else { continue }
+                do {
+                    try process(family: family, config: config, fetched: fetched, directorySchools: directorySchools)
+                    result.anySuccess = true
+                } catch {
+                    result.errors.append((config.username, error.localizedDescription))
+                }
+            }
+        }
+        return result
     }
 
-    /// Bridges the nonisolated `sync` path back onto the MainActor for
-    /// SwiftData writes.  Separate from the public `process` method so
-    /// the MainActor hop is explicit and unit-testable via `process`
-    /// without needing an actor boundary crossing.
-    @MainActor
-    private func processOnMain(
-        child: Child,
-        config: IMAPServerConfig,
-        fetched: [IMAPMessageInfo],
-        directorySchools: [String: DirectorySchool]
-    ) throws {
-        try process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
-    }
-
-    /// Pure processing step — takes an already-fetched batch and applies
-    /// whitelist filtering (or bypass), dedupe, and insert. Exposed so
-    /// the bypass invariant has behavioural test coverage.
-    @MainActor
+    /// Pure processing step for one child — takes an already-fetched batch
+    /// and applies whitelist filtering (or bypass), dedupe, and insert.
     ///
     /// - Parameter directorySchools: optional pre-fetched map of
     ///   `Child.rneCode` → `DirectorySchool`. When present, the
@@ -88,11 +115,51 @@ struct IMAPSyncService {
     ///   `mailDomains` (ENT + académie + commune services) rather
     ///   than inferring from the establishment string. Populate via
     ///   `DirectorySchoolCache.schools(for:)` in the caller.
+    @MainActor
     func process(
         child: Child,
         config: IMAPServerConfig,
         fetched: [IMAPMessageInfo],
         directorySchools: [String: DirectorySchool] = [:]
+    ) throws {
+        try process(
+            existing: child.messages,
+            whitelistChildren: [child],
+            attach: { $0.child = child },
+            config: config,
+            fetched: fetched,
+            directorySchools: directorySchools
+        )
+    }
+
+    /// Parent lane: same pipeline, rows attached to `family.messages`.
+    /// The whitelist is the union of every child's school domains (plus
+    /// manual entries) — a parent-assigned Gmail still only keeps school mail.
+    @MainActor
+    func process(
+        family: Family,
+        config: IMAPServerConfig,
+        fetched: [IMAPMessageInfo],
+        directorySchools: [String: DirectorySchool] = [:]
+    ) throws {
+        try process(
+            existing: family.messages,
+            whitelistChildren: family.children,
+            attach: { $0.family = family },
+            config: config,
+            fetched: fetched,
+            directorySchools: directorySchools
+        )
+    }
+
+    @MainActor
+    private func process(
+        existing: [Message],
+        whitelistChildren: [Child],
+        attach: (Message) -> Void,
+        config: IMAPServerConfig,
+        fetched: [IMAPMessageInfo],
+        directorySchools: [String: DirectorySchool]
     ) throws {
         // Dedicated school channels bypass filtering entirely. The guard
         // runs BEFORE whitelist construction so a monlycée-only user with
@@ -108,7 +175,7 @@ struct IMAPSyncService {
         if bypassFilter {
             whitelist = []
         } else {
-            whitelist = MailWhitelist.build(from: [child], directorySchools: directorySchools)
+            whitelist = MailWhitelist.build(from: whitelistChildren, directorySchools: directorySchools)
             guard !whitelist.isEmpty else {
                 NSLog("[noto][warn] IMAP sync aborted — empty whitelist (provider=%@)", config.providerID)
                 throw IMAPSyncError.emptyWhitelist
@@ -132,22 +199,22 @@ struct IMAPSyncService {
             // IMAP UIDs are only unique per-mailbox, so "42" from Gmail
             // must not match "42" from MonLycée for the same child.
             if let uid = info.uid.map(String.init),
-               let existing = child.messages.first(where: {
+               let match = existing.first(where: {
                    $0.imapUID == uid && $0.imapProvider == config.providerID
                }) {
-                updateIfNeeded(existing: existing, with: info, config: config)
+                updateIfNeeded(existing: match, with: info, config: config)
                 continue
             }
 
             // Fallback dedupe: legacy rows without UID — composite match
             // on (sender, subject, same calendar day), scoped by provider.
-            if let existing = findLegacyMatch(child: child, info: info, providerID: config.providerID) {
+            if let match = Self.legacyMatch(in: existing, info: info, providerID: config.providerID) {
                 // Backfill the UID so the next sync resolves via the
                 // primary path.
-                if let uid = info.uid.map(String.init), existing.imapUID == nil {
-                    existing.imapUID = uid
+                if let uid = info.uid.map(String.init), match.imapUID == nil {
+                    match.imapUID = uid
                 }
-                updateIfNeeded(existing: existing, with: info, config: config)
+                updateIfNeeded(existing: match, with: info, config: config)
                 continue
             }
 
@@ -156,7 +223,7 @@ struct IMAPSyncService {
             // (`MonLyceeMailService`, source `.monlycee`) before the parent
             // connected it over IMAP. Webmail ids and IMAP UIDs differ, so
             // only the composite match can tell.
-            if findSSOMatch(child: child, info: info, providerID: config.providerID) != nil {
+            if Self.ssoMatch(in: existing, info: info, providerID: config.providerID) != nil {
                 continue
             }
 
@@ -172,17 +239,17 @@ struct IMAPSyncService {
                 imapProvider: config.providerID
             )
             msg.read = info.isRead
-            msg.child = child
+            attach(msg)
             modelContext.insert(msg)
             keptCount += 1
         }
 
-        // Provider + counts only. The child's first name is deliberately
-        // absent here — combining "lycée Y ↔ child name" in the unified
-        // log (even across two lines, since timestamps are microsecond-
-        // precise) is indirectly identifying under RGPD.
-        NSLog("[noto] IMAP sync: provider=%@ fetched=%d kept=%d dropped=%d",
-              config.providerID, fetched.count, keptCount, droppedCount)
+        // Provider + assignment kind + counts only. The child's first name
+        // is deliberately absent here — combining "lycée Y ↔ child name" in
+        // the unified log (even across two lines, since timestamps are
+        // microsecond-precise) is indirectly identifying under RGPD.
+        NSLog("[noto] IMAP sync: provider=%@ assignment=%@ fetched=%d kept=%d dropped=%d",
+              config.providerID, config.assignment.kind, fetched.count, keptCount, droppedCount)
     }
 
     // MARK: - Dedupe helpers
@@ -194,8 +261,13 @@ struct IMAPSyncService {
     /// never absorbed or source-upgraded into IMAP.
     @MainActor
     func findLegacyMatch(child: Child, info: IMAPMessageInfo, providerID: String? = nil) -> Message? {
+        Self.legacyMatch(in: child.messages, info: info, providerID: providerID)
+    }
+
+    @MainActor
+    private static func legacyMatch(in messages: [Message], info: IMAPMessageInfo, providerID: String?) -> Message? {
         let cal = Calendar.current
-        return child.messages.first { msg in
+        return messages.first { msg in
             guard msg.source == .imap else { return false }
             guard msg.kind == .conversation else { return false }
             // Scope to the same provider when known — prevents cross-account
@@ -216,11 +288,16 @@ struct IMAPSyncService {
     /// Gmail mail is not a monlycee.net one.
     @MainActor
     func findSSOMatch(child: Child, info: IMAPMessageInfo, providerID: String) -> Message? {
+        Self.ssoMatch(in: child.messages, info: info, providerID: providerID)
+    }
+
+    @MainActor
+    private static func ssoMatch(in messages: [Message], info: IMAPMessageInfo, providerID: String) -> Message? {
         guard providerID == MonLyceeMailService.imapProviderID else { return nil }
         let cal = Calendar.current
         let sender = MonLyceeMailService.normalized(info.from)
         let subject = MonLyceeMailService.normalized(info.subject)
-        return child.messages.first { msg in
+        return messages.first { msg in
             msg.source == .monlycee
                 && msg.kind == .conversation
                 && MonLyceeMailService.normalized(msg.sender) == sender

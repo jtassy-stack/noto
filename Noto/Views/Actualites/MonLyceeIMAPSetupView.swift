@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Sheet that collects IMAP credentials and validates them against
 /// the provider auto-resolved from the email address.
@@ -9,11 +10,16 @@ import SwiftUI
 /// `imap.{domain}:993` fallback).
 struct MonLyceeIMAPSetupView: View {
     @Environment(\.dismiss) private var dismiss
+    @Query private var families: [Family]
 
     @State private var email = ""
     @State private var password = ""
     @State private var isValidating = false
     @State private var errorMessage: String?
+    /// Who this mailbox's mail belongs to — editable later in Réglages.
+    @State private var assignment: MailboxAssignment = .allChildren
+
+    private var children: [Child] { families.first?.children ?? [] }
 
     /// Live resolver preview — updates as the user types, so they see
     /// "Gmail" / "Outlook" / "MonLycée" picked up before they submit.
@@ -114,6 +120,10 @@ struct MonLyceeIMAPSetupView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, NotoTheme.Spacing.xs)
                         }
+
+                        if !children.isEmpty {
+                            MailboxAssignmentPicker(selection: $assignment, children: children)
+                        }
                     }
                     .padding(.horizontal, NotoTheme.Spacing.md)
 
@@ -193,7 +203,8 @@ struct MonLyceeIMAPSetupView: View {
         let config = IMAPServerConfig(
             preset: preset,
             username: trimmedEmail,
-            password: password
+            password: password,
+            assignment: assignment
         )
 
         do {

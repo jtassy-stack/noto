@@ -238,9 +238,11 @@ struct ENTLoginView: View {
         isLoading = false
         onDismissAll?() ?? dismiss()
 
-        if provider == .monlycee, MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
+        if provider == .monlycee {
+            let imapConfigs = IMAPService.loadConfigs()
             Task {
-                for child in mailChildren {
+                for child in mailChildren
+                where MonLyceeMailService.shouldSync(child: child, configs: imapConfigs) {
                     await MonLyceeMailService.sync(child: child, modelContext: mailContext)
                 }
             }

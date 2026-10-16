@@ -123,10 +123,10 @@ final class FullSyncService {
             // Best-effort mail refresh — session cookies can expire between
             // launches, so a failure here is silent rather than surfaced
             // as an error; the next full ENT login re-establishes them.
-            if MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
-                for child in monlyceeChildren {
-                    await MonLyceeMailService.sync(child: child, modelContext: modelContext)
-                }
+            let imapConfigs = IMAPService.loadConfigs()
+            for child in monlyceeChildren
+            where MonLyceeMailService.shouldSync(child: child, configs: imapConfigs) {
+                await MonLyceeMailService.sync(child: child, modelContext: modelContext)
             }
         }
 

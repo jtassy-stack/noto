@@ -126,6 +126,8 @@ final class SchoolPhoto {
 @Model
 final class Message {
     var child: Child?
+    /// Set (instead of `child`) for parent-lane mail — see `Family.messages`.
+    var family: Family?
     var sender: String
     var subject: String
     var body: String

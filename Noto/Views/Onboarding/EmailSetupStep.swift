@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Optional onboarding step to connect the parent's email account
 /// (MonLycée / IMAP). Runs after school connection.
@@ -13,6 +14,10 @@ struct EmailSetupStep: View {
     @State private var password = ""
     @State private var isValidating = false
     @State private var errorMessage: String?
+    @State private var assignment: MailboxAssignment = .allChildren
+    @Query private var families: [Family]
+
+    private var children: [Child] { families.first?.children ?? [] }
 
     private var isFormValid: Bool {
         !email.trimmingCharacters(in: .whitespaces).isEmpty
@@ -66,6 +71,12 @@ struct EmailSetupStep: View {
                             RoundedRectangle(cornerRadius: NotoTheme.Radius.sm)
                                 .stroke(NotoTheme.Colors.border, lineWidth: 0.5)
                         )
+
+                    // Only meaningful with 2+ children or for a parent box;
+                    // shown whenever a child exists so the choice is explicit.
+                    if !children.isEmpty {
+                        MailboxAssignmentPicker(selection: $assignment, children: children)
+                    }
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
 
@@ -162,12 +173,13 @@ struct EmailSetupStep: View {
         let config = IMAPServerConfig(
             preset: preset,
             username: trimmedEmail,
-            password: password
+            password: password,
+            assignment: assignment
         )
 
         do {
             try await IMAPService.validate(config: config)
-            try IMAPService.saveConfig(config)
+            try IMAPService.addConfig(config)
             isValidating = false
             onComplete()
         } catch {
