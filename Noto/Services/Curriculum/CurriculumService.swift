@@ -310,7 +310,13 @@ final class CurriculumService {
     /// Convert app grade to celyn.io API format.
     /// Collège: "3e" → "3eme". Lycée: "2nde", "1re" → "1ere", "Tle" → "terminale". Primaire: passed through.
     func apiGrade(for grade: String) -> String {
-        let g = Self.canonicalLevel(grade).lowercased().trimmingCharacters(in: .whitespaces)
+        Self.apiGrade(for: grade)
+    }
+
+    /// Static form of `apiGrade(for:)` — pure, usable without a loaded service
+    /// (Discover tag matching, tests).
+    static func apiGrade(for grade: String) -> String {
+        let g = canonicalLevel(grade).lowercased().trimmingCharacters(in: .whitespaces)
         // Already in API format
         if g.hasSuffix("eme") || g.hasSuffix("ème") { return g.replacingOccurrences(of: "ème", with: "eme") }
         // Short collège format: "6e" → "6eme", "3e" → "3eme"
