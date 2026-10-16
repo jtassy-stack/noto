@@ -334,6 +334,29 @@ struct SyncTests {
         #expect(bodyCalls.count == 3)
     }
 
+    @Test func concurrentSyncsForTheSameChildInsertOnce() async throws {
+        // Login's background sync and FullSyncService can overlap on a fresh
+        // child: the second call must not re-fetch nor re-insert.
+        MonLyceeStubProtocol.install(webmailHandler())
+        let (ctx, child) = try makeContext()
+        let client = stubbedClient()
+
+        // Two MainActor tasks: the second starts while the first is
+        // suspended on the network.
+        let first = Task { @MainActor in
+            await MonLyceeMailService.sync(child: child, modelContext: ctx, client: client)
+        }
+        let second = Task { @MainActor in
+            await MonLyceeMailService.sync(child: child, modelContext: ctx, client: client)
+        }
+        let results = [await first.value, await second.value]
+
+        #expect(results.contains(.success(0)))
+        #expect(child.messages.count == 3)
+        let bodyCalls = MonLyceeStubProtocol.requests().filter { $0.request.url?.lastPathComponent == "getMail.json" }
+        #expect(bodyCalls.count == 3)
+    }
+
     @Test func bodyLoopStopRule() {
         #expect(!MonLyceeMailService.shouldStopBodyLoop(after: .http(status: 500)))
         #expect(MonLyceeMailService.shouldStopBodyLoop(after: .unauthorized(status: 401)))
