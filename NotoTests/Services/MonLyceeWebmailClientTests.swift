@@ -14,6 +14,8 @@ final class MonLyceeStubProtocol: URLProtocol, @unchecked Sendable {
         var body: Data = Data()
         /// Lets a test simulate a redirect to another host.
         var responseURL: URL?
+        /// When set, the request fails at the transport level instead.
+        var transportError: URLError.Code?
     }
 
     nonisolated(unsafe) private static var handler: (@Sendable (URLRequest, Data) -> Stub)?
@@ -47,6 +49,10 @@ final class MonLyceeStubProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         let stub = handler(request, body)
+        if let code = stub.transportError {
+            client?.urlProtocol(self, didFailWithError: URLError(code))
+            return
+        }
         let response = HTTPURLResponse(url: stub.responseURL ?? request.url!, statusCode: stub.status,
                                        httpVersion: "HTTP/1.1", headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -103,13 +109,17 @@ private func formFields(_ body: String) -> [String: String] {
 }
 
 /// Routes `getMailHeaderList.json` / `getMail.json` to fixtures.
-private func webmailHandler(bodyStatus: Int = 200) -> @Sendable (URLRequest, Data) -> MonLyceeStubProtocol.Stub {
+private func webmailHandler(
+    bodyStatus: Int = 200,
+    body: Data = MonLyceeMailFixtures.mail,
+    bodyTransportError: URLError.Code? = nil
+) -> @Sendable (URLRequest, Data) -> MonLyceeStubProtocol.Stub {
     { request, _ in
         switch request.url?.lastPathComponent {
         case "getMailHeaderList.json":
             return .init(body: MonLyceeMailFixtures.headerList)
         case "getMail.json":
-            return .init(status: bodyStatus, body: MonLyceeMailFixtures.mail)
+            return .init(status: bodyStatus, body: body, transportError: bodyTransportError)
         default:
             return .init(status: 404)
         }
@@ -284,6 +294,58 @@ struct SyncTests {
 
         #expect(result == .failure(.unauthorized(status: 401)))
         #expect(child.messages.isEmpty)
+    }
+
+    @Test func htmlLoginPageDuringBodiesStopsTheLoop() async throws {
+        // Expired session redirected to a login page still on *.monlycee.net:
+        // 200 + HTML → invalidPayload, same for every remaining body.
+        MonLyceeStubProtocol.install(webmailHandler(body: Data("<html>Connexion</html>".utf8)))
+        let (ctx, child) = try makeContext()
+
+        let result = await MonLyceeMailService.sync(child: child, modelContext: ctx, client: stubbedClient())
+
+        #expect(result == .success(0))
+        #expect(child.messages.isEmpty)
+        let bodyCalls = MonLyceeStubProtocol.requests().filter { $0.request.url?.lastPathComponent == "getMail.json" }
+        #expect(bodyCalls.count == 1)
+    }
+
+    @Test func networkFailureDuringBodiesStopsTheLoop() async throws {
+        MonLyceeStubProtocol.install(webmailHandler(bodyTransportError: .timedOut))
+        let (ctx, child) = try makeContext()
+
+        let result = await MonLyceeMailService.sync(child: child, modelContext: ctx, client: stubbedClient())
+
+        #expect(result == .success(0))
+        #expect(child.messages.isEmpty)
+        let bodyCalls = MonLyceeStubProtocol.requests().filter { $0.request.url?.lastPathComponent == "getMail.json" }
+        #expect(bodyCalls.count == 1)
+    }
+
+    @Test func httpErrorOnABodySkipsOnlyThatMessage() async throws {
+        // A plain 500 is specific to one message: the loop goes on.
+        MonLyceeStubProtocol.install(webmailHandler(bodyStatus: 500))
+        let (ctx, child) = try makeContext()
+
+        let result = await MonLyceeMailService.sync(child: child, modelContext: ctx, client: stubbedClient())
+
+        #expect(result == .success(0))
+        let bodyCalls = MonLyceeStubProtocol.requests().filter { $0.request.url?.lastPathComponent == "getMail.json" }
+        #expect(bodyCalls.count == 3)
+    }
+
+    @Test func bodyLoopStopRule() {
+        #expect(!MonLyceeMailService.shouldStopBodyLoop(after: .http(status: 500)))
+        #expect(MonLyceeMailService.shouldStopBodyLoop(after: .unauthorized(status: 401)))
+        #expect(MonLyceeMailService.shouldStopBodyLoop(after: .noSession))
+        #expect(MonLyceeMailService.shouldStopBodyLoop(after: .invalidPayload))
+        #expect(MonLyceeMailService.shouldStopBodyLoop(after: .network(.timedOut)))
+    }
+
+    @Test func requestsUseAShortTimeout() {
+        let request = MonLyceeWebmailClient.formRequest(path: "getMail.json", params: [])
+        #expect(request.timeoutInterval == MonLyceeWebmailClient.requestTimeout)
+        #expect(MonLyceeWebmailClient.requestTimeout < 60)
     }
 
     @Test func expiredSessionDuringBodiesStopsTheLoop() async throws {

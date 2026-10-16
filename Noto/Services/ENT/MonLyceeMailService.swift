@@ -177,6 +177,10 @@ struct MonLyceeWebmailClient: Sendable {
     /// The WAF in front of apis-mail.monlycee.net (F5 BIG-IP, per the TS01…
     /// cookies) 403s a request that does not look like the webmail's own
     /// same-origin XHR call.
+    /// Per-request cap, well under URLSession's 60 s default: a sync makes
+    /// up to `pageSize + 2` calls in a row, so a stalled WAF must fail fast.
+    static let requestTimeout: TimeInterval = 15
+
     private static let userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
     let session: URLSession
@@ -205,6 +209,7 @@ struct MonLyceeWebmailClient: Sendable {
 
         var request = URLRequest(url: Self.webmailURL)
         request.httpMethod = "GET"
+        request.timeoutInterval = Self.requestTimeout
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         _ = try await perform(request)
 
@@ -259,6 +264,7 @@ struct MonLyceeWebmailClient: Sendable {
     static func formRequest(path: String, params: [(String, String)]) -> URLRequest {
         var request = URLRequest(url: apiBaseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
+        request.timeoutInterval = requestTimeout
         request.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue("https://web-mail.monlycee.net/main.html", forHTTPHeaderField: "Referer")
         request.setValue("https://web-mail.monlycee.net", forHTTPHeaderField: "Origin")
@@ -338,8 +344,30 @@ enum MonLyceeMailService {
         shouldSync(configuredIMAPProviderIDs: IMAPService.loadConfigs().map(\.providerID))
     }
 
+    /// Children whose sync is running. The ENT login fires a sync in the
+    /// background right before `RootView`/`FullSyncService` may start one
+    /// for the same freshly added child: both would pass `isDuplicate`
+    /// before either saves, and insert every mail twice.
+    private static var inFlight: Set<PersistentIdentifier> = []
+
+    /// Whether the body loop must stop after `error`. Only a plain HTTP
+    /// error is specific to one message (worth skipping, retried next
+    /// sync); everything else fails every remaining body the same way:
+    ///   - `.unauthorized` / `.noSession`: the SSO session is gone;
+    ///   - `.network`: offline or a stalled WAF — each further call would
+    ///     wait for its own timeout;
+    ///   - `.invalidPayload`: an expired session served as a 200 HTML login
+    ///     page still on *.monlycee.net.
+    static func shouldStopBodyLoop(after error: MonLyceeMailError) -> Bool {
+        switch error {
+        case .http: return false
+        case .unauthorized, .noSession, .network, .invalidPayload: return true
+        }
+    }
+
     /// Syncs the first page of the inbox into `child.messages`.
-    /// - Returns: the number of inserted messages, or why it stopped.
+    /// - Returns: the number of inserted messages (0 when a sync for this
+    ///   child is already running), or why it stopped.
     @discardableResult
     static func sync(
         child: Child,
@@ -347,6 +375,13 @@ enum MonLyceeMailService {
         client: MonLyceeWebmailClient = MonLyceeWebmailClient(),
         pageSize: Int = 50
     ) async -> Result<Int, MonLyceeMailError> {
+        let childID = child.persistentModelID
+        guard inFlight.insert(childID).inserted else {
+            logger.info("monlycee webmail sync already running for this child — skipped")
+            return .success(0)
+        }
+        defer { inFlight.remove(childID) }
+
         let headers: [MonLyceeMailHeader]
         let token: String
         do throws(MonLyceeMailError) {
@@ -359,15 +394,18 @@ enum MonLyceeMailService {
 
         var inserted = 0
         var bodyFailures = 0
+        var stoppedEarly = false
         for header in headers where !isDuplicate(header, among: child.messages) {
             let body: String
             do throws(MonLyceeMailError) {
                 body = try await client.fetchBody(msgId: header.msgId, csrfToken: token)
             } catch {
-                // A lost session fails every remaining body the same way —
-                // stop; anything else is retried on the next sync.
-                if case .unauthorized = error { break }
                 bodyFailures += 1
+                if shouldStopBodyLoop(after: error) {
+                    logger.notice("monlycee webmail body loop stopped: \(String(describing: error), privacy: .public)")
+                    stoppedEarly = true
+                    break
+                }
                 continue
             }
             let message = makeMessage(from: header, body: body)
@@ -383,7 +421,7 @@ enum MonLyceeMailService {
         }
         // Counts only — no child name, no sender, no subject (RGPD, same
         // rule as `IMAPSyncService.process`).
-        logger.info("monlycee webmail sync: fetched=\(headers.count) inserted=\(inserted) bodyFailures=\(bodyFailures)")
+        logger.info("monlycee webmail sync: fetched=\(headers.count) inserted=\(inserted) bodyFailures=\(bodyFailures) stoppedEarly=\(stoppedEarly)")
         return .success(inserted)
     }
 
@@ -437,7 +475,9 @@ enum MonLyceeMailService {
         }
     }
 
-    private static func normalized(_ string: String) -> String {
+    /// Shared with `IMAPSyncService.findSSOMatch` so both directions of the
+    /// cross-channel dedupe compare the same way.
+    static func normalized(_ string: String) -> String {
         string.trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "fr_FR"))
     }
