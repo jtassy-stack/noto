@@ -151,6 +151,15 @@ struct IMAPSyncService {
                 continue
             }
 
+            // Cross-channel dedupe: the same monlycee.net inbox may already
+            // have been imported through the ENT SSO channel
+            // (`MonLyceeMailService`, source `.monlycee`) before the parent
+            // connected it over IMAP. Webmail ids and IMAP UIDs differ, so
+            // only the composite match can tell.
+            if findSSOMatch(child: child, info: info, providerID: config.providerID) != nil {
+                continue
+            }
+
             let msg = Message(
                 sender: info.from,
                 subject: info.subject,
@@ -197,6 +206,26 @@ struct IMAPSyncService {
             guard msg.subject == info.subject else { return false }
             guard msg.sender == info.from else { return false }
             return cal.isDate(msg.date, inSameDayAs: info.date)
+        }
+    }
+
+    /// A `.monlycee` row (ENT SSO webmail channel) holding the same mail as
+    /// `info`, fetched through the monlycee.net IMAP preset. Mirror of
+    /// `MonLyceeMailService.isDuplicate`'s IMAP branch: same normalisation,
+    /// (sender, subject, same day). Other IMAP providers never match — a
+    /// Gmail mail is not a monlycee.net one.
+    @MainActor
+    func findSSOMatch(child: Child, info: IMAPMessageInfo, providerID: String) -> Message? {
+        guard providerID == MonLyceeMailService.imapProviderID else { return nil }
+        let cal = Calendar.current
+        let sender = MonLyceeMailService.normalized(info.from)
+        let subject = MonLyceeMailService.normalized(info.subject)
+        return child.messages.first { msg in
+            msg.source == .monlycee
+                && msg.kind == .conversation
+                && MonLyceeMailService.normalized(msg.sender) == sender
+                && MonLyceeMailService.normalized(msg.subject) == subject
+                && cal.isDate(msg.date, inSameDayAs: info.date)
         }
     }
 

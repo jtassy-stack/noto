@@ -271,8 +271,9 @@ struct ActualitesView: View {
                 Divider()
                     .background(NotoTheme.Colors.border)
 
-                // MonLycée setup prompt — visible when IMAP not configured
-                if !imapConfigured {
+                // MonLycée setup prompt — only when no channel delivers
+                // monlycee.net mail yet (see `showsMonLyceePrompt`).
+                if showsMonLyceePrompt {
                     monLyceePrompt
                 }
 
@@ -355,6 +356,21 @@ struct ActualitesView: View {
     }
 
     // MARK: - Sub-views
+
+    /// The prompt pushes the parent towards the monlycee.net IMAP preset.
+    /// A child connected through the MonLycée ENT already receives that
+    /// inbox via the SSO channel (`MonLyceeMailService`), so suggesting IMAP
+    /// there would only set up a second fetcher for the same mail.
+    private var showsMonLyceePrompt: Bool {
+        Self.showsMonLyceePrompt(
+            imapConfigured: imapConfigured,
+            childProviders: children.map(\.entProvider)
+        )
+    }
+
+    static func showsMonLyceePrompt(imapConfigured: Bool, childProviders: [ENTProvider?]) -> Bool {
+        !imapConfigured && !childProviders.contains(.monlycee)
+    }
 
     private func refreshIMAPState() {
         imapConfigured = IMAPService.isConfigured
