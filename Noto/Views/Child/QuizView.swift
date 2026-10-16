@@ -20,7 +20,9 @@ struct QuizView: View {
                 if let session {
                     content(for: session)
                 } else {
-                    ProgressView()
+                    // Also shown while the on-device model prepares homework
+                    // questions (3.3, at most `QuizGenerator.defaultTimeout`).
+                    ProgressView("On prépare tes questions…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -39,12 +41,12 @@ struct QuizView: View {
                 }
             }
         }
-        .onAppear {
-            if session == nil { startSession() }
+        .task {
+            if session == nil { await startSession() }
         }
     }
 
-    private func startSession() {
+    private func startSession() async {
         // The parent's rules, read once per quiz from the app group.
         let config = RewardConfigStore.load()
         // 3.4: minutes earned go to the reward ledger, then unlock (or wait
@@ -53,12 +55,16 @@ struct QuizView: View {
         let credit: @MainActor (Int, Date) -> Void = { minutes, date in
             RewardUnlockService.credit(minutes: minutes, at: date, schedule: child.schedule)
         }
+        // 3.3: homework slots the bank cannot fill get an on-device question
+        // (FoundationModels, iOS 26+ with Apple Intelligence), else the bank
+        // fills them, silently. No network on this path.
+        let generator = QuizGenerator()
         if let seed {
-            session = QuizSession(child: child, modelContext: modelContext, config: config, seed: seed,
-                                  onMinutesEarned: credit)
+            session = await QuizSession.make(child: child, modelContext: modelContext, config: config, seed: seed,
+                                             onMinutesEarned: credit, generator: generator)
         } else {
-            session = QuizSession(child: child, modelContext: modelContext, config: config,
-                                  onMinutesEarned: credit)
+            session = await QuizSession.make(child: child, modelContext: modelContext, config: config,
+                                             onMinutesEarned: credit, generator: generator)
         }
     }
 
@@ -84,7 +90,10 @@ struct QuizView: View {
             if let result = session.result {
                 QuizResultView(result: result,
                                onDone: { dismiss() },
-                               onAnotherQuiz: { startSession() })
+                               onAnotherQuiz: {
+                                   self.session = nil
+                                   Task { await startSession() }
+                               })
             }
         }
     }
@@ -97,6 +106,12 @@ private struct QuestionScreen: View {
 
     private static let letters = ["A", "B", "C", "D"]
 
+    /// Bank text (reviewed) may carry inline Markdown; generated text is
+    /// model output and is shown verbatim: no link can become tappable.
+    private func display(_ raw: String) -> AttributedString {
+        question.isGenerated ? AttributedString(raw) : BankText.attributed(raw)
+    }
+
     private enum Focus: Hashable { case question, feedback }
     @AccessibilityFocusState private var focus: Focus?
 
@@ -105,7 +120,7 @@ private struct QuestionScreen: View {
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
                 header
 
-                Text(BankText.attributed(question.question))
+                Text(display(question.question))
                     .font(ChildStyle.question)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -189,7 +204,7 @@ private struct QuestionScreen: View {
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .frame(minWidth: 24)
                     .accessibilityHidden(true)
-                Text(BankText.attributed(text))
+                Text(display(text))
                     .font(ChildStyle.body)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
                     .multilineTextAlignment(.leading)
@@ -269,7 +284,7 @@ private struct QuestionScreen: View {
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
             }
             if let explanation = question.explanation, !explanation.isEmpty {
-                Text(BankText.attributed(explanation))
+                Text(display(explanation))
                     .font(ChildStyle.body)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -16,10 +16,11 @@ enum QuizFormat: String, Codable, Sendable {
 
 /// One quiz question. Bank and celyn items are shared and non-personal, so
 /// there is no `Child` link: per-child history lives in `QuizAttempt` /
-/// `NotionMastery`. `.homework` / `.generated` items are derived from a
-/// child's homework and are therefore personal: nothing creates them yet, and
-/// before 3.3 does they need a `Child` owner with cascade delete or must stay
-/// out of this entity (RGPD erasure, design brief C.4 item 15).
+/// `NotionMastery`. `.homework` / `.generated` items would be derived from a
+/// child's homework and therefore personal, so they stay out of this entity
+/// (RGPD erasure, design brief C.4 item 15): 3.3 on-device questions
+/// (`QuizGenerator`) are ephemeral `QuizQuestion`s, never inserted here; only
+/// their key ends up in the child's `QuizAttempt`, which cascades.
 ///
 /// The first block mirrors celyn's `KoiQuizV2Dto` 1:1 (`src/lib/koi/read.ts`);
 /// the second block is nōto-only.

@@ -3,8 +3,10 @@ import Foundation
 /// Tools that Apple FoundationModels can call during briefing generation.
 /// Each tool provides structured school/culture data to the on-device LLM.
 ///
-/// On iOS 26+, FoundationModels supports @Generable tool calling:
-/// the model can request data mid-generation and incorporate it naturally.
+/// Not wired to FoundationModels (plan 3.3): a real `Tool` is `Sendable`
+/// with a `@concurrent call`, so it cannot hold the `Child` `@Model` these
+/// read; see `TextSummarizer.foundationModelWithTools` for the reasoning.
+/// The live on-device briefing path is `TextSummarizer.summarize`.
 
 // MARK: - Tool Definitions
 

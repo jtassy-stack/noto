@@ -34,97 +34,66 @@ enum TextSummarizer {
 
     // MARK: - Apple FoundationModels with Tool Calling (iOS 26+)
 
+    /// Not wired, on purpose (plan 3.3). The former draft used a pseudo-API
+    /// (`session.registerTool`, `respond(to:tools:)`) that does not exist.
+    /// With the real API, tools are passed to `LanguageModelSession(tools:)`
+    /// and conform to `Tool`, which is `Sendable` with a `@concurrent
+    /// call(arguments:)`: a tool cannot hold the `Child` `@Model` that
+    /// `BriefingTools` reads, so every result would have to be snapshotted
+    /// up front, at which point tool calling only adds five schemas to a
+    /// 4096-token context for nothing. `generateBriefing(for:familyRecos:)`
+    /// has no caller today; `summarize(briefingItems:)` below is the live
+    /// on-device path and gets the same data as pre-built items.
     @available(iOS 26.0, *)
     private static func foundationModelWithTools(child: Child, familyRecos: [CultureReco]) async -> String? {
-        // FoundationModels tool calling flow:
-        //
-        // 1. Register tools (schedule, grades, homework, messages, culture)
-        // 2. Send system prompt instructing parent-addressed French output
-        // 3. Model calls tools as needed to gather data
-        // 4. Model generates natural language briefing
-        //
-        // This runs entirely on-device — no data leaves the phone.
-
-        // TODO: Uncomment when FoundationModels SDK is available in Xcode
-        //
-        // import FoundationModels
-        //
-        // let session = LanguageModelSession()
-        //
-        // // Register tools
-        // let scheduleTool = session.registerTool(
-        //     name: "get_schedule",
-        //     description: "Récupère l'emploi du temps du jour pour l'enfant"
-        // ) { () -> ScheduleToolResult in
-        //     ScheduleTool(child: child).call()
-        // }
-        //
-        // let gradesTool = session.registerTool(
-        //     name: "get_grades",
-        //     description: "Récupère les notes récentes, tendances, difficultés et points forts"
-        // ) { () -> GradesToolResult in
-        //     GradesTool(child: child).call()
-        // }
-        //
-        // let homeworkTool = session.registerTool(
-        //     name: "get_homework",
-        //     description: "Récupère les devoirs à venir"
-        // ) { () -> HomeworkToolResult in
-        //     HomeworkTool(child: child).call()
-        // }
-        //
-        // let messagesTool = session.registerTool(
-        //     name: "get_messages",
-        //     description: "Récupère les messages non lus de l'école"
-        // ) { () -> MessagesToolResult in
-        //     MessagesTool(child: child).call()
-        // }
-        //
-        // let cultureTool = session.registerTool(
-        //     name: "get_culture_recommendations",
-        //     description: "Récupère les recommandations culturelles liées aux cours et difficultés"
-        // ) { () -> CultureRecoToolResult in
-        //     CultureRecoTool(child: child, familyRecos: familyRecos).call()
-        // }
-        //
-        // let systemPrompt = """
-        // Tu es l'assistant de nōto, une app pour parents.
-        // Tu t'adresses au PARENT, pas à l'élève.
-        // Tu parles en français, de manière concise et chaleureuse.
-        //
-        // Génère un briefing du jour pour \(child.firstName) (\(child.grade)).
-        // Utilise les outils disponibles pour récupérer les données.
-        //
-        // Structure ton briefing :
-        // 1. Ce qui est urgent ou important (contrôles, messages non lus)
-        // 2. L'emploi du temps du jour (cours annulés, changements)
-        // 3. Les devoirs à rendre bientôt
-        // 4. Les tendances (progrès ou difficultés)
-        // 5. Les alertes Temps d'écran si la limite a été dépassée (ex : "La limite de 2h a été atteinte 3 fois cette semaine")
-        // 6. Une recommandation culturelle si pertinente
-        //
-        // Sois bref (3-5 phrases max). Pas de liste à puces, écris en prose naturelle.
-        // Si une matière est en difficulté et qu'il y a une reco culturelle liée, mentionne le lien.
-        // """
-        //
-        // do {
-        //     let response = try await session.respond(
-        //         to: systemPrompt,
-        //         tools: [scheduleTool, gradesTool, homeworkTool, messagesTool, cultureTool]
-        //     )
-        //     return response.content
-        // } catch {
-        //     return nil
-        // }
-
-        return nil
+        nil
     }
 
+    /// Simpler path: the pre-built items are the whole context, no tool
+    /// calling. Parent tone (vouvoiement). Any failure, timeout or output
+    /// that breaks the tone returns nil, and the template text is used.
     @available(iOS 26.0, *)
     private static func foundationModelFromItems(items: [BriefingItem]) async -> String? {
-        // Simpler path: pass pre-built items as context, no tool calling
-        // TODO: Implement with FoundationModels when SDK available
+        guard !items.isEmpty else { return nil }
+        let lines = items.prefix(maxModelItems).map { item in
+            "- [\(priorityLabel(item.priority))] \(item.childName) : \(item.summary)"
+        }
+        let prompt = """
+        Éléments du jour :
+        \(lines.joined(separator: "\n"))
+        Rédige le briefing.
+        """
+        #if canImport(FoundationModels)
+        let text = await AsyncTimeout.run(modelTimeout) {
+            await OnDeviceBriefingModel.respond(prompt: prompt)
+        }
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isAcceptableBriefing(trimmed) ? trimmed : nil
+        #else
         return nil
+        #endif
+    }
+
+    private static let maxModelItems = 12
+    private static let modelTimeout: Duration = .seconds(8)
+    static let maxBriefingLength = 700
+
+    private static func priorityLabel(_ priority: BriefingPriority) -> String {
+        switch priority {
+        case .urgent: "urgent"
+        case .positive: "positif"
+        case .normal: "normal"
+        case .low: "secondaire"
+        }
+    }
+
+    /// Model output check (pure): non-empty, short, and addressed to the
+    /// parent (no tutoiement word, CLAUDE.md tone rule).
+    static func isAcceptableBriefing(_ text: String) -> Bool {
+        guard !text.isEmpty, text.count <= maxBriefingLength else { return false }
+        let words = Set(SubjectAlias.tokens(text))
+        return words.isDisjoint(with: ["tu", "ton", "ta", "tes", "toi", "te"])
     }
 
     // MARK: - Manual Briefing Item Builder (fallback)

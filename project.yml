@@ -39,6 +39,10 @@ targets:
         product: SwiftMail
       - sdk: FamilyControls.framework
       - sdk: DeviceActivity.framework
+      # iOS 26+ only (3.3 on-device generation): weak, or dyld fails at
+      # launch on iOS 17-25. Every use sits behind `if #available(iOS 26, *)`.
+      - sdk: FoundationModels.framework
+        weak: true
       - target: NotoDeviceActivity
         embed: false
         link: false
