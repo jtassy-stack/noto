@@ -227,16 +227,24 @@ struct ENTLoginView: View {
 
         // Mail via the SSO session cookies — skipped when the parent
         // already connected the monlycee.net inbox over IMAP, so the two
-        // mechanisms never double-fetch the same inbox.
-        if provider == .monlycee, MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
-            for child in family.children where child.entProvider == provider {
-                await MonLyceeMailService.sync(child: child, modelContext: modelContext)
-            }
-        }
-
-        onDismissAll?() ?? dismiss()
+        // mechanisms never double-fetch the same inbox. Fired in the
+        // background *after* the sheet closes: up to ~50 sequential webmail
+        // calls per child must not keep the login spinner up. The Task
+        // inherits the MainActor (MonLyceeMailService and `Child` require
+        // it) and the environment's main ModelContext outlives the sheet.
+        let mailChildren = family.children.filter { $0.entProvider == provider }
+        let mailContext = modelContext
 
         isLoading = false
+        onDismissAll?() ?? dismiss()
+
+        if provider == .monlycee, MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
+            Task {
+                for child in mailChildren {
+                    await MonLyceeMailService.sync(child: child, modelContext: mailContext)
+                }
+            }
+        }
     }
 
     /// Transfers monlycee.net cookies (session + CSRF) from the SSO
