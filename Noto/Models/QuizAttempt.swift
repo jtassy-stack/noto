@@ -24,6 +24,14 @@ final class QuizAttempt {
     var bonusMinutes: Int = 0
     /// `RewardDenial` raw value, for the parent screen (3.7).
     var denialReason: String?
+    /// Gamification (3.6), parallel to `itemIDs`: the curriculum subject of
+    /// each question ("" when none) and the XP it earned, frozen when the
+    /// quiz ends (`Gamification` XP table). Stored because the subject and
+    /// difficulty cannot be recovered later (bank rows are deleted and
+    /// regenerated). Inline defaults: additive, lightweight migration;
+    /// attempts saved before 3.6 keep 0 XP.
+    var itemSubjects: [String] = []
+    var itemXP: [Int] = []
 
     init(
         id: UUID = UUID(),
@@ -38,7 +46,9 @@ final class QuizAttempt {
         minutesEarned: Int,
         bonusApplied: Bool,
         bonusMinutes: Int = 0,
-        denialReason: String? = nil
+        denialReason: String? = nil,
+        itemSubjects: [String] = [],
+        itemXP: [Int] = []
     ) {
         self.id = id
         self.child = child
@@ -53,5 +63,7 @@ final class QuizAttempt {
         self.bonusApplied = bonusApplied
         self.bonusMinutes = bonusMinutes
         self.denialReason = denialReason
+        self.itemSubjects = itemSubjects
+        self.itemXP = itemXP
     }
 }

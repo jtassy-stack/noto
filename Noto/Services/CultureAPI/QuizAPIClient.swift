@@ -88,6 +88,34 @@ final class QuizAPIClient: Sendable {
         }
     }
 
+    // MARK: - Culture lot of the day (GET)
+
+    /// Daily culture lot consumer. Keskonfé's lot is culture-only, grade-free
+    /// and the same for everyone, so asking for it says nothing about the
+    /// child (design brief C.1 item 6: « via B.1 keskonfe until celyn grade
+    /// support lands »).
+    static let cultureLotApp = "keskonfe"
+
+    /// Today's Keskonfé lot: `GET /api/quiz/v2/lot?app=keskonfe` (contract
+    /// §6, `KoiDailyDto` + v2 fields). The request carries ONLY `app`: no
+    /// level, no location, no date (celyn defaults to the Paris day, which is
+    /// the day the lot is generated for; a device-local date could ask for a
+    /// lot that does not exist yet). 404 = no lot today.
+    func cultureLot() async throws -> CultureLotResponse {
+        let params = [URLQueryItem(name: "app", value: Self.cultureLotApp)]
+        var request = URLRequest(url: url(path: "/quiz/v2/lot", params: params))
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let data = try await send(request, expecting: [200])
+        do {
+            return try JSONDecoder().decode(CultureLotResponse.self, from: data)
+        } catch {
+            throw QuizAPIError.decoding(error)
+        }
+    }
+
     // MARK: - Report (POST)
 
     /// Flags a wrong or inappropriate question:
@@ -345,6 +373,97 @@ struct BankQuizDto: Decodable, Sendable, Equatable {
         reviewMethod = try c.decode(String?.self, forKey: .reviewMethod)
         reviewConfidence = try c.decode(Double.self, forKey: .reviewConfidence)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+}
+
+/// `GET /api/quiz/v2/lot` 200 (`KoiDailyDto`, celyn `src/lib/koi/read.ts`).
+/// Tolerant, like CelynKit (contract §8): an unreadable quiz is dropped,
+/// never the lot. `citation`, `editions`, `nextEditionAt` are ignored.
+struct CultureLotResponse: Decodable, Sendable, Equatable {
+    /// YYYY-MM-DD (Paris day of the lot).
+    let date: String
+    let number: Int
+    let quizzes: [CultureLotQuizDto]
+
+    private enum CodingKeys: String, CodingKey { case date, number, quizzes }
+
+    init(date: String, number: Int, quizzes: [CultureLotQuizDto]) {
+        self.date = date
+        self.number = number
+        self.quizzes = quizzes
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(String.self, forKey: .date)
+        number = try c.decodeIfPresent(Int.self, forKey: .number) ?? 0
+        let lossy = try c.decodeIfPresent([Lossy<CultureLotQuizDto>].self, forKey: .quizzes) ?? []
+        quizzes = lossy.compactMap(\.value)
+    }
+
+    /// Decodes an element or swallows its error (keeps the array going).
+    private struct Lossy<T: Decodable & Sendable>: Decodable, Sendable {
+        let value: T?
+        init(from decoder: Decoder) throws {
+            value = try? T(from: decoder)
+        }
+    }
+}
+
+/// One quiz of the lot (`KoiQuizV2Dto`), the fields nōto shows. Required:
+/// `id`, `domain`, `question`, `choices`, `answerIndex`; the rest is optional
+/// so a field celyn drops or nulls never hides the card.
+struct CultureLotQuizDto: Codable, Sendable, Equatable {
+    let id: UUID
+    /// films | series | animes | livres | musique | podcasts | spectacles | expos | jeux (Keskonfé).
+    let domain: String
+    let difficulty: Int
+    /// actu | catalogue | bridge | filmo | fait
+    let kind: String
+    let question: String
+    let choices: [String]
+    let answerIndex: Int
+    let explanation: String?
+    let oeuvreTitle: String?
+    /// actu | histoire | fun (v2).
+    let tone: String?
+    /// YYYY-MM-DD, nil = evergreen (v2).
+    let validUntil: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, domain, difficulty, kind, question, choices, answerIndex, explanation, oeuvreTitle,
+             tone, validUntil
+    }
+
+    init(id: UUID, domain: String, difficulty: Int = 1, kind: String = "catalogue", question: String,
+         choices: [String], answerIndex: Int, explanation: String? = nil, oeuvreTitle: String? = nil,
+         tone: String? = nil, validUntil: String? = nil) {
+        self.id = id
+        self.domain = domain
+        self.difficulty = difficulty
+        self.kind = kind
+        self.question = question
+        self.choices = choices
+        self.answerIndex = answerIndex
+        self.explanation = explanation
+        self.oeuvreTitle = oeuvreTitle
+        self.tone = tone
+        self.validUntil = validUntil
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        domain = try c.decode(String.self, forKey: .domain)
+        difficulty = (try? c.decodeIfPresent(Int.self, forKey: .difficulty)) ?? 1
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? ""
+        question = try c.decode(String.self, forKey: .question)
+        choices = try c.decode([String].self, forKey: .choices)
+        answerIndex = try c.decode(Int.self, forKey: .answerIndex)
+        explanation = try? c.decodeIfPresent(String.self, forKey: .explanation)
+        oeuvreTitle = try? c.decodeIfPresent(String.self, forKey: .oeuvreTitle)
+        tone = try? c.decodeIfPresent(String.self, forKey: .tone)
+        validUntil = try? c.decodeIfPresent(String.self, forKey: .validUntil)
     }
 }
 

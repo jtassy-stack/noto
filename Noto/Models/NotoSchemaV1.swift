@@ -42,6 +42,12 @@ enum NotoSchemaV1: VersionedSchema {
             QuizItem.self,
             QuizAttempt.self,
             NotionMastery.self,
+            // Gamification (Phase 3.6), same lightweight rule: a new entity
+            // appended here, plus additive fields with inline defaults on an
+            // existing one (`QuizAttempt.itemSubjects` / `itemXP`,
+            // `Child.streakJokers`, `NotionMastery.masteredAt`). A rename, a type change or a field
+            // without default would need the V2 freeze described above.
+            StreakJoker.self,
         ]
     }
 }

@@ -35,8 +35,13 @@ enum SpacedRepetition {
             streak = 0
         }
         let next = calendar.quizStartOfDay(addingDays: intervalsDays[newBox - 1], to: now)
+        // `masteredAt` is stamped on the first mastered box and carried
+        // forward, never cleared by a miss (badge permanence, 3.6). A row
+        // migrated from before 3.6 can sit in box 4–5 with no stamp: the
+        // incoming box counts too, so a first post-upgrade miss keeps it.
+        let masteredAt = mastery.masteredAt ?? ((box >= 4 || newBox >= 4) ? now : nil)
         return MasterySnapshot(notionKey: mastery.notionKey, leitnerBox: newBox,
-                               nextReview: next, streakCorrect: streak)
+                               nextReview: next, streakCorrect: streak, masteredAt: masteredAt)
     }
 
     /// A new notion: box 1, due today.

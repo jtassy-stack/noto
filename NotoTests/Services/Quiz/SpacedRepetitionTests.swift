@@ -110,4 +110,18 @@ struct SpacedRepetitionTests {
     func notionOutcome(items: [Bool], expected: Bool) {
         #expect(SpacedRepetition.notionOutcome(itemsCorrect: items) == expected)
     }
+
+    @Test("a pre-3.6 row already in box 4–5 keeps its mastery through a first miss (Codex #49)")
+    func migratedMasteryPreservedOnMiss() {
+        for box in [4, 5] {
+            let migrated = MasterySnapshot(notionKey: key, leitnerBox: box, nextReview: QuizClock.date(day: 0),
+                                           streakCorrect: 3, masteredAt: nil)
+            let after = SpacedRepetition.review(migrated, correct: false, now: now, calendar: calendar)
+            #expect(after.leitnerBox == 1)
+            #expect(after.masteredAt == now)
+        }
+        let notYet = MasterySnapshot(notionKey: key, leitnerBox: 3, nextReview: QuizClock.date(day: 0),
+                                     streakCorrect: 1, masteredAt: nil)
+        #expect(SpacedRepetition.review(notYet, correct: false, now: now, calendar: calendar).masteredAt == nil)
+    }
 }

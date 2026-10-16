@@ -13,17 +13,30 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "ChildHomeView"
 ///
 /// The cagnotte shows minutes earned from `QuizAttempt` only: crediting and
 /// unlocking Screen Time is 3.4, so nothing here promises an unlock.
+///
+/// Gamification (3.6): the série with its monthly jokers, the « Mes badges »
+/// link (earned badges only), the optional culture question of the day
+/// (reward-free) and, only when the parent turned it on, the family weekly
+/// challenge.
 struct ChildHomeView: View {
     @Query private var families: [Family]
     @Query private var attempts: [QuizAttempt]
+    @Query private var jokerRows: [StreakJoker]
     @Query(filter: #Predicate<QuizItem> { $0.reviewed == true }) private var reviewedItems: [QuizItem]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
     @State private var showParentGate = false
     @State private var gateApproved = false
     @State private var showSettings = false
     @State private var showQuiz = false
+    @State private var cultureQuestion: DailyCultureQuestion?
+    /// Device day the home was last refreshed for. Bumped on return to the
+    /// foreground and at midnight, so a home left mounted overnight reloads
+    /// the culture question and re-renders the série for the new day.
+    @State private var dayKey = CalendarDay(Date(), calendar: .current).key
+    private let cultureStore = DailyCultureQuestionStore()
 
     private var child: Child? {
         guard let linkedID = ScreenTimeEventStore.loadLinkedChildID() else {
@@ -50,6 +63,9 @@ struct ChildHomeView: View {
 
                     if let child {
                         revisionSection(for: child)
+                    }
+                    if let cultureQuestion {
+                        cultureSection(cultureQuestion)
                     }
                     scheduleSection
                     screenTimeStatusSection
@@ -89,7 +105,7 @@ struct ChildHomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .fullScreenCover(isPresented: $showQuiz) {
+            .fullScreenCover(isPresented: $showQuiz, onDismiss: { recordDueJokers() }) {
                 if let child {
                     QuizView(child: child)
                 }
@@ -99,7 +115,18 @@ struct ChildHomeView: View {
             screenTimeManager.refresh()
         }
         .task(id: child?.persistentModelID) {
+            recordDueJokers()
             await syncQuestionBank()
+        }
+        .task(id: dayKey) {
+            recordDueJokers()
+            await loadCultureQuestion()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshDay() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            refreshDay()
         }
     }
 
@@ -126,6 +153,39 @@ struct ChildHomeView: View {
         } catch {
             logger.info("Bank sync skipped: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Safety net for the joker save done by `QuizSession.finish`: persists
+    /// the gap jokers once today has a passed quiz (idempotent; pending, and
+    /// nothing saved, before that). Runs on appear, on a new day and when the
+    /// quiz cover closes.
+    private func recordDueJokers() {
+        guard let child, !ProcessInfo.processInfo.isRunningForPreviews else { return }
+        GamificationStore.recordDueJokers(for: child, in: modelContext, now: Date(), calendar: .current)
+    }
+
+    /// Re-keys the day-bound tasks when the device day changed.
+    private func refreshDay() {
+        let today = CalendarDay(Date(), calendar: .current).key
+        if today != dayKey { dayKey = today }
+    }
+
+    /// Today's culture question: cache, else one anonymous GET (only
+    /// `app=keskonfe`). Nil (no card) when offline or without a lot. A
+    /// question cached for another day is dropped first (no stale card).
+    private func loadCultureQuestion() async {
+        guard !ProcessInfo.processInfo.isRunningForPreviews else { return }
+        // General-audience pool (no kid-safe flag yet): only when a parent opted in.
+        guard CultureQuestionSettings.isEnabled() else { cultureQuestion = nil; return }
+        if let shown = cultureQuestion, shown.dayKey != dayKey { cultureQuestion = nil }
+        cultureQuestion = await cultureStore.questionOfTheDay(client: QuizAPIClient(), now: Date(),
+                                                              calendar: .current)
+    }
+
+    private func jokerDays(for child: Child) -> [CalendarDay] {
+        jokerRows
+            .filter { $0.child?.persistentModelID == child.persistentModelID }
+            .compactMap(\.day)
     }
 
     private func attemptSnapshots(for child: Child) -> [AttemptSnapshot] {
@@ -161,8 +221,15 @@ struct ChildHomeView: View {
     @ViewBuilder
     private func revisionSection(for child: Child) -> some View {
         let snapshots = attemptSnapshots(for: child)
-        let minutes = QuizStreak.minutesEarnedToday(attempts: snapshots, now: Date(), calendar: .current)
-        let streak = QuizStreak.current(attempts: snapshots, now: Date(), calendar: .current)
+        let now = Date()
+        let minutes = QuizStreak.minutesEarnedToday(attempts: snapshots, now: now, calendar: .current)
+        let jokers = jokerDays(for: child)
+        let streak = Gamification.streak(attempts: snapshots, jokers: jokers, now: now, calendar: .current)
+        let badgeCount = Gamification.badges(
+            attempts: snapshots, masteries: child.notionMasteries.map { MasterySnapshot($0) },
+            jokers: jokers + streak.newJokers, level: child.grade, specialties: child.specialties,
+            curriculum: CurriculumSnapshot.bundled, calendar: .current
+        ).count
         let exam = examTomorrow(for: child)
 
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
@@ -177,7 +244,12 @@ struct ChildHomeView: View {
                 : AnyLayout(HStackLayout(alignment: .top, spacing: NotoTheme.Spacing.cardGap))
             cardsLayout {
                 cagnotteCard(minutes: minutes)
-                streakCard(days: streak)
+                streakCard(streak)
+            }
+
+            if FamilyChallengeSettings.isEnabled() {
+                familyChallengeCard(
+                    passed: Gamification.passedQuizzesThisWeek(attempts: snapshots, now: now, calendar: .current))
             }
 
             if exam.found {
@@ -213,7 +285,78 @@ struct ChildHomeView: View {
                 .notoCard()
             }
             .accessibilityHint("Tes thèmes de l'année et ta progression")
+
+            // Earned badges only: the link appears with the first one.
+            if badgeCount > 0 {
+                NavigationLink {
+                    BadgesView(child: child)
+                } label: {
+                    HStack {
+                        Label("Mes badges", systemImage: "rosette")
+                            .font(ChildStyle.body)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Spacer()
+                        Text("\(badgeCount)")
+                            .font(ChildStyle.caption.monospacedDigit())
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        Image(systemName: "chevron.right")
+                            .font(ChildStyle.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .frame(minHeight: ChildStyle.minTapTarget)
+                    .notoCard()
+                }
+                .accessibilityLabel("Mes badges : \(badgeCount) \(badgeCount == 1 ? "badge gagné" : "badges gagnés")")
+            }
         }
+    }
+
+    private func cultureSection(_ question: DailyCultureQuestion) -> some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Question culture du jour")
+                .childSectionLabel()
+                .padding(.horizontal, NotoTheme.Spacing.xs)
+            CultureQuestionCard(question: question) { choice in
+                if let updated = cultureStore.recordAnswer(choice, now: Date(), calendar: .current) {
+                    cultureQuestion = updated
+                } else if cultureStore.cached(now: Date(), calendar: .current) == nil {
+                    // Yesterday's card after midnight: drop it and load today's.
+                    cultureQuestion = nil
+                    refreshDay()
+                }
+            }
+        }
+    }
+
+    private func familyChallengeCard(passed: Int) -> some View {
+        let goal = FamilyChallengeSettings.weeklyGoal
+        return HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
+            Image(systemName: "person.3.fill")
+                .foregroundStyle(NotoTheme.Colors.info)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Défi de la semaine en famille")
+                    .font(ChildStyle.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text(Self.familyChallengeText(passed: passed, goal: goal))
+                    .font(ChildStyle.body)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(NotoTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .notoCard()
+        .accessibilityElement(children: .combine)
+    }
+
+    static func familyChallengeText(passed: Int, goal: Int) -> String {
+        passed >= goal
+            ? "Défi réussi : \(passed) quiz réussis cette semaine !"
+            : "\(min(passed, goal)) quiz réussis sur \(goal) cette semaine."
     }
 
     private func cagnotteCard(minutes: Int) -> some View {
@@ -237,8 +380,9 @@ struct ChildHomeView: View {
         .accessibilityLabel("Ta cagnotte : \(minutes) minutes gagnées aujourd'hui")
     }
 
-    private func streakCard(days: Int) -> some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+    private func streakCard(_ streak: StreakStatus) -> some View {
+        let days = streak.days
+        return VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
             Text("Ta série")
                 .font(ChildStyle.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
@@ -255,14 +399,39 @@ struct ChildHomeView: View {
             Text(days == 0 ? "lance-la avec un quiz" : (days == 1 ? "jour" : "jours d'affilée"))
                 .font(ChildStyle.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
+            if let jokerText = Self.jokerText(streak) {
+                HStack(spacing: 4) {
+                    Image(systemName: "shield.lefthalf.filled")
+                        .accessibilityHidden(true)
+                    Text(jokerText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(ChildStyle.caption)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
         }
         .padding(NotoTheme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .notoCard()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(days == 0
-            ? "Ta série : pas encore commencée"
-            : "Ta série : \(days) \(days == 1 ? "jour" : "jours d'affilée")")
+        .accessibilityLabel(Self.streakAccessibilityLabel(streak))
+    }
+
+    /// Jokers line, child wording: only the positive note when a saved joker
+    /// protected the série, nothing otherwise. The stock is never shown (no
+    /// « plus de joker », no scarcity cue: jokers work quietly) and pending
+    /// jokers (not saved until a quiz is passed today) say nothing either.
+    static func jokerText(_ streak: StreakStatus) -> String? {
+        guard streak.days > 0, streak.protectedByJoker, streak.newJokers.isEmpty else { return nil }
+        return "Un joker a protégé ta série."
+    }
+
+    static func streakAccessibilityLabel(_ streak: StreakStatus) -> String {
+        let days = streak.days
+        let head = days == 0
+            ? "Ta série : pas encore commencée."
+            : "Ta série : \(days) \(days == 1 ? "jour" : "jours d'affilée")."
+        return jokerText(streak).map { "\(head) \($0)" } ?? head
     }
 
     private func examCard(subject: String?) -> some View {

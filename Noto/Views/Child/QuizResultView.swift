@@ -2,8 +2,8 @@ import SwiftUI
 
 /// End of a quiz: score, minutes added to the cagnotte or, when none, the
 /// reason in friendly child wording (tutoiement). Before 3.4 the minutes are
-/// only recorded: no wording here promises an unlock. XP is 3.6 and stays
-/// hidden until then.
+/// only recorded: no wording here promises an unlock. XP and subject level-ups
+/// (3.6) are shown when the quiz earned some.
 struct QuizResultView: View {
     let result: QuizSessionResult
     let onDone: () -> Void
@@ -31,7 +31,9 @@ struct QuizResultView: View {
 
                 minutesCard
 
-                // XP (3.6) intentionally not shown yet.
+                if result.xpEarned > 0 || !result.levelUps.isEmpty {
+                    xpCard
+                }
 
                 VStack(spacing: NotoTheme.Spacing.sm) {
                     ChildPrimaryButton(title: "Terminer", action: onDone)
@@ -76,7 +78,42 @@ struct QuizResultView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private var xpCard: some View {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
+            Image(systemName: "bolt.fill")
+                .foregroundStyle(NotoTheme.Colors.warning)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                Text("+\(result.xpEarned) XP")
+                    .font(ChildStyle.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                ForEach(result.levelUps, id: \.subject) { levelUp in
+                    Text(Self.levelUpText(levelUp))
+                        .font(ChildStyle.body)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(NotoTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .notoCard()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.xpAccessibilityLabel(for: result))
+    }
+
     // MARK: - Copy (pure, tested through `QuizResultCopyTests`)
+
+    static func levelUpText(_ levelUp: SubjectLevelUp) -> String {
+        "Niveau \(levelUp.level) en \(levelUp.subject) !"
+    }
+
+    static func xpAccessibilityLabel(for result: QuizSessionResult) -> String {
+        (["\(result.xpEarned) points d'expérience gagnés"] + result.levelUps.map(levelUpText))
+            .joined(separator: ". ")
+    }
+
 
     static func title(for result: QuizSessionResult) -> String {
         if result.totalCount > 0, result.correctCount == result.totalCount { return "Sans faute, bravo !" }
@@ -114,7 +151,8 @@ struct QuizResultView: View {
     QuizResultView(
         result: QuizSessionResult(correctCount: 5, totalCount: 5, durationSec: 95,
                                   decision: RewardDecision(base: 10, bonus: 5, denial: nil, countsAsSuccess: true),
-                                  requiredCorrect: 4),
+                                  requiredCorrect: 4, xpEarned: 54,
+                                  levelUps: [SubjectLevelUp(subject: "Mathématiques", level: 2)]),
         onDone: {}, onAnotherQuiz: {}
     )
 }
@@ -122,7 +160,7 @@ struct QuizResultView: View {
 #Preview("Pas assez de bonnes réponses") {
     QuizResultView(
         result: QuizSessionResult(correctCount: 2, totalCount: 5, durationSec: 80,
-                                  decision: .denied(.belowThreshold), requiredCorrect: 4),
+                                  decision: .denied(.belowThreshold), requiredCorrect: 4, xpEarned: 20),
         onDone: {}
     )
 }

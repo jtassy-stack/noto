@@ -84,18 +84,13 @@ enum RewardPolicy {
         }
 
         // 3.
-        guard attempt.durationSec >= config.minDurationSec else { return .denied(.tooFast) }
+        guard !isTooFast(attempt, config: config) else { return .denied(.tooFast) }
 
-        // 4. Keys compared as sets: same questions in another order is a replay.
-        //    Only passed priors block (brief A.5 rule 4). Open question for
+        // 4. Only passed priors block (brief A.5 rule 4). Open question for
         //    Julien (brief C.4): a rushed or failed attempt reveals the answers,
         //    then a slow identical replay earns the full tier.
-        let keys = Set(attempt.questionKeys)
-        let isReplay = history.contains { prior in
-            prior.passed && Set(prior.questionKeys) == keys
-                && (config.replayWindow == .ever || calendar.isDate(prior.date, inSameDayAs: now))
-        }
-        guard !isReplay else { return .denied(.identicalReplay) }
+        guard !isReplay(attempt, history: history, passedOnly: true, config: config,
+                        now: now, calendar: calendar) else { return .denied(.identicalReplay) }
 
         // 5. Denied attempts (minutesEarned == 0) never use up a tier slot.
         let today = history.filter { calendar.isDate($0.date, inSameDayAs: now) }
@@ -120,5 +115,24 @@ enum RewardPolicy {
                                                    now: now, calendar: calendar)
         return RewardDecision(base: base, bonus: bonusDue ? config.examEveBonus : 0,
                               denial: nil, countsAsSuccess: true)
+    }
+
+    /// Rule 3 on its own: total duration below `minDurationSec`.
+    static func isTooFast(_ attempt: AttemptSnapshot, config: RewardConfig) -> Bool {
+        attempt.durationSec < config.minDurationSec
+    }
+
+    /// Rule 4 on its own: an earlier attempt with the same question-key set
+    /// (compared as sets: same questions in another order is a replay),
+    /// inside `replayWindow`. `passedOnly` restricts the priors to passed
+    /// ones (the minutes rule); the XP guard (`Gamification.earnsXP`) checks
+    /// every prior, failed ones included.
+    static func isReplay(_ attempt: AttemptSnapshot, history: [AttemptSnapshot], passedOnly: Bool,
+                         config: RewardConfig, now: Date, calendar: Calendar) -> Bool {
+        let keys = Set(attempt.questionKeys)
+        return history.contains { prior in
+            (!passedOnly || prior.passed) && Set(prior.questionKeys) == keys
+                && (config.replayWindow == .ever || calendar.isDate(prior.date, inSameDayAs: now))
+        }
     }
 }
