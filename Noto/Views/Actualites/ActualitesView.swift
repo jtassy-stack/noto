@@ -716,7 +716,7 @@ struct FeedMessageDetailView: View {
 
                 // Body
                 if !bodyText.isEmpty {
-                    Text(bodyText)
+                    LinkifiedText(bodyText)
                         .font(NotoTheme.Typography.body)
                         .foregroundStyle(NotoTheme.Colors.textPrimary)
                         .textSelection(.enabled)

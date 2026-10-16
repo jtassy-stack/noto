@@ -1443,7 +1443,7 @@ struct HomeworkDetailView: View {
                     Divider()
 
                     // Full description
-                    Text(hw.descriptionText)
+                    LinkifiedText(hw.descriptionText)
                         .font(NotoTheme.Typography.body)
                         .textSelection(.enabled)
 
@@ -1686,7 +1686,7 @@ private struct MessageDetailView: View {
                     Divider()
 
                     if !msg.body.isEmpty {
-                        Text(msg.body)
+                        LinkifiedText(msg.body)
                             .font(NotoTheme.Typography.body)
                             .textSelection(.enabled)
                     } else if let link = msg.link, let url = URL(string: link) {
