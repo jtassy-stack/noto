@@ -42,6 +42,7 @@ Elles viennent de `RewardConfig()` (`Noto/Services/Quiz/RewardPolicy.swift`). Si
 | 0.3 | Console.app ouverte sur l'iPhone, filtre `noto` (processus `Noto` et `NotoDeviceActivity`). Voir `docs/TEST_REWARD.md` § Préparation. | ☐ |
 | 0.4 | La famille contient deux enfants, l'un en **6e**, l'autre en **2nde** (niveau visible dans la fiche enfant). Les deux niveaux ont une banque embarquée (`Noto/Resources/questions/6e.json`, `2nde.json`), le quiz marche donc même hors ligne. | ☐ |
 | 0.5 | Au moins un enfant a un emploi du temps synchronisé avec un cours dans la journée du test (pour l'étape 5). | ☐ |
+| 0.6 | Aucun contrôle demain pour l'enfant 6e : aucun devoir dû demain ne contient « contrôle », « DS », « interro », « évaluation » ou « bac blanc ». Sinon le bonus veille de contrôle ajoute 5 min au premier quiz réussi, et tous les montants de la section 2 sont décalés de 5 min (15, 20, 25, puis 25 dans la vue parent). | ☐ |
 
 ## 1. Configuration côté parent
 
@@ -69,7 +70,7 @@ Elles viennent de `RewardConfig()` (`Noto/Services/Quiz/RewardPolicy.swift`). Si
 | 2.5 | « Un autre quiz », réussi. | « +5 min ». Cagnotte 15 min. | ☐ |
 | 2.6 | Troisième quiz réussi. | « +5 min ». Cagnotte 20 min (plafond atteint). | ☐ |
 | 2.7 | Quatrième quiz réussi. | 0 min (plafond et barème épuisés). XP et progression du thème bougent quand même. | ☐ |
-| 2.8 | Un quiz en moins de 30 s (répondre au hasard très vite). | 0 min, message « Tu as répondu super vite ! … ». | ☐ |
+| 2.8 | Un quiz réussi (au moins 4 bonnes réponses sur 5) mais terminé en moins de 30 s. Répondre au hasard ne marche pas : le score insuffisant est vérifié avant la vitesse. | 0 min, message « Tu as répondu super vite ! … ». | ☐ |
 | 2.9 | Un quiz avec 3 bonnes réponses sur 5 ou moins. | 0 min, message « Il fallait 4 bonnes réponses pour gagner des minutes. … ». | ☐ |
 | 2.10 | Mode parent (derrière le PIN) → Révisions. | Les quiz du jour apparaissent, minutes gagnées = 20, notions maîtrisées ou fragiles cohérentes. | ☐ |
 
