@@ -119,6 +119,15 @@ final class FullSyncService {
                     result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via MonLycée.")
                 }
             }
+
+            // Best-effort mail refresh — session cookies can expire between
+            // launches, so a failure here is silent rather than surfaced
+            // as an error; the next full ENT login re-establishes them.
+            if MonLyceeMailService.shouldSyncWithCurrentIMAPConfig {
+                for child in monlyceeChildren {
+                    await MonLyceeMailService.sync(child: child, modelContext: modelContext)
+                }
+            }
         }
 
         // Pure ENT/PCN sync

@@ -173,6 +173,51 @@ struct IMAPSyncServiceTests {
         #expect(match == nil)
     }
 
+    // MARK: - findSSOMatch (monlycee.net IMAP vs ENT SSO channel)
+
+    @Test("monlycee IMAP fetch matches a mail already imported via the SSO channel")
+    func ssoRowMatchedForMonLyceeIMAP() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        let existing = insertMessage(in: ctx, child: child, source: .monlycee, sender: "Mme DUPONT", imapUID: "42")
+
+        let service = IMAPSyncService(modelContext: ctx)
+        let match = service.findSSOMatch(child: child, info: info(sender: "Mme Dupont"), providerID: "monlycee")
+        #expect(match?.id == existing.id)
+    }
+
+    @Test("Other IMAP providers never match an SSO row")
+    func ssoRowNotMatchedForOtherProvider() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        _ = insertMessage(in: ctx, child: child, source: .monlycee, imapUID: "42")
+
+        let service = IMAPSyncService(modelContext: ctx)
+        #expect(service.findSSOMatch(child: child, info: info(), providerID: "gmail") == nil)
+    }
+
+    @Test("SSO match requires the same day")
+    func ssoRowDifferentDayNotMatched() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        _ = insertMessage(in: ctx, child: child, source: .monlycee, date: .now.addingTimeInterval(-86_400 * 2))
+
+        let service = IMAPSyncService(modelContext: ctx)
+        #expect(service.findSSOMatch(child: child, info: info(date: .now), providerID: "monlycee") == nil)
+    }
+
+    @Test("process() does not re-insert a monlycee mail already imported via SSO")
+    func processSkipsSSODuplicate() throws {
+        let ctx = try makeContext()
+        let child = makeChild(in: ctx)
+        _ = insertMessage(in: ctx, child: child, source: .monlycee, imapUID: "42")
+
+        let service = IMAPSyncService(modelContext: ctx)
+        try service.process(child: child, config: anyConfig(providerID: "monlycee"), fetched: [info(uid: 7)])
+        #expect(child.messages.count == 1)
+        #expect(child.messages.allSatisfy { $0.source == .monlycee })
+    }
+
     // MARK: - updateIfNeeded (cleanup on refetch)
 
     @Test("updateIfNeeded does NOT change source (Phase-7-fix regression guard)")
