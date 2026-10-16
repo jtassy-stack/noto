@@ -84,6 +84,9 @@ targets:
     platform: iOS
     sources:
       - path: NotoDeviceActivity
+      # Own manifest: the .appex reads/writes the app-group UserDefaults
+      # (Shared/), and Apple checks required-reason APIs per bundle.
+      - path: NotoDeviceActivity/PrivacyInfo.xcprivacy
       - path: Shared
     dependencies:
       - sdk: DeviceActivity.framework
