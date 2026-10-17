@@ -146,12 +146,19 @@ struct DiscoverView: View {
 
     /// Finds the best chapter match for a search result by extracting
     /// the subject from its curriculumTags and looking it up in the index.
+    /// Only the tags of the child's own level count (a `CE2-francais` tag
+    /// must not link a lycéen's French homework); when the grade is unknown
+    /// every tag is tried.
     private static func bestChapterMatch(
         for result: CultureSearchResult,
+        childGrade: String,
         index: [String: ChapterMatch]
     ) -> ChapterMatch? {
+        let tags = RecoGradeMatcher.gradeCode(for: childGrade) == nil
+            ? result.curriculumTags
+            : RecoGradeMatcher.matchingTags(result.curriculumTags, childGrade: childGrade)
         // Try each curriculum tag — format is "3eme-histoire"
-        for tag in result.curriculumTags {
+        for tag in tags {
             let parts = tag.split(separator: "-", maxSplits: 1)
             guard parts.count == 2 else { continue }
             let subject = String(parts[1]).lowercased()
@@ -337,7 +344,8 @@ struct DiscoverView: View {
 
             let apiGrade: String? = {
                 guard child.level != .maternelle else { return nil }
-                return curriculumService.apiGrade(for: child.grade)
+                // Unknown grade → no `?grade=` at all rather than an empty one.
+                return RecoGradeMatcher.gradeCode(for: child.grade)
             }()
             logger.info("BO topics for \(child.firstName) / \(child.grade) (api: \(apiGrade ?? "nil")): \(uniqueTopics.joined(separator: " | "))")
 
@@ -355,9 +363,15 @@ struct DiscoverView: View {
                 let chapterIndex = Self.buildChapterIndex(for: child)
                 results = results.map {
                     var r = $0
+                    // A result tagged only for other levels (e.g. CE2 for a
+                    // lycéen) is never presented « Pour <enfant> » nor linked
+                    // to one of the child's chapters.
+                    guard RecoGradeMatcher.isForChildLevel(tags: r.curriculumTags, childGrade: child.grade) else {
+                        return r
+                    }
                     r.linkedChildName = child.firstName
                     r.linkedLevel = child.grade
-                    if let match = Self.bestChapterMatch(for: r, index: chapterIndex) {
+                    if let match = Self.bestChapterMatch(for: r, childGrade: child.grade, index: chapterIndex) {
                         r.linkedChapterText = match.text
                         r.linkedChapterDate = match.date
                         r.linkedChapterIsHomework = match.isHomework
@@ -561,22 +575,14 @@ private struct RecoRow: View {
         return "Lié à : \(truncated) — \(source) \(Self.chapterDateFormatter.string(from: date))"
     }
 
+    /// Level badge: only the linked child's own level, else none.
     private static func filteredGradeTags(for reco: CultureSearchResult) -> [String] {
-        guard let level = reco.linkedLevel else { return Array(reco.curriculumTags.prefix(1)) }
-        let normalized = level.hasSuffix("e") ? String(level.dropLast()) + "eme" : level
-        let filtered = reco.curriculumTags.filter { $0.hasPrefix(normalized) }
-        return Array((filtered.isEmpty ? reco.curriculumTags : filtered).prefix(1))
+        RecoGradeMatcher.badgeTags(reco.curriculumTags, linkedLevel: reco.linkedLevel)
     }
 
-    /// Formats "3eme-histoire" → "Histoire · 3e"
+    /// Formats "3eme-histoire" → "Histoire · 3e", "terminale-arts" → "Arts · Tle"
     private static func formatCurriculumTag(_ tag: String) -> String {
-        let parts = tag.split(separator: "-", maxSplits: 1)
-        guard parts.count == 2 else { return tag }
-        let grade = String(parts[0])
-            .replacingOccurrences(of: "eme", with: "e")
-            .replacingOccurrences(of: "ere", with: "re")
-        let subject = String(parts[1]).prefix(1).uppercased() + String(parts[1]).dropFirst()
-        return "\(subject) · \(grade)"
+        RecoGradeMatcher.formatTag(tag)
     }
 }
 
