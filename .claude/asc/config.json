@@ -14,21 +14,13 @@
   "trigger": "opt-in",
   "distribution": {
     "_note": "Internal 'Team (Expo)' auto-receives every build. External 'Fitness and family' (public link, family devices) gets each [tf] build attached and submitted to Beta App Review.",
-    "groups": [
-      "Fitness and family"
-    ],
+    "groups": ["Fitness and family"],
     "betaReview": true,
     "expireOldBuilds": false
   },
   "provisioningProfiles": {
-    "fr.noto.app": {
-      "name": "noto appstore",
-      "secret": "PROVISIONING_PROFILE_NOTO"
-    },
-    "fr.noto.app.deviceactivity": {
-      "name": "noto deviceactivity appstore",
-      "secret": "PROVISIONING_PROFILE_NOTO_DEVICEACTIVITY"
-    }
+    "fr.noto.app": { "name": "noto appstore", "secret": "PROVISIONING_PROFILE_NOTO" },
+    "fr.noto.app.deviceactivity": { "name": "noto deviceactivity appstore", "secret": "PROVISIONING_PROFILE_NOTO_DEVICEACTIVITY" }
   },
   "secretsXcconfig": null
 }
