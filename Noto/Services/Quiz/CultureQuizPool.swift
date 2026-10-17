@@ -6,6 +6,7 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "CultureQuizPoo
 /// Culture G quiz for parents and children, fed by every question celyn's
 /// « Koi ? » engine generates (Keskonfé, Sirius, Le Club lots).
 ///
+<<<<<<< HEAD
 /// - Source: `GET /api/quiz/v2/bank/culture` (contract §12), every reviewed
 ///   culture G question of the Koi pool, synced page by page into a local
 ///   pool (`CultureQuizPoolStore`) and kept up to date with the keyset cursor
@@ -15,6 +16,14 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "CultureQuizPoo
 ///   feed the pool instead. Requests carry only `app`, `limit`, an opaque
 ///   cursor or a public date, never anything about the family; answers are
 ///   checked on device and never sent.
+=======
+/// - Source: `GET /api/quiz/v2/lot?app=<app>[&date=]` for each app of
+///   `QuizAPIClient.cultureLotApps`, today and a backfill window of past lots,
+///   accumulated in a local pool (`CultureQuizPoolStore`) so the quiz goes
+///   beyond one day's 8 questions and, over time, through the whole Koi output.
+///   Requests carry only `app` and a public date, never anything about the
+///   family; answers are checked on device and never sent.
+>>>>>>> origin/master
 /// - Audience: the parent gets every question still valid; the child only the
 ///   ones `CultureQuizFilter.isAppropriate` keeps (culture / sport / sciences
 ///   domains, evergreen tones, difficulty for collège, on-device text filter).
@@ -35,6 +44,7 @@ enum CultureQuizAudience: Sendable, Equatable, Hashable {
 /// One Koi question kept in the local pool, with the lot it came from.
 struct CultureQuizEntry: Codable, Sendable, Equatable, Identifiable {
     let quiz: CultureLotQuizDto
+<<<<<<< HEAD
     /// keskonfe | sirius | leclub (bank: the first app that served it, or
     /// `koi` for a pooled question no lot used yet).
     let app: String
@@ -44,6 +54,12 @@ struct CultureQuizEntry: Codable, Sendable, Equatable, Identifiable {
     /// retention cutoff, deleted by tombstones). nil for lot entries and
     /// pools saved before the bank.
     var fromBank: Bool? = nil
+=======
+    /// keskonfe | sirius | leclub
+    let app: String
+    /// YYYY-MM-DD (Paris day of the lot).
+    let lotDate: String
+>>>>>>> origin/master
 
     var id: UUID { quiz.id }
 }
@@ -236,9 +252,15 @@ final class CultureQuizSeenStore {
 // MARK: - Local pool
 
 /// Local pool of Koi questions (public content, no personal data), a JSON
+<<<<<<< HEAD
 /// file in Application Support. `refresh` syncs the culture bank (falling
 /// back to today's lot of each app plus `backfillDays` past lots when the
 /// bank is unavailable), then prunes out-of-date and old questions.
+=======
+/// file in Application Support. `refresh` adds today's lot of each app and
+/// backfills `backfillDays` past lots once, then prunes out-of-date and old
+/// questions.
+>>>>>>> origin/master
 @MainActor
 final class CultureQuizPoolStore {
     static let fileName = "culture-quiz-pool.json"
@@ -249,6 +271,7 @@ final class CultureQuizPoolStore {
     /// Today's lots are fetched again after this delay (Sirius publishes
     /// editions at 07:00, 12:00 and 20:00).
     static let todayRefreshInterval: TimeInterval = 3 * 3600
+<<<<<<< HEAD
     /// The culture bank is asked again after this delay (celyn caches it
     /// `max-age=3600`).
     static let bankRefreshInterval: TimeInterval = 3600
@@ -257,6 +280,8 @@ final class CultureQuizPoolStore {
     static let maxBankPages = 40
     /// App label of a bank question no lot has served yet.
     static let bankApp = "koi"
+=======
+>>>>>>> origin/master
 
     struct Snapshot: Codable, Sendable, Equatable {
         var entries: [CultureQuizEntry] = []
@@ -264,6 +289,7 @@ final class CultureQuizPoolStore {
         var fetchedDays: Set<String> = []
         /// Last successful fetch of today's lot, per app.
         var todayFetchedAt: [String: Date] = [:]
+<<<<<<< HEAD
         /// Last cursor the culture bank returned (opaque); nil = full sync.
         var bankCursor: String? = nil
         /// Last time a bank sync reached its end (`hasMore == false`).
@@ -275,6 +301,8 @@ final class CultureQuizPoolStore {
         /// (interrupted, or past `maxBankPages`); nil = no full sync running.
         /// Kept so the sync resumed from `bankCursor` still replaces the pool.
         var bankFullSyncSeen: Set<UUID>? = nil
+=======
+>>>>>>> origin/master
     }
 
     private let fileURL: URL
@@ -302,16 +330,24 @@ final class CultureQuizPoolStore {
         }
     }
 
+<<<<<<< HEAD
     /// Syncs the culture bank when due; if the bank is unavailable, fetches
     /// what is missing from the lots (today's when stale, past lots never
     /// fetched). Then merges, prunes, saves, and returns the pool. Sequential
     /// GETs; the first transport, auth or rate-limit error stops the round
     /// (what was fetched is kept, the rest is retried on a later call).
+=======
+    /// Fetches what is missing (today's lots when stale, past lots never
+    /// fetched), merges, prunes, saves, and returns the pool. Sequential GETs;
+    /// the first transport, auth or rate-limit error stops the round (what
+    /// was fetched is kept, the rest is retried on a later call).
+>>>>>>> origin/master
     @discardableResult
     func refresh(client: QuizAPIClient, now: Date, calendar: Calendar) async -> [CultureQuizEntry] {
         var snapshot = load()
         let today = CalendarDay(now, calendar: calendar)
 
+<<<<<<< HEAD
         func isRecent(_ date: Date?) -> Bool {
             date.map { now.timeIntervalSince($0) < Self.bankRefreshInterval } ?? false
         }
@@ -418,6 +454,8 @@ final class CultureQuizPoolStore {
     /// past lots never fetched.
     private func refreshLots(client: QuizAPIClient, now: Date, today: CalendarDay, calendar: Calendar,
                              into snapshot: inout Snapshot) async {
+=======
+>>>>>>> origin/master
         // Today's lots first (the freshest questions, a playable pool fast),
         // then the past lots never fetched.
         var requests: [(app: String, date: String?)] = QuizAPIClient.cultureLotApps
@@ -442,6 +480,13 @@ final class CultureQuizPoolStore {
                 snapshot.todayFetchedAt[request.app] = now
             }
         }
+<<<<<<< HEAD
+=======
+
+        Self.prune(&snapshot, today: today, calendar: calendar)
+        save(snapshot)
+        return snapshot.entries
+>>>>>>> origin/master
     }
 
     private enum FetchOutcome { case lot(CultureLotResponse), missing, stop }
@@ -467,9 +512,14 @@ final class CultureQuizPoolStore {
         for quiz in lot.quizzes {
             let entry = CultureQuizEntry(quiz: quiz, app: app, lotDate: lot.date)
             if let position = index[quiz.id] {
+<<<<<<< HEAD
                 let known = snapshot.entries[position]
                 snapshot.entries[position] = CultureQuizEntry(quiz: quiz, app: known.app,
                                                               lotDate: known.lotDate, fromBank: known.fromBank)
+=======
+                snapshot.entries[position] = CultureQuizEntry(quiz: quiz, app: snapshot.entries[position].app,
+                                                              lotDate: snapshot.entries[position].lotDate)
+>>>>>>> origin/master
             } else {
                 index[quiz.id] = snapshot.entries.count
                 snapshot.entries.append(entry)
@@ -477,15 +527,24 @@ final class CultureQuizPoolStore {
         }
     }
 
+<<<<<<< HEAD
     /// Drops out-of-date questions, lot questions past `retentionDays` (the
     /// bank's own are kept until a tombstone), and fetched-day marks outside
     /// the backfill window.
+=======
+    /// Drops out-of-date questions, questions past `retentionDays`, and
+    /// fetched-day marks outside the backfill window.
+>>>>>>> origin/master
     static func prune(_ snapshot: inout Snapshot, today: CalendarDay, calendar: Calendar) {
         let todayKey = today.key
         let oldest = today.adding(days: -retentionDays, calendar: calendar).key
         snapshot.entries.removeAll {
+<<<<<<< HEAD
             ($0.fromBank != true && $0.lotDate < oldest)
                 || !CultureQuizFilter.isPlayable($0, today: todayKey, calendar: calendar)
+=======
+            $0.lotDate < oldest || !CultureQuizFilter.isPlayable($0, today: todayKey, calendar: calendar)
+>>>>>>> origin/master
         }
         let window = today.adding(days: -backfillDays, calendar: calendar).key
         snapshot.fetchedDays = snapshot.fetchedDays.filter { key in

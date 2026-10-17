@@ -75,7 +75,11 @@
 - `School/` — `SchoolView` with sub-tabs: Notes · EDT · Devoirs · Messages
 - `Insights/` — `InsightsView`: trends, strengths/weaknesses, weighted averages
 - `Discover/` — `DiscoverView`: grade-filtered culture-api recommendations with curriculum tag badges
+<<<<<<< HEAD
 - `Culture/` — `CultureQuizView`: culture G quiz (10 questions) for the parent (Découvrir) and the child (child home, behind the parent's « Culture générale » toggle), drawn from the celyn culture bank (`GET /api/quiz/v2/bank/culture`: every reviewed « Koi ? » culture G question, synced page by page with the keyset cursor + tombstones, hourly at most) kept on device, with the daily lots of Keskonfé, Sirius, Le Club as fallback when the bank route is unavailable; child pool filtered by `CultureQuizFilter` (domains, no actu, difficulty, `ChildSafeText`); reward-free; logic in `Services/Quiz/CultureQuizPool.swift`
+=======
+- `Culture/` — `CultureQuizView`: culture G quiz (10 questions) for the parent (Découvrir) and the child (child home, behind the parent's « Culture générale » toggle), drawn from every celyn « Koi ? » lot (Keskonfé, Sirius, Le Club) accumulated on device; child pool filtered by `CultureQuizFilter` (domains, no actu, difficulty, `ChildSafeText`); reward-free; logic in `Services/Quiz/CultureQuizPool.swift`
+>>>>>>> origin/master
 - `AddChild/` — child onboarding flow (QR scan + Keychain storage)
 - `Child/` — `DeviceMode.child` app (tutoiement): `ChildHomeView` (cagnotte, série, « Réviser », EDT, Réglages behind `ParentGateView`), `QuizView`, `QuizResultView`, `SubjectPathView`; quiz logic in `Services/Quiz/QuizSession.swift`
 
