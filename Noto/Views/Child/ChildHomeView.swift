@@ -46,6 +46,8 @@ struct ChildHomeView: View {
     @State private var gateApproved = false
     @State private var showSettings = false
     @State private var showQuiz = false
+    /// Subject or theme of the quiz to open; nil = the quiz of the day.
+    @State private var quizFocus: QuizFocus?
     @State private var cultureQuestion: DailyCultureQuestion?
     @State private var cultureQuizEnabled = false
     @State private var rewardStatus: RewardStatus = .neutral
@@ -89,25 +91,23 @@ struct ChildHomeView: View {
                     examBonus: Self.examBonusMinutes(RewardConfigStore.load()),
                     classLockActive: screenTimeManager.isAuthorized && ScreenTimeEventStore.isClassLockEnabled(),
                     canQuiz: canQuiz,
-                    onStartQuiz: { showQuiz = true }
+                    onStartQuiz: { startQuiz(nil) }
                 )
             }
             .tabItem { Label("Aujourd'hui", systemImage: "calendar") }
             .tag(ChildTab.today)
 
             NavigationStack {
+                let plan = child.map { QuizSession.plan(for: $0, now: now) }
                 ChildReviseView(
                     child: child,
-                    plan: child.map { QuizSession.plan(for: $0, now: now) },
+                    plan: plan,
+                    subjects: child.map { subjectChoices(for: $0, position: plan?.position ?? .empty) } ?? [],
                     canQuiz: canQuiz,
                     cultureQuestion: cultureQuestion,
                     cultureQuizEnabled: cultureQuizEnabled,
-                    onStartQuiz: { showQuiz = true },
-                    onCultureAnswer: { answerCultureQuestion($0) },
-                    onOpenSubject: { subject in
-                        pathSubject = subject
-                        tab = .path
-                    }
+                    onStartQuiz: { startQuiz($0) },
+                    onCultureAnswer: { answerCultureQuestion($0) }
                 )
             }
             .tabItem { Label("Réviser", systemImage: "sparkles") }
@@ -115,7 +115,8 @@ struct ChildHomeView: View {
 
             NavigationStack {
                 if let child {
-                    SubjectPathView(child: child, selectedSubject: $pathSubject)
+                    SubjectPathView(child: child, selectedSubject: $pathSubject,
+                                    onRevise: { startQuiz($0) })
                 } else {
                     noChildState
                 }
@@ -162,7 +163,7 @@ struct ChildHomeView: View {
             refreshRewardStatus()
         }) {
             if let child {
-                QuizView(child: child)
+                QuizView(child: child, focus: quizFocus)
             }
         }
         .onAppear {
@@ -206,6 +207,26 @@ struct ChildHomeView: View {
             showParentGate = true
         } else {
             showSettings = true
+        }
+    }
+
+    private func startQuiz(_ focus: QuizFocus?) {
+        quizFocus = focus
+        showQuiz = true
+    }
+
+    /// The subjects « Réviser » offers: the child's programme subjects that
+    /// have at least one question, each with the theme taught in class now.
+    private func subjectChoices(for child: Child, position: ProgrammePosition) -> [ChildReviseView.SubjectChoice] {
+        guard !reviewedItems.isEmpty else { return [] }
+        let subjects = SubjectProgress.path(level: child.grade, specialties: child.specialties, masteries: [],
+                                            curriculum: CurriculumSnapshot.bundled).map(\.subject)
+        let counts = QuizSession.availableCounts(for: child, in: modelContext,
+                                                 focuses: subjects.map { QuizFocus(subject: $0) })
+        return zip(subjects, counts).compactMap { subject, count in
+            guard count > 0 else { return nil }
+            return ChildReviseView.SubjectChoice(
+                subject: subject, inClass: position.position(forSubject: subject)?.current.first?.theme)
         }
     }
 

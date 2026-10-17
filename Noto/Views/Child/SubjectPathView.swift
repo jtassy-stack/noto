@@ -46,18 +46,26 @@ extension SubjectProgress {
 /// level (`Gamification`, 3.6), the theme taught in class now (cahier de
 /// textes, `ProgrammePosition`) on top, then the year's themes with their
 /// progress. Mastered is green, a theme in progress is cobalt (« à revoir »
-/// is an information, amber is kept for the série). Child mode, tutoiement.
+/// is an information, amber is kept for the série). A theme already met in
+/// class or in a quiz can be revised on its own (« Réviser ce thème »).
+/// Child mode, tutoiement.
 struct SubjectPathView: View {
     let child: Child
     /// The subject shown; nil = the first one taught in class now, else the
     /// first of the programme. « Réviser » sets it to open a subject.
     @Binding var selectedSubject: String?
     var curriculum: CurriculumSnapshot = .bundled
+    /// Opens a quiz on that theme; nil = themes are not playable here.
+    var onRevise: ((QuizFocus) -> Void)?
 
-    init(child: Child, selectedSubject: Binding<String?> = .constant(nil), curriculum: CurriculumSnapshot = .bundled) {
+    @Environment(\.modelContext) private var modelContext
+
+    init(child: Child, selectedSubject: Binding<String?> = .constant(nil), curriculum: CurriculumSnapshot = .bundled,
+         onRevise: ((QuizFocus) -> Void)? = nil) {
         self.child = child
         self._selectedSubject = selectedSubject
         self.curriculum = curriculum
+        self.onRevise = onRevise
     }
 
     private var subjects: [SubjectProgress] {
@@ -86,8 +94,10 @@ struct SubjectPathView: View {
                 } else {
                     subjectPills(subjects, current: current?.subject)
                     if let current {
+                        let inClass = Self.inClassThemes(of: current, position: position)
                         subjectSection(current, xp: Gamification.xp(for: current.subject, in: xp),
-                                       inClass: Self.inClassThemes(of: current, position: position))
+                                       inClass: inClass,
+                                       playable: playableThemes(of: current, inClass: inClass, position: position))
                     }
                     legend
                 }
@@ -124,7 +134,21 @@ struct SubjectPathView: View {
         }
     }
 
-    private func subjectSection(_ subject: SubjectProgress, xp: Int, inClass: [ThemeProgress]) -> some View {
+    /// Themes that open a quiz: met already (taught in class, or played) and
+    /// with at least one question.
+    private func playableThemes(of subject: SubjectProgress, inClass: [ThemeProgress],
+                                position: ProgrammePosition) -> Set<String> {
+        guard onRevise != nil else { return [] }
+        let met = Self.metThemes(of: subject, inClass: inClass, position: position)
+        guard !met.isEmpty else { return [] }
+        let counts = QuizSession.availableCounts(
+            for: child, in: modelContext,
+            focuses: met.map { QuizFocus(subject: subject.subject, theme: $0.theme) })
+        return Set(zip(met, counts).filter { $0.1 > 0 }.map(\.0.theme))
+    }
+
+    private func subjectSection(_ subject: SubjectProgress, xp: Int, inClass: [ThemeProgress],
+                                playable: Set<String>) -> some View {
         let others = subject.themes.filter { theme in !inClass.contains(theme) }
         return VStack(alignment: .leading, spacing: NotoTheme.Spacing.md) {
             SubjectLevelBar(xp: xp)
@@ -149,9 +173,16 @@ struct SubjectPathView: View {
                                         .font(ChildStyle.caption)
                                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                                 }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("En classe : \(theme.theme). \(Self.status(theme))")
+                                if playable.contains(theme.theme), let onRevise {
+                                    ChildPrimaryButton(title: "Réviser ce thème") {
+                                        onRevise(QuizFocus(subject: subject.subject, theme: theme.theme))
+                                    }
+                                    .padding(.top, NotoTheme.Spacing.xs)
+                                    .accessibilityHint("Lance un quiz sur ce thème")
+                                }
                             }
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("En classe : \(theme.theme). \(Self.status(theme))")
                         }
                     }
                     .padding(NotoTheme.Spacing.md)
@@ -175,7 +206,17 @@ struct SubjectPathView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(others.enumerated()), id: \.element.id) { index, theme in
                             if index > 0 { SettingsDivider() }
-                            themeRow(theme)
+                            if playable.contains(theme.theme), let onRevise {
+                                Button {
+                                    onRevise(QuizFocus(subject: subject.subject, theme: theme.theme))
+                                } label: {
+                                    themeRow(theme, playable: true)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Lance un quiz sur ce thème")
+                            } else {
+                                themeRow(theme, playable: false)
+                            }
                         }
                     }
                     .notoCard()
@@ -184,7 +225,7 @@ struct SubjectPathView: View {
         }
     }
 
-    private func themeRow(_ theme: ThemeProgress) -> some View {
+    private func themeRow(_ theme: ThemeProgress, playable: Bool) -> some View {
         HStack(spacing: NotoTheme.Spacing.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(theme.theme)
@@ -197,10 +238,16 @@ struct SubjectPathView: View {
             }
             Spacer(minLength: NotoTheme.Spacing.sm)
             MasteryDots(box: theme.box)
+            if playable {
+                Image(systemName: "chevron.right")
+                    .font(ChildStyle.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+            }
         }
         .padding(.horizontal, NotoTheme.Spacing.md)
         .padding(.vertical, 12)
         .frame(minHeight: ChildStyle.minTapTarget)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(theme.theme). \(Self.status(theme))")
     }
@@ -242,6 +289,17 @@ struct SubjectPathView: View {
         }
         return subjects.first { !(position.position(forSubject: $0.subject)?.current.isEmpty ?? true) }
             ?? subjects.first
+    }
+
+    /// Themes the child has met: taught in class now or before (cahier de
+    /// textes), or already played (Leitner box > 0). Never a theme not
+    /// reached yet, as in the quiz of the day.
+    static func metThemes(of subject: SubjectProgress, inClass: [ThemeProgress],
+                          position: ProgrammePosition) -> [ThemeProgress] {
+        let seen = Set((position.position(forSubject: subject.subject)?.all ?? []).map { SubjectAlias.fold($0.theme) })
+        return subject.themes.filter { theme in
+            theme.box > 0 || inClass.contains(theme) || seen.contains(SubjectAlias.fold(theme.theme))
+        }
     }
 
     /// The subject's themes taught in class now, in the tracker's order.
