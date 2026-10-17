@@ -130,7 +130,7 @@ struct QuizQuestionScreen<Session: QuizPlaying>: View {
     let question: QuizQuestion
     let copy: QuizQuestionCopy
 
-    private static let letters = ["A", "B", "C", "D"]
+    private static var letters: [String] { ["A", "B", "C", "D"] }
 
     /// Bank text (reviewed) may carry inline Markdown; generated text is
     /// model output and is shown verbatim: no link can become tappable.
