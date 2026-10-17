@@ -35,6 +35,8 @@ struct ChildHomeView: View {
     @State private var showSettings = false
     @State private var showQuiz = false
     @State private var cultureQuestion: DailyCultureQuestion?
+    @State private var cultureQuizEnabled = false
+    @State private var showCultureQuiz = false
     @State private var rewardStatus: RewardStatus = .neutral
     /// Device day the home was last refreshed for. Bumped on return to the
     /// foreground and at midnight, so a home left mounted overnight reloads
@@ -70,6 +72,9 @@ struct ChildHomeView: View {
                     }
                     if let cultureQuestion {
                         cultureSection(cultureQuestion)
+                    }
+                    if cultureQuizEnabled {
+                        cultureQuizCard
                     }
                     scheduleSection
                     screenTimeStatusSection
@@ -194,7 +199,8 @@ struct ChildHomeView: View {
     private func loadCultureQuestion() async {
         guard !ProcessInfo.processInfo.isRunningForPreviews else { return }
         // General-audience pool (no kid-safe flag yet): only when a parent opted in.
-        guard CultureQuestionSettings.isEnabled() else { cultureQuestion = nil; return }
+        cultureQuizEnabled = CultureQuestionSettings.isEnabled()
+        guard cultureQuizEnabled else { cultureQuestion = nil; return }
         if let shown = cultureQuestion, shown.dayKey != dayKey { cultureQuestion = nil }
         cultureQuestion = await cultureStore.questionOfTheDay(client: QuizAPIClient(), now: Date(),
                                                               calendar: .current)
@@ -349,6 +355,41 @@ struct ChildHomeView: View {
                     refreshDay()
                 }
             }
+        }
+    }
+
+    /// Entry to the culture G quiz (10 Koi questions, child-filtered pool,
+    /// reward-free), shown with the culture question when the parent turned
+    /// culture on.
+    private var cultureQuizCard: some View {
+        Button {
+            showCultureQuiz = true
+        } label: {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(NotoTheme.Colors.warning)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Quiz culture G")
+                        .font(ChildStyle.headline)
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    Text("10 questions pour le plaisir : cinéma, livres, sport, sciences…")
+                        .font(ChildStyle.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(NotoTheme.Spacing.md)
+            .frame(maxWidth: .infinity, minHeight: ChildStyle.minTapTarget, alignment: .leading)
+            .notoCard()
+        }
+        .buttonStyle(.plain)
+        .fullScreenCover(isPresented: $showCultureQuiz) {
+            CultureQuizView(audience: .child(level: child.map { CurriculumService.canonicalLevel($0.grade) }))
         }
     }
 

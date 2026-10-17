@@ -96,13 +96,21 @@ final class QuizAPIClient: Sendable {
     /// support lands »).
     static let cultureLotApp = "keskonfe"
 
-    /// Today's Keskonfé lot: `GET /api/quiz/v2/lot?app=keskonfe` (contract
-    /// §6, `KoiDailyDto` + v2 fields). The request carries ONLY `app`: no
-    /// level, no location, no date (celyn defaults to the Paris day, which is
-    /// the day the lot is generated for; a device-local date could ask for a
-    /// lot that does not exist yet). 404 = no lot today.
-    func cultureLot() async throws -> CultureLotResponse {
-        let params = [URLQueryItem(name: "app", value: Self.cultureLotApp)]
+    /// Every Koi ? app whose lots feed the culture G quiz (contract §6:
+    /// `app=keskonfe|sirius|leclub`): Keskonfé (œuvres), Sirius (actu et
+    /// culture G), Le Club (sport). Each lot is public and the same for
+    /// everyone; audience filtering happens on device (`CultureQuizFilter`).
+    static let cultureLotApps = ["keskonfe", "sirius", "leclub"]
+
+    /// One Koi lot: `GET /api/quiz/v2/lot?app=<app>[&date=YYYY-MM-DD]`
+    /// (contract §6, `KoiDailyDto` + v2 fields). The request carries ONLY
+    /// `app` and, for a past lot, its public `date`: no level, no location,
+    /// nothing about the child. Without `date` celyn answers the Paris day,
+    /// which is the day the lot is generated for (a device-local date could
+    /// ask for a lot that does not exist yet). 404 = no lot that day.
+    func cultureLot(app: String = cultureLotApp, date: String? = nil) async throws -> CultureLotResponse {
+        var params = [URLQueryItem(name: "app", value: app)]
+        if let date, !date.isEmpty { params.append(URLQueryItem(name: "date", value: date)) }
         var request = URLRequest(url: url(path: "/quiz/v2/lot", params: params))
         request.httpMethod = "GET"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -415,7 +423,9 @@ struct CultureLotResponse: Decodable, Sendable, Equatable {
 /// so a field celyn drops or nulls never hides the card.
 struct CultureLotQuizDto: Codable, Sendable, Equatable {
     let id: UUID
-    /// films | series | animes | livres | musique | podcasts | spectacles | expos | jeux (Keskonfé).
+    /// films | series | animes | livres | musique | podcasts | spectacles | expos | jeux (Keskonfé),
+    /// or a news domain on Sirius / Le Club (politique, international, societe, economie, sante,
+    /// environnement, sciences_tech, sport, culture).
     let domain: String
     let difficulty: Int
     /// actu | catalogue | bridge | filmo | fait

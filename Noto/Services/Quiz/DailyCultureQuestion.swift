@@ -53,12 +53,7 @@ enum DailyCultureQuestionPicker {
     }
 
     static func isPlayable(_ quiz: CultureLotQuizDto, on lotDate: String) -> Bool {
-        let trimmed = quiz.choices.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard cultureDomains.contains(quiz.domain),
-              !quiz.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              trimmed.count == 4, !trimmed.contains(where: \.isEmpty),
-              Set(trimmed.map { $0.lowercased() }).count == 4,
-              trimmed.indices.contains(quiz.answerIndex) else { return false }
+        guard cultureDomains.contains(quiz.domain), CultureQuizFilter.isWellFormed(quiz) else { return false }
         // YYYY-MM-DD strings compare chronologically.
         if let validUntil = quiz.validUntil, validUntil < lotDate { return false }
         return true
