@@ -98,15 +98,18 @@ struct ChildEmptyState: View {
     }
 }
 
-/// Leitner box as five dots (box 0 = notion not started yet).
+/// Leitner box as five dots (box 0 = notion not started yet): green once
+/// mastered (box 4+), cobalt while in progress (an information, not a
+/// warning: amber is the série's colour in the child app).
 struct MasteryDots: View {
     let box: Int
 
     var body: some View {
+        let fill = box >= 4 ? NotoTheme.Colors.success : NotoTheme.Colors.info
         HStack(spacing: 4) {
             ForEach(1...5, id: \.self) { index in
                 Circle()
-                    .fill(index <= box ? NotoTheme.Colors.success : NotoTheme.Colors.border)
+                    .fill(index <= box ? fill : NotoTheme.Colors.border)
                     .frame(width: 8, height: 8)
             }
         }

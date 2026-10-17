@@ -4,39 +4,50 @@ import SwiftData
 
 private let logger = Logger(subsystem: "com.pmf.noto", category: "ChildHomeView")
 
-/// Child-facing home for devices set to `DeviceMode.child`: cagnotte, série,
-/// « Réviser » entry, next contrôle, today's schedule and the current Screen
-/// Time status, read-only. Parent controls (restrictions, thresholds,
-/// class-lock setup) stay in `ScreenTimeView`/Settings, behind the parent
-/// gate. Every string here addresses the child (tutoiement, CLAUDE.md
-/// exception for `DeviceMode.child`).
+/// The child app's tabs (`DeviceMode.child`).
+enum ChildTab: Hashable {
+    case today, revise, path, me
+}
+
+/// Child-facing app for devices set to `DeviceMode.child`, in four tabs:
+/// - « Aujourd'hui » (`ChildTodayView`): cagnotte, série, tomorrow's
+///   contrôle and the school day, lessons with their homework and the class
+///   lock, ending on the quiz of the day.
+/// - « Réviser » (`ChildReviseView`): the quiz of the day and what it is made
+///   of, the themes taught in class now, and the reward-free culture corner.
+/// - « Parcours » (`SubjectPathView`): themes, XP and levels per subject.
+/// - « Moi » (`ChildMeView`): the série month, badges, the family challenge
+///   and Réglages behind the parent PIN.
+///
+/// This container owns what the tabs share: the linked child, the quiz
+/// cover, the parent gate, the joker / bank / culture refreshes and the
+/// reward status. Parent controls (restrictions, thresholds, class-lock
+/// setup) stay in `ScreenTimeView`/Settings, behind the parent gate. Every
+/// string addresses the child (tutoiement, CLAUDE.md exception for
+/// `DeviceMode.child`).
 ///
 /// The cagnotte shows minutes earned from `QuizAttempt`. Since 3.4 a line
 /// under it says what the minutes do (« Tes N min sont débloquées », « Tes
 /// minutes t'attendent après les cours »…), read from the reward ledger
 /// (`RewardUnlockService.status`), and only when Screen Time is authorized
 /// with watched apps; otherwise the neutral wording stays.
-///
-/// Gamification (3.6): the série with its monthly jokers, the « Mes badges »
-/// link (earned badges only), the optional culture question of the day
-/// (reward-free) and, only when the parent turned it on, the family weekly
-/// challenge.
 struct ChildHomeView: View {
     @Query private var families: [Family]
     @Query private var attempts: [QuizAttempt]
     @Query private var jokerRows: [StreakJoker]
     @Query(filter: #Predicate<QuizItem> { $0.reviewed == true }) private var reviewedItems: [QuizItem]
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var screenTimeManager = ScreenTimeManager.shared
+    @State private var tab: ChildTab = .today
+    /// Subject shown by « Parcours », set when « Réviser » opens a subject.
+    @State private var pathSubject: String?
     @State private var showParentGate = false
     @State private var gateApproved = false
     @State private var showSettings = false
     @State private var showQuiz = false
     @State private var cultureQuestion: DailyCultureQuestion?
     @State private var cultureQuizEnabled = false
-    @State private var showCultureQuiz = false
     @State private var rewardStatus: RewardStatus = .neutral
     /// Device day the home was last refreshed for. Bumped on return to the
     /// foreground and at midnight, so a home left mounted overnight reloads
@@ -59,72 +70,99 @@ struct ChildHomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
-                    Text(greeting)
-                        .font(ChildStyle.greeting)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                        .padding(.top, NotoTheme.Spacing.sm)
+        let child = self.child
+        let now = Date()
+        let snapshots = child.map { attemptSnapshots(for: $0) } ?? []
+        let jokers = child.map { jokerDays(for: $0) } ?? []
+        let streak = Gamification.streak(attempts: snapshots, jokers: jokers, now: now, calendar: .current)
+        let canQuiz = child.map { availableQuestions(for: $0) > 0 } ?? false
 
-                    if let child {
-                        revisionSection(for: child)
-                    }
-                    if let cultureQuestion {
-                        cultureSection(cultureQuestion)
-                    }
-                    if cultureQuizEnabled {
-                        cultureQuizCard
-                    }
-                    scheduleSection
-                    screenTimeStatusSection
-                }
-                .padding(.horizontal, NotoTheme.Spacing.md)
-                .padding(.vertical, NotoTheme.Spacing.md)
+        TabView(selection: $tab) {
+            NavigationStack {
+                ChildTodayView(
+                    child: child,
+                    lessons: todaysLessons,
+                    minutes: QuizStreak.minutesEarnedToday(attempts: snapshots, now: now, calendar: .current),
+                    streak: streak,
+                    rewardStatus: rewardStatus,
+                    exam: child.flatMap { examTomorrow(for: $0) },
+                    examBonus: Self.examBonusMinutes(RewardConfigStore.load()),
+                    classLockActive: screenTimeManager.isAuthorized && ScreenTimeEventStore.isClassLockEnabled(),
+                    canQuiz: canQuiz,
+                    onStartQuiz: { showQuiz = true }
+                )
             }
-            .background(NotoTheme.Colors.background)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        // No PIN configured yet (e.g. upgraded from before
-                        // this feature existed) — fail open rather than
-                        // permanently locking Settings out of reach.
-                        if ParentGateService.isConfigured {
-                            showParentGate = true
-                        } else {
-                            showSettings = true
-                        }
-                    } label: {
-                        Image(systemName: "gearshape")
+            .tabItem { Label("Aujourd'hui", systemImage: "calendar") }
+            .tag(ChildTab.today)
+
+            NavigationStack {
+                ChildReviseView(
+                    child: child,
+                    plan: child.map { QuizSession.plan(for: $0, now: now) },
+                    canQuiz: canQuiz,
+                    cultureQuestion: cultureQuestion,
+                    cultureQuizEnabled: cultureQuizEnabled,
+                    onStartQuiz: { showQuiz = true },
+                    onCultureAnswer: { answerCultureQuestion($0) },
+                    onOpenSubject: { subject in
+                        pathSubject = subject
+                        tab = .path
                     }
-                    .accessibilityLabel("Réglages — protégé par code parent")
-                }
+                )
             }
-            // Réglages (restrictions, déconnexion des comptes, etc.) est un
-            // écran parent — un enfant qui tient ce téléphone ne doit pas
-            // pouvoir désactiver son propre contrôle parental d'un tap.
-            .sheet(isPresented: $showParentGate, onDismiss: {
-                if gateApproved {
-                    gateApproved = false
-                    showSettings = true
-                }
-            }) {
-                ParentGateView(mode: .verify) { success in gateApproved = success }
-            }
-            // The parent may have flipped « Culture générale » there: re-read
-            // it now rather than at the next day change.
-            .sheet(isPresented: $showSettings, onDismiss: {
-                Task { await loadCultureQuestion() }
-            }) {
-                SettingsView()
-            }
-            .fullScreenCover(isPresented: $showQuiz, onDismiss: {
-                recordDueJokers()
-                refreshRewardStatus()
-            }) {
+            .tabItem { Label("Réviser", systemImage: "sparkles") }
+            .tag(ChildTab.revise)
+
+            NavigationStack {
                 if let child {
-                    QuizView(child: child)
+                    SubjectPathView(child: child, selectedSubject: $pathSubject)
+                } else {
+                    noChildState
                 }
+            }
+            .tabItem { Label("Parcours", systemImage: "map") }
+            .tag(ChildTab.path)
+
+            NavigationStack {
+                ChildMeView(
+                    child: child,
+                    attempts: snapshots,
+                    jokers: jokers + streak.newJokers,
+                    streak: streak,
+                    familyChallengePassed: FamilyChallengeSettings.isEnabled()
+                        ? Gamification.passedQuizzesThisWeek(attempts: snapshots, now: now, calendar: .current)
+                        : nil,
+                    onOpenSettings: { openSettings() }
+                )
+            }
+            .tabItem { Label("Moi", systemImage: "person.crop.circle") }
+            .tag(ChildTab.me)
+        }
+        .tint(ChildStyle.accent)
+        // Réglages (restrictions, déconnexion des comptes, etc.) est un
+        // écran parent — un enfant qui tient ce téléphone ne doit pas
+        // pouvoir désactiver son propre contrôle parental d'un tap.
+        .sheet(isPresented: $showParentGate, onDismiss: {
+            if gateApproved {
+                gateApproved = false
+                showSettings = true
+            }
+        }) {
+            ParentGateView(mode: .verify) { success in gateApproved = success }
+        }
+        // The parent may have flipped « Culture générale » there: re-read
+        // it now rather than at the next day change.
+        .sheet(isPresented: $showSettings, onDismiss: {
+            Task { await loadCultureQuestion() }
+        }) {
+            SettingsView()
+        }
+        .fullScreenCover(isPresented: $showQuiz, onDismiss: {
+            recordDueJokers()
+            refreshRewardStatus()
+        }) {
+            if let child {
+                QuizView(child: child)
             }
         }
         .onAppear {
@@ -150,7 +188,38 @@ struct ChildHomeView: View {
         }
     }
 
-    // MARK: - Révisions
+    private var noChildState: some View {
+        ScrollView {
+            ChildEmptyState(systemImage: "person.crop.circle.badge.questionmark",
+                            title: "Ton profil arrive bientôt",
+                            message: "Demande à tes parents de relier ce téléphone à ton profil.")
+                .padding(NotoTheme.Spacing.md)
+        }
+        .background(NotoTheme.Colors.background)
+    }
+
+    /// No PIN configured yet (e.g. upgraded from before this feature
+    /// existed): fail open rather than permanently locking Settings out of
+    /// reach.
+    private func openSettings() {
+        if ParentGateService.isConfigured {
+            showParentGate = true
+        } else {
+            showSettings = true
+        }
+    }
+
+    private func answerCultureQuestion(_ choice: Int) {
+        if let updated = cultureStore.recordAnswer(choice, now: Date(), calendar: .current) {
+            cultureQuestion = updated
+        } else if cultureStore.cached(now: Date(), calendar: .current) == nil {
+            // Yesterday's card after midnight: drop it and load today's.
+            cultureQuestion = nil
+            refreshDay()
+        }
+    }
+
+    // MARK: - Refreshes
 
     /// Opportunistic refresh of the celyn programme bank for the child's
     /// level (throttled to once per 12 h per level by `QuizBankStore`). Only
@@ -210,6 +279,8 @@ struct ChildHomeView: View {
                                                               calendar: .current)
     }
 
+    // MARK: - Derived data
+
     private func jokerDays(for child: Child) -> [CalendarDay] {
         jokerRows
             .filter { $0.child?.persistentModelID == child.persistentModelID }
@@ -223,228 +294,42 @@ struct ChildHomeView: View {
     }
 
     /// Same predicate as the quiz draw (`QuizSession.availableItems`), so the
-    /// home never offers « Réviser » on a quiz that would open empty. The
-    /// `@Query` is read so the view refreshes when the bank changes.
+    /// app never offers a quiz that would open empty. The `@Query` is read so
+    /// the view refreshes when the bank changes.
     private func availableQuestions(for child: Child) -> Int {
         guard !reviewedItems.isEmpty else { return 0 }
         return QuizSession.availableCount(for: child, in: modelContext)
     }
 
-    /// Subject of tomorrow's contrôle when `ExamKeywordDetector` sees one.
-    private func examTomorrow(for child: Child) -> (found: Bool, subject: String?) {
+    /// Tomorrow's contrôle when `ExamKeywordDetector` sees one, with its
+    /// subject when a homework row names it.
+    private func examTomorrow(for child: Child) -> ExamTomorrow? {
         let calendar = Calendar.current
         let now = Date()
         let homework = child.homework.map { HomeworkSnapshot($0, calendar: calendar) }
         let schedule = child.schedule.map { ScheduleSnapshot($0) }
         guard ExamKeywordDetector.hasExamTomorrow(homework: homework, schedule: schedule,
-                                                  now: now, calendar: calendar) else { return (false, nil) }
+                                                  now: now, calendar: calendar) else { return nil }
         let tomorrow = calendar.quizStartOfDay(addingDays: 1, to: now)
         let subject = homework.first {
             !$0.done && calendar.isDate($0.dueDate, inSameDayAs: tomorrow)
                 && ExamKeywordDetector.matches($0.descriptionText)
         }?.subject
-        return (true, subject)
+        return ExamTomorrow(subject: subject)
     }
 
-    @ViewBuilder
-    private func revisionSection(for child: Child) -> some View {
-        let snapshots = attemptSnapshots(for: child)
-        let now = Date()
-        let minutes = QuizStreak.minutesEarnedToday(attempts: snapshots, now: now, calendar: .current)
-        let jokers = jokerDays(for: child)
-        let streak = Gamification.streak(attempts: snapshots, jokers: jokers, now: now, calendar: .current)
-        let badgeCount = Gamification.badges(
-            attempts: snapshots, masteries: child.notionMasteries.map { MasterySnapshot($0) },
-            jokers: jokers + streak.newJokers, level: child.grade, specialties: child.specialties,
-            curriculum: CurriculumSnapshot.bundled, calendar: .current
-        ).count
-        let exam = examTomorrow(for: child)
+    // MARK: - Copy (pure, tested)
 
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("Révisions")
-                .childSectionLabel()
-                .padding(.horizontal, NotoTheme.Spacing.xs)
-
-            // Side by side, stacked at accessibility text sizes (half-width
-            // cards would truncate the figures).
-            let cardsLayout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: NotoTheme.Spacing.cardGap))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: NotoTheme.Spacing.cardGap))
-            cardsLayout {
-                cagnotteCard(minutes: minutes)
-                streakCard(streak)
-            }
-
-            if let text = Self.rewardStatusText(rewardStatus) {
-                rewardStatusCard(text)
-            }
-
-            if FamilyChallengeSettings.isEnabled() {
-                familyChallengeCard(
-                    passed: Gamification.passedQuizzesThisWeek(attempts: snapshots, now: now, calendar: .current))
-            }
-
-            if exam.found {
-                examCard(subject: exam.subject)
-            }
-
-            if availableQuestions(for: child) > 0 {
-                ChildPrimaryButton(title: "Réviser (3 min)", systemImage: "sparkles") {
-                    showQuiz = true
-                }
-                .accessibilityHint("Lance un petit quiz de quelques questions")
-            } else {
-                ChildEmptyState(systemImage: "tray",
-                                title: "Les questions arrivent bientôt",
-                                message: "On prépare des questions pour ta classe. Reviens un peu plus tard !")
-            }
-
-            NavigationLink {
-                SubjectPathView(child: child)
-            } label: {
-                HStack {
-                    Label("Mon parcours", systemImage: "map")
-                        .font(ChildStyle.body)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(ChildStyle.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.horizontal, NotoTheme.Spacing.md)
-                .frame(minHeight: ChildStyle.minTapTarget)
-                .notoCard()
-            }
-            .accessibilityHint("Tes thèmes de l'année et ta progression")
-
-            // Earned badges only: the link appears with the first one.
-            if badgeCount > 0 {
-                NavigationLink {
-                    BadgesView(child: child)
-                } label: {
-                    HStack {
-                        Label("Mes badges", systemImage: "rosette")
-                            .font(ChildStyle.body)
-                            .foregroundStyle(NotoTheme.Colors.textPrimary)
-                        Spacer()
-                        Text("\(badgeCount)")
-                            .font(ChildStyle.caption.monospacedDigit())
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        Image(systemName: "chevron.right")
-                            .font(ChildStyle.caption)
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                            .accessibilityHidden(true)
-                    }
-                    .padding(.horizontal, NotoTheme.Spacing.md)
-                    .frame(minHeight: ChildStyle.minTapTarget)
-                    .notoCard()
-                }
-                .accessibilityLabel("Mes badges : \(badgeCount) \(badgeCount == 1 ? "badge gagné" : "badges gagnés")")
-            }
-        }
-    }
-
-    private func cultureSection(_ question: DailyCultureQuestion) -> some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("Question culture du jour")
-                .childSectionLabel()
-                .padding(.horizontal, NotoTheme.Spacing.xs)
-            CultureQuestionCard(question: question) { choice in
-                if let updated = cultureStore.recordAnswer(choice, now: Date(), calendar: .current) {
-                    cultureQuestion = updated
-                } else if cultureStore.cached(now: Date(), calendar: .current) == nil {
-                    // Yesterday's card after midnight: drop it and load today's.
-                    cultureQuestion = nil
-                    refreshDay()
-                }
-            }
-        }
-    }
-
-    /// Entry to the culture G quiz (10 Koi questions, child-filtered pool,
-    /// reward-free), shown with the culture question when the parent turned
-    /// culture on.
-    private var cultureQuizCard: some View {
-        Button {
-            showCultureQuiz = true
-        } label: {
-            HStack(spacing: NotoTheme.Spacing.sm) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(NotoTheme.Colors.warning)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Quiz culture G")
-                        .font(ChildStyle.headline)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    Text("10 questions pour le plaisir : cinéma, livres, sport, sciences…")
-                        .font(ChildStyle.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .accessibilityHidden(true)
-            }
-            .padding(NotoTheme.Spacing.md)
-            .frame(maxWidth: .infinity, minHeight: ChildStyle.minTapTarget, alignment: .leading)
-            .notoCard()
-        }
-        .buttonStyle(.plain)
-        .fullScreenCover(isPresented: $showCultureQuiz) {
-            CultureQuizView(audience: .child(level: child.map { CurriculumService.canonicalLevel($0.grade) }))
-        }
-    }
-
-    private func familyChallengeCard(passed: Int) -> some View {
-        let goal = FamilyChallengeSettings.weeklyGoal
-        return HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
-            Image(systemName: "person.3.fill")
-                .foregroundStyle(NotoTheme.Colors.info)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Défi de la semaine en famille")
-                    .font(ChildStyle.headline)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Text(Self.familyChallengeText(passed: passed, goal: goal))
-                    .font(ChildStyle.body)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(NotoTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .notoCard()
-        .accessibilityElement(children: .combine)
+    /// Exam-eve bonus the parent's rules grant, nil when turned off (the
+    /// contrôle card then promises nothing).
+    static func examBonusMinutes(_ config: RewardConfig) -> Int? {
+        config.examEveBonusEnabled && config.examEveBonus > 0 ? config.examEveBonus : nil
     }
 
     static func familyChallengeText(passed: Int, goal: Int) -> String {
         passed >= goal
             ? "Défi réussi : \(passed) quiz réussis cette semaine !"
             : "\(min(passed, goal)) quiz réussis sur \(goal) cette semaine."
-    }
-
-    private func cagnotteCard(minutes: Int) -> some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-            Text("Ta cagnotte")
-                .font(ChildStyle.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-            Text("\(minutes) min")
-                .font(ChildStyle.figure)
-                .foregroundStyle(NotoTheme.Colors.textPrimary)
-                .minimumScaleFactor(0.7)
-                .lineLimit(1)
-            Text("gagnées aujourd'hui")
-                .font(ChildStyle.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-        }
-        .padding(NotoTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .notoCard()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Ta cagnotte : \(minutes) minutes gagnées aujourd'hui")
     }
 
     /// Child wording for the reward state, nil = keep the neutral cagnotte
@@ -464,68 +349,6 @@ struct ChildHomeView: View {
         }
     }
 
-    private func rewardStatusCard(_ text: (title: String, detail: String?)) -> some View {
-        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
-            Image(systemName: rewardStatus == .afterClass ? "clock" : "lock.open.fill")
-                .foregroundStyle(NotoTheme.Colors.success)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(text.title)
-                    .font(ChildStyle.headline)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let detail = text.detail {
-                    Text(detail)
-                        .font(ChildStyle.body)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(NotoTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .notoCard()
-        .accessibilityElement(children: .combine)
-    }
-
-    private func streakCard(_ streak: StreakStatus) -> some View {
-        let days = streak.days
-        return VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
-            Text("Ta série")
-                .font(ChildStyle.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-            HStack(alignment: .firstTextBaseline, spacing: NotoTheme.Spacing.xs) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(days > 0 ? NotoTheme.Colors.warning : NotoTheme.Colors.textTertiary)
-                    .accessibilityHidden(true)
-                Text("\(days)")
-                    .font(ChildStyle.figure)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-            }
-            Text(days == 0 ? "lance-la avec un quiz" : (days == 1 ? "jour" : "jours d'affilée"))
-                .font(ChildStyle.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-            if let jokerText = Self.jokerText(streak) {
-                HStack(spacing: 4) {
-                    Image(systemName: "shield.lefthalf.filled")
-                        .accessibilityHidden(true)
-                    Text(jokerText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .font(ChildStyle.caption)
-                .foregroundStyle(NotoTheme.Colors.textSecondary)
-            }
-        }
-        .padding(NotoTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .notoCard()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.streakAccessibilityLabel(streak))
-    }
-
     /// Jokers line, child wording: only the positive note when a saved joker
     /// protected the série, nothing otherwise. The stock is never shown (no
     /// « plus de joker », no scarcity cue: jokers work quietly) and pending
@@ -542,104 +365,15 @@ struct ChildHomeView: View {
             : "Ta série : \(days) \(days == 1 ? "jour" : "jours d'affilée")."
         return jokerText(streak).map { "\(head) \($0)" } ?? head
     }
-
-    private func examCard(subject: String?) -> some View {
-        HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
-            Image(systemName: "list.clipboard")
-                .foregroundStyle(NotoTheme.Colors.info)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(subject.map { "Contrôle demain : \($0.capitalized)" } ?? "Contrôle demain")
-                    .font(ChildStyle.headline)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Text("Un petit quiz ce soir pour t'échauffer ?")
-                    .font(ChildStyle.body)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(NotoTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .signalCard(.info)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var greeting: String {
-        guard let child else { return "Bonjour" }
-        return "Salut \(child.firstName)"
-    }
-
-    private var scheduleSection: some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("Aujourd'hui")
-                .childSectionLabel()
-                .padding(.horizontal, NotoTheme.Spacing.xs)
-
-            if todaysLessons.isEmpty {
-                Text("Pas de cours aujourd'hui.")
-                    .font(ChildStyle.body)
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .padding(NotoTheme.Spacing.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .notoCard()
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(todaysLessons.enumerated()), id: \.element.id) { index, lesson in
-                        if index > 0 { SettingsDivider() }
-                        HStack(spacing: NotoTheme.Spacing.md) {
-                            Text(lesson.start.formatted(.dateTime.hour().minute().locale(Locale(identifier: "fr_FR"))))
-                                .font(ChildStyle.headline.monospacedDigit())
-                                .foregroundStyle(NotoTheme.Colors.textSecondary)
-                                .frame(minWidth: 48, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(lesson.subject)
-                                    .font(ChildStyle.body)
-                                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                                if let room = lesson.room {
-                                    Text(room)
-                                        .font(ChildStyle.caption)
-                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                                }
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, NotoTheme.Spacing.md)
-                        .padding(.vertical, 12)
-                    }
-                }
-                .notoCard()
-            }
-        }
-    }
-
-    private var screenTimeStatusSection: some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("Temps d'écran")
-                .childSectionLabel()
-                .padding(.horizontal, NotoTheme.Spacing.xs)
-
-            HStack {
-                Image(systemName: screenTimeManager.isAuthorized ? "checkmark.shield.fill" : "shield.slash")
-                    .foregroundStyle(screenTimeManager.isAuthorized ? NotoTheme.Colors.success : NotoTheme.Colors.textSecondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(screenTimeManager.isAuthorized ? "Contrôle actif" : "Contrôle non configuré")
-                        .font(ChildStyle.body)
-                        .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    if ScreenTimeEventStore.isClassLockEnabled() {
-                        Text("Verrouillage pendant les cours activé")
-                            .font(ChildStyle.caption)
-                            .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    }
-                }
-                Spacer()
-            }
-            .padding(NotoTheme.Spacing.md)
-            .notoCard()
-        }
-    }
 }
 
-#Preview("Accueil enfant") {
+/// Tomorrow's contrôle as the home shows it.
+struct ExamTomorrow: Equatable, Sendable {
+    /// Subject of the homework that announces it, when one does.
+    let subject: String?
+}
+
+#Preview("App enfant") {
     ChildHomeView()
         .withPreviewData()
 }

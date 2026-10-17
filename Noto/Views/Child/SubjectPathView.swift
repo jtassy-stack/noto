@@ -41,12 +41,24 @@ extension SubjectProgress {
     }
 }
 
-/// « Mon parcours »: the themes of the child's level per subject, each with
-/// its progress (five dots = Leitner boxes), and the subject's XP and level
-/// (`Gamification`, 3.6). Child mode, tutoiement.
+/// « Parcours », the child app's third tab: one subject at a time (scrolling
+/// pills, so a lycée timetable of ten subjects and more fits), its XP and
+/// level (`Gamification`, 3.6), the theme taught in class now (cahier de
+/// textes, `ProgrammePosition`) on top, then the year's themes with their
+/// progress. Mastered is green, a theme in progress is cobalt (« à revoir »
+/// is an information, amber is kept for the série). Child mode, tutoiement.
 struct SubjectPathView: View {
     let child: Child
+    /// The subject shown; nil = the first one taught in class now, else the
+    /// first of the programme. « Réviser » sets it to open a subject.
+    @Binding var selectedSubject: String?
     var curriculum: CurriculumSnapshot = .bundled
+
+    init(child: Child, selectedSubject: Binding<String?> = .constant(nil), curriculum: CurriculumSnapshot = .bundled) {
+        self.child = child
+        self._selectedSubject = selectedSubject
+        self.curriculum = curriculum
+    }
 
     private var subjects: [SubjectProgress] {
         SubjectProgress.path(level: child.grade, specialties: child.specialties,
@@ -54,61 +66,121 @@ struct SubjectPathView: View {
                              curriculum: curriculum)
     }
 
-    private var subjectXP: [SubjectXP] {
-        GamificationStore.subjectXP(of: child)
-    }
-
     var body: some View {
         let subjects = self.subjects
-        let xp = self.subjectXP
+        let xp = GamificationStore.subjectXP(of: child)
+        let position = QuizSession.plan(for: child, curriculum: curriculum).position
+        let current = Self.resolvedSubject(selectedSubject, subjects: subjects, position: position)
         ScrollView {
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.lg) {
+                Text("Mon parcours")
+                    .font(ChildStyle.greeting)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, NotoTheme.Spacing.sm)
+
                 if subjects.isEmpty {
                     ChildEmptyState(systemImage: "map",
                                     title: "Ton parcours arrive bientôt",
                                     message: "Les thèmes de ta classe apparaîtront ici.")
                 } else {
-                    Text("Chaque quiz fait avancer tes thèmes : plus il y a de points verts, mieux tu les connais. "
-                         + "Chaque bonne réponse te rapporte aussi de l'XP dans sa matière.")
-                        .font(ChildStyle.body)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    ForEach(subjects) { subject in
-                        subjectSection(subject, xp: Gamification.xp(for: subject.subject, in: xp))
+                    subjectPills(subjects, current: current?.subject)
+                    if let current {
+                        subjectSection(current, xp: Gamification.xp(for: current.subject, in: xp),
+                                       inClass: Self.inClassThemes(of: current, position: position))
                     }
+                    legend
                 }
             }
             .padding(NotoTheme.Spacing.md)
         }
         .background(NotoTheme.Colors.background)
-        .navigationTitle("Mon parcours")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func subjectSection(_ subject: SubjectProgress, xp: Int) -> some View {
-        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(subject.subject)
-                    .font(ChildStyle.subject)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                Text("\(subject.masteredCount)/\(subject.themes.count)")
-                    .font(ChildStyle.caption.monospacedDigit())
-                    .foregroundStyle(NotoTheme.Colors.textSecondary)
-                    .accessibilityLabel("\(subject.masteredCount) thèmes maîtrisés sur \(subject.themes.count)")
-            }
-            .padding(.horizontal, NotoTheme.Spacing.xs)
-
-            SubjectLevelBar(xp: xp)
-                .padding(.horizontal, NotoTheme.Spacing.xs)
-
-            VStack(spacing: 0) {
-                ForEach(Array(subject.themes.enumerated()), id: \.element.id) { index, theme in
-                    if index > 0 { SettingsDivider() }
-                    themeRow(theme)
+    private func subjectPills(_ subjects: [SubjectProgress], current: String?) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                ForEach(subjects) { subject in
+                    let isSelected = subject.subject == current
+                    Button {
+                        selectedSubject = subject.subject
+                    } label: {
+                        Text(subject.subject)
+                            .font(ChildStyle.body.weight(isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.white : NotoTheme.Colors.textPrimary)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: ChildStyle.minTapTarget)
+                            .background(isSelected ? ChildStyle.accent : NotoTheme.Colors.surface,
+                                        in: Capsule())
+                            .overlay {
+                                if !isSelected { Capsule().stroke(NotoTheme.Colors.border, lineWidth: 1) }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
-            .notoCard()
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func subjectSection(_ subject: SubjectProgress, xp: Int, inClass: [ThemeProgress]) -> some View {
+        let others = subject.themes.filter { theme in !inClass.contains(theme) }
+        return VStack(alignment: .leading, spacing: NotoTheme.Spacing.md) {
+            SubjectLevelBar(xp: xp)
+                .padding(NotoTheme.Spacing.md)
+                .notoCard()
+
+            if !inClass.isEmpty {
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+                    Text("En classe en ce moment")
+                        .childSectionLabel()
+                        .padding(.horizontal, NotoTheme.Spacing.xs)
+                    VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+                        ForEach(inClass) { theme in
+                            VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                                Text(theme.theme)
+                                    .font(ChildStyle.title)
+                                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                HStack(spacing: NotoTheme.Spacing.sm) {
+                                    MasteryDots(box: theme.box)
+                                    Text(Self.status(theme))
+                                        .font(ChildStyle.caption)
+                                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                                }
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("En classe : \(theme.theme). \(Self.status(theme))")
+                        }
+                    }
+                    .padding(NotoTheme.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .signalCard(.info)
+                }
+            }
+
+            if !others.isEmpty {
+                VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Les thèmes de l'année")
+                            .childSectionLabel()
+                        Spacer()
+                        Text("\(subject.masteredCount)/\(subject.themes.count)")
+                            .font(ChildStyle.caption.monospacedDigit())
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .accessibilityLabel("\(subject.masteredCount) thèmes maîtrisés sur \(subject.themes.count)")
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.xs)
+                    VStack(spacing: 0) {
+                        ForEach(Array(others.enumerated()), id: \.element.id) { index, theme in
+                            if index > 0 { SettingsDivider() }
+                            themeRow(theme)
+                        }
+                    }
+                    .notoCard()
+                }
+            }
         }
     }
 
@@ -133,11 +205,50 @@ struct SubjectPathView: View {
         .accessibilityLabel("\(theme.theme). \(Self.status(theme))")
     }
 
+    private var legend: some View {
+        HStack(spacing: NotoTheme.Spacing.md) {
+            legendItem(NotoTheme.Colors.success, "maîtrisé")
+            legendItem(NotoTheme.Colors.info, "en cours")
+            legendItem(NotoTheme.Colors.border, "pas encore")
+        }
+        .font(ChildStyle.caption)
+        .foregroundStyle(NotoTheme.Colors.textSecondary)
+        .padding(.horizontal, NotoTheme.Spacing.xs)
+        .accessibilityHidden(true)
+    }
+
+    private func legendItem(_ color: Color, _ text: String) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text)
+        }
+    }
+
     static func status(_ theme: ThemeProgress) -> String {
         switch theme.box {
         case ...0: "À découvrir"
         case 4...: "Tu maîtrises"
         default: "En cours : \(theme.box) sur 5"
+        }
+    }
+
+    /// The selected subject when it is in the path, else the first one with a
+    /// theme taught in class now, else the first of the programme.
+    static func resolvedSubject(_ selected: String?, subjects: [SubjectProgress],
+                                position: ProgrammePosition) -> SubjectProgress? {
+        if let selected,
+           let match = subjects.first(where: { SubjectAlias.fold($0.subject) == SubjectAlias.fold(selected) }) {
+            return match
+        }
+        return subjects.first { !(position.position(forSubject: $0.subject)?.current.isEmpty ?? true) }
+            ?? subjects.first
+    }
+
+    /// The subject's themes taught in class now, in the tracker's order.
+    static func inClassThemes(of subject: SubjectProgress, position: ProgrammePosition) -> [ThemeProgress] {
+        guard let current = position.position(forSubject: subject.subject)?.current else { return [] }
+        return current.compactMap { sighting in
+            subject.themes.first { SubjectAlias.fold($0.theme) == SubjectAlias.fold(sighting.theme) }
         }
     }
 }

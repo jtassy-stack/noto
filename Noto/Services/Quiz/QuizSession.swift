@@ -425,6 +425,36 @@ final class QuizSession: QuizPlaying {
                generated: generated, playedKeys: playedKeys).questions
     }
 
+    /// The slots the next quiz plans (homework, due notions, programme) and
+    /// the programme position they were planned from. The child home shows
+    /// both (« Quiz du jour » composition, « En classe en ce moment »); the
+    /// draw fills the same slots from the bank, so a slot the bank cannot
+    /// fill is topped up from the rest of the level.
+    ///
+    /// Programme position (3.8): computed here, on the device, from the
+    /// cahier de textes rows and homework this device synced. Never stored.
+    static func plan(for child: Child, curriculum: CurriculumSnapshot = .bundled,
+                     calendar: Calendar = .current, now: Date = Date()) -> (plan: QuizPlan, position: ProgrammePosition) {
+        let level = CurriculumService.canonicalLevel(child.grade)
+        let homework = child.homework.map { HomeworkSnapshot($0, calendar: calendar) }
+        let position = ProgrammePositionTracker.compute(
+            level: level, specialties: child.specialties,
+            lessons: child.lessonContents.map { LessonContentSnapshot($0) },
+            homework: homework,
+            curriculum: curriculum, now: now, calendar: calendar)
+        let period = PeriodRank.currentPeriod(now: now, level: level, calendar: calendar)
+
+        // `weakSubjects: []` for now: nothing computes them yet on the child device.
+        let plan = QuizSourceSelector.plan(
+            context: ChildRevisionContext(level: level, specialties: child.specialties, weakSubjects: []),
+            homework: homework,
+            masteries: child.notionMasteries.map { MasterySnapshot($0) },
+            curriculum: curriculum, now: now, calendar: calendar,
+            maxSlots: questionCount, currentPeriod: period, position: position
+        )
+        return (plan, position)
+    }
+
     /// A homework slot no bank item could fill.
     struct HomeworkGap: Equatable {
         let slot: QuizPlanSlot
@@ -462,24 +492,8 @@ final class QuizSession: QuizPlaying {
         let ordered = shuffled.filter { !playedKeys.contains($0.questionKey) }
             + shuffled.filter { playedKeys.contains($0.questionKey) }
 
-        // Programme position (3.8): computed here, on the device, from the
-        // cahier de textes rows and homework this device synced. Never stored.
-        let homework = child.homework.map { HomeworkSnapshot($0, calendar: calendar) }
-        let position = ProgrammePositionTracker.compute(
-            level: level, specialties: child.specialties,
-            lessons: child.lessonContents.map { LessonContentSnapshot($0) },
-            homework: homework,
-            curriculum: curriculum, now: now, calendar: calendar)
+        let (plan, position) = Self.plan(for: child, curriculum: curriculum, calendar: calendar, now: now)
         let period = PeriodRank.currentPeriod(now: now, level: level, calendar: calendar)
-
-        // `weakSubjects: []` for now: nothing computes them yet on the child device.
-        let plan = QuizSourceSelector.plan(
-            context: ChildRevisionContext(level: level, specialties: child.specialties, weakSubjects: []),
-            homework: homework,
-            masteries: child.notionMasteries.map { MasterySnapshot($0) },
-            curriculum: curriculum, now: now, calendar: calendar,
-            maxSlots: questionCount, currentPeriod: period, position: position
-        )
         let eligible = QuizSourceSelector.programmeEligibility(
             level: level, position: position, currentPeriod: period,
             curriculum: curriculum, specialties: child.specialties)

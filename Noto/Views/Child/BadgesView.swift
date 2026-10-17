@@ -42,7 +42,7 @@ private struct BadgeRow: View {
         HStack(spacing: NotoTheme.Spacing.md) {
             Image(systemName: BadgeCopy.symbol(for: badge.kind))
                 .font(.system(.title2))
-                .foregroundStyle(NotoTheme.Colors.warning)
+                .foregroundStyle(BadgeCopy.tint(for: badge.kind))
                 .frame(minWidth: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -82,6 +82,17 @@ enum BadgeCopy {
         case .streak(let days): "Tu as révisé \(days) jours d'affilée."
         case .subjectLevel(let subject, _): "Tes bonnes réponses en \(subject) t'ont fait monter de niveau."
         case .themeMastered(let subject, _): "\(subject) : tu connais toutes les notions de ce thème."
+        }
+    }
+
+    /// Colour = signal: amber only for the série (the child app's amber),
+    /// cobalt for a level, green for a mastered theme.
+    static func tint(for kind: BadgeKind) -> Color {
+        switch kind {
+        case .firstQuiz: ChildStyle.accent
+        case .streak: NotoTheme.Colors.warning
+        case .subjectLevel: NotoTheme.Colors.info
+        case .themeMastered: NotoTheme.Colors.success
         }
     }
 

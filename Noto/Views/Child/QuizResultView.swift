@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// End of a quiz: score, minutes added to the cagnotte or, when none, the
-/// reason in friendly child wording (tutoiement). The wording stays neutral
+/// End of a quiz: a warm title, the score as a subtitle, then the minutes
+/// added to the cagnotte or, when none, the reason in friendly child wording
+/// (tutoiement). The wording stays neutral
 /// on unlocking: whether the minutes unlock now, wait for the end of class or
 /// for the daily budget is said on the home (`ChildHomeView`, 3.4), which
 /// knows the Screen Time setup. XP and subject level-ups
@@ -26,10 +27,12 @@ struct QuizResultView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
 
-                Text("\(result.correctCount) / \(result.totalCount)")
-                    .font(ChildStyle.figure)
-                    .foregroundStyle(NotoTheme.Colors.textPrimary)
-                    .accessibilityLabel("\(result.correctCount) bonnes réponses sur \(result.totalCount)")
+                // The score is a subtitle: what the child gained comes first
+                // (minutes, XP), so a 2 / 5 is never the first figure read.
+                Text(Self.scoreLine(for: result))
+                    .font(ChildStyle.body)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
 
                 minutesCard
 
@@ -83,7 +86,7 @@ struct QuizResultView: View {
     private var xpCard: some View {
         HStack(alignment: .top, spacing: NotoTheme.Spacing.sm) {
             Image(systemName: "bolt.fill")
-                .foregroundStyle(NotoTheme.Colors.warning)
+                .foregroundStyle(NotoTheme.Colors.info)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
                 Text("+\(result.xpEarned) XP")
@@ -106,6 +109,11 @@ struct QuizResultView: View {
     }
 
     // MARK: - Copy (pure, tested through `QuizResultCopyTests`)
+
+    /// « 4 bonnes réponses sur 5 ».
+    static func scoreLine(for result: QuizSessionResult) -> String {
+        "\(result.correctCount) \(result.correctCount > 1 ? "bonnes réponses" : "bonne réponse") sur \(result.totalCount)"
+    }
 
     static func levelUpText(_ levelUp: SubjectLevelUp) -> String {
         "Niveau \(levelUp.level) en \(levelUp.subject) !"
