@@ -204,7 +204,8 @@ struct CultureQuizPoolStoreTests {
     }
 
     /// One quiz per lot, id derived from the app and date so merges are distinct.
-    private static func lot(for request: URLRequest) -> QuizStubProtocol.Stub {
+    /// Nonisolated: called from the stub handler, a `@Sendable` nonisolated closure.
+    nonisolated private static func lot(for request: URLRequest) -> QuizStubProtocol.Stub {
         let query = request.queryMap
         let app = query["app"] ?? "?"
         let date = query["date"] ?? "2023-11-14"
