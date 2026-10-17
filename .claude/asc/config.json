@@ -13,14 +13,22 @@
   },
   "trigger": "opt-in",
   "distribution": {
-    "_note": "Only the internal 'Team (Expo)' group exists — internal groups auto-receive every build, so CI runs no distribution step. Add external groups here (+ the distribute step from the asc-kit workflow template) when needed.",
-    "groups": [],
-    "betaReview": false,
+    "_note": "Internal 'Team (Expo)' auto-receives every build. External 'Fitness and family' (public link, family devices) gets each [tf] build attached and submitted to Beta App Review.",
+    "groups": [
+      "Fitness and family"
+    ],
+    "betaReview": true,
     "expireOldBuilds": false
   },
   "provisioningProfiles": {
-    "fr.noto.app": { "name": "noto appstore", "secret": "PROVISIONING_PROFILE_NOTO" },
-    "fr.noto.app.deviceactivity": { "name": "noto deviceactivity appstore", "secret": "PROVISIONING_PROFILE_NOTO_DEVICEACTIVITY" }
+    "fr.noto.app": {
+      "name": "noto appstore",
+      "secret": "PROVISIONING_PROFILE_NOTO"
+    },
+    "fr.noto.app.deviceactivity": {
+      "name": "noto deviceactivity appstore",
+      "secret": "PROVISIONING_PROFILE_NOTO_DEVICEACTIVITY"
+    }
   },
   "secretsXcconfig": null
 }
