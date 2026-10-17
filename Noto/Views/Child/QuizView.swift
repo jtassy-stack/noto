@@ -83,7 +83,7 @@ struct QuizView: View {
             }
         case .inProgress:
             if let question = session.currentQuestion {
-                QuestionScreen(session: session, question: question)
+                QuizQuestionScreen(session: session, question: question, copy: .child)
                     .id(question.id)
             }
         case .finished:
@@ -99,10 +99,36 @@ struct QuizView: View {
     }
 }
 
-/// The current question, its choices and the feedback once answered.
-private struct QuestionScreen: View {
-    let session: QuizSession
+/// Wording of `QuizQuestionScreen`: tutoiement for the child's quiz,
+/// vouvoiement for the parent's (`ParentQuizView`).
+struct QuizQuestionCopy: Sendable {
+    let correct: String
+    let incorrect: String
+    let nextQuestion: String
+    let seeResult: String
+    let chosenWrong: String
+    let choiceHint: String
+
+    static let child = QuizQuestionCopy(
+        correct: "Bien joué !", incorrect: "Pas tout à fait…", nextQuestion: "Question suivante",
+        seeResult: "Voir mon résultat", chosenWrong: "Ta réponse, pas la bonne",
+        choiceHint: "Touche deux fois pour choisir cette réponse"
+    )
+
+    static let parent = QuizQuestionCopy(
+        correct: "Bonne réponse", incorrect: "Ce n'est pas la bonne réponse", nextQuestion: "Question suivante",
+        seeResult: "Voir votre résultat", chosenWrong: "Votre réponse, pas la bonne",
+        choiceHint: "Touchez deux fois pour choisir cette réponse"
+    )
+}
+
+/// The current question, its choices and the feedback once answered. Shared
+/// by the child's quiz and the parent's (`ParentQuizView`): same questions,
+/// same screen, only the wording changes.
+struct QuizQuestionScreen<Session: QuizPlaying>: View {
+    let session: Session
     let question: QuizQuestion
+    let copy: QuizQuestionCopy
 
     private static let letters = ["A", "B", "C", "D"]
 
@@ -136,7 +162,7 @@ private struct QuestionScreen: View {
                 if let chosen = session.currentAnswer {
                     feedback(chosen: chosen)
                         .accessibilityFocused($focus, equals: .feedback)
-                    ChildPrimaryButton(title: session.isLastQuestion ? "Voir mon résultat" : "Question suivante",
+                    ChildPrimaryButton(title: session.isLastQuestion ? copy.seeResult : copy.nextQuestion,
                                        systemImage: "arrow.right") {
                         session.advance()
                     }
@@ -241,7 +267,7 @@ private struct QuestionScreen: View {
         .disabled(state != .idle)
         .accessibilityLabel("Réponse \(letter) : \(BankText.plain(text))")
         .accessibilityValue(accessibilityValue(for: state))
-        .accessibilityHint(state == .idle ? "Touche deux fois pour choisir cette réponse" : "")
+        .accessibilityHint(state == .idle ? copy.choiceHint : "")
     }
 
     private func background(for state: ChoiceState) -> Color {
@@ -264,7 +290,7 @@ private struct QuestionScreen: View {
         switch state {
         case .idle, .dimmed: ""
         case .correct: "Bonne réponse"
-        case .wrongChosen: "Ta réponse, pas la bonne"
+        case .wrongChosen: copy.chosenWrong
         }
     }
 
@@ -274,7 +300,7 @@ private struct QuestionScreen: View {
         let correct = chosen == question.answerIndex
         let answer = question.choices[question.answerIndex]
         return VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Label(correct ? "Bien joué !" : "Pas tout à fait…",
+            Label(correct ? copy.correct : copy.incorrect,
                   systemImage: correct ? "hand.thumbsup.fill" : "lightbulb.fill")
                 .font(ChildStyle.headline)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)

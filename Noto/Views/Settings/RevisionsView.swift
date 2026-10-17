@@ -16,6 +16,8 @@ struct RevisionsView: View {
     @Query private var families: [Family]
     @State private var config = RewardConfigStore.load()
     @State private var appliedSuggestion: RevisionSuggestion?
+    /// Child whose programme the parent is being quizzed on (`ParentQuizView`).
+    @State private var parentQuizChild: Child?
 
     private var children: [Child] { families.first?.children ?? [] }
 
@@ -54,6 +56,9 @@ struct RevisionsView: View {
                 }
             }
             .onAppear { config = RewardConfigStore.load() }
+            .fullScreenCover(item: $parentQuizChild) { child in
+                ParentQuizView(child: child)
+            }
         }
     }
 
@@ -66,6 +71,11 @@ struct RevisionsView: View {
                 .font(NotoTheme.Typography.childName)
                 .foregroundStyle(NotoTheme.Colors.textPrimary)
                 .padding(.horizontal, NotoTheme.Spacing.xs)
+
+            // Collège & lycée only, like the child's quiz.
+            if CurriculumService.revisionLevels.contains(CurriculumService.canonicalLevel(child.grade)) {
+                parentQuizCard(child)
+            }
 
             if s.lastQuizDate == nil {
                 emptyCard("Votre enfant n'a pas encore fait de quiz de révision sur cet appareil.")
@@ -101,6 +111,38 @@ struct RevisionsView: View {
                 weeklyCard(s)
             }
         }
+    }
+
+    /// « Testez-vous » : the parent plays the child's quiz (same questions,
+    /// no reward). Shown even before the child's first quiz: the bank and the
+    /// homework are on every device, the child's results are not (V1).
+    private func parentQuizCard(_ child: Child) -> some View {
+        let history = ParentQuizHistory(child: child)
+        return VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Testez-vous sur son programme")
+                .font(NotoTheme.Typography.signalTitle)
+                .foregroundStyle(NotoTheme.Colors.textPrimary)
+            Text(Self.parentQuizText(history, levelLabel: child.grade))
+                .font(NotoTheme.Typography.body)
+                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(history.quizCount == 0 ? "Faire le quiz" : "Refaire un quiz") {
+                parentQuizChild = child
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(NotoTheme.Colors.brand)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(NotoTheme.Spacing.md)
+        .notoCard()
+    }
+
+    static func parentQuizText(_ history: ParentQuizHistory, levelLabel: String, now: Date = Date()) -> String {
+        let intro = "Les mêmes questions que votre enfant (\(levelLabel)) : devoirs des prochains jours "
+            + "et programme. Sans effet sur ses récompenses."
+        guard let last = history.lastDate else { return intro }
+        return "Votre dernier score : \(history.lastCorrect) / \(history.lastTotal), "
+            + lastQuizLabel(last, now: now) + ". " + intro
     }
 
     private func notionsCard(_ s: RevisionSummary, child: Child) -> some View {
