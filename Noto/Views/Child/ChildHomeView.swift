@@ -111,7 +111,11 @@ struct ChildHomeView: View {
             }) {
                 ParentGateView(mode: .verify) { success in gateApproved = success }
             }
-            .sheet(isPresented: $showSettings) {
+            // The parent may have flipped « Culture générale » there: re-read
+            // it now rather than at the next day change.
+            .sheet(isPresented: $showSettings, onDismiss: {
+                Task { await loadCultureQuestion() }
+            }) {
                 SettingsView()
             }
             .fullScreenCover(isPresented: $showQuiz, onDismiss: {

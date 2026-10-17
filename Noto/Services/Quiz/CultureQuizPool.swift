@@ -6,12 +6,15 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "CultureQuizPoo
 /// Culture G quiz for parents and children, fed by every question celyn's
 /// « Koi ? » engine generates (Keskonfé, Sirius, Le Club lots).
 ///
-/// - Source: `GET /api/quiz/v2/lot?app=<app>[&date=]` for each app of
-///   `QuizAPIClient.cultureLotApps`, today and a backfill window of past lots,
-///   accumulated in a local pool (`CultureQuizPoolStore`) so the quiz goes
-///   beyond one day's 8 questions and, over time, through the whole Koi output.
-///   Requests carry only `app` and a public date, never anything about the
-///   family; answers are checked on device and never sent.
+/// - Source: `GET /api/quiz/v2/bank/culture` (contract §12), every reviewed
+///   culture G question of the Koi pool, synced page by page into a local
+///   pool (`CultureQuizPoolStore`) and kept up to date with the keyset cursor
+///   and its tombstones. When the bank route is unavailable (404 on an older
+///   celyn, unreadable page), the daily lots `GET /api/quiz/v2/lot?app=<app>
+///   [&date=]` of `QuizAPIClient.cultureLotApps` (today + a backfill window)
+///   feed the pool instead. Requests carry only `app`, `limit`, an opaque
+///   cursor or a public date, never anything about the family; answers are
+///   checked on device and never sent.
 /// - Audience: the parent gets every question still valid; the child only the
 ///   ones `CultureQuizFilter.isAppropriate` keeps (culture / sport / sciences
 ///   domains, evergreen tones, difficulty for collège, on-device text filter).
@@ -32,10 +35,15 @@ enum CultureQuizAudience: Sendable, Equatable, Hashable {
 /// One Koi question kept in the local pool, with the lot it came from.
 struct CultureQuizEntry: Codable, Sendable, Equatable, Identifiable {
     let quiz: CultureLotQuizDto
-    /// keskonfe | sirius | leclub
+    /// keskonfe | sirius | leclub (bank: the first app that served it, or
+    /// `koi` for a pooled question no lot used yet).
     let app: String
-    /// YYYY-MM-DD (Paris day of the lot).
+    /// YYYY-MM-DD (Paris day of the lot; bank: the day it was generated).
     let lotDate: String
+    /// true = synced from the culture bank, which owns its lifetime (no
+    /// retention cutoff, deleted by tombstones). nil for lot entries and
+    /// pools saved before the bank.
+    var fromBank: Bool? = nil
 
     var id: UUID { quiz.id }
 }
@@ -228,9 +236,9 @@ final class CultureQuizSeenStore {
 // MARK: - Local pool
 
 /// Local pool of Koi questions (public content, no personal data), a JSON
-/// file in Application Support. `refresh` adds today's lot of each app and
-/// backfills `backfillDays` past lots once, then prunes out-of-date and old
-/// questions.
+/// file in Application Support. `refresh` syncs the culture bank (falling
+/// back to today's lot of each app plus `backfillDays` past lots when the
+/// bank is unavailable), then prunes out-of-date and old questions.
 @MainActor
 final class CultureQuizPoolStore {
     static let fileName = "culture-quiz-pool.json"
@@ -241,6 +249,14 @@ final class CultureQuizPoolStore {
     /// Today's lots are fetched again after this delay (Sirius publishes
     /// editions at 07:00, 12:00 and 20:00).
     static let todayRefreshInterval: TimeInterval = 3 * 3600
+    /// The culture bank is asked again after this delay (celyn caches it
+    /// `max-age=3600`).
+    static let bankRefreshInterval: TimeInterval = 3600
+    /// Pages fetched per refresh at most (500 questions each); a longer
+    /// sync goes on from the saved cursor at the next refresh.
+    static let maxBankPages = 40
+    /// App label of a bank question no lot has served yet.
+    static let bankApp = "koi"
 
     struct Snapshot: Codable, Sendable, Equatable {
         var entries: [CultureQuizEntry] = []
@@ -248,6 +264,17 @@ final class CultureQuizPoolStore {
         var fetchedDays: Set<String> = []
         /// Last successful fetch of today's lot, per app.
         var todayFetchedAt: [String: Date] = [:]
+        /// Last cursor the culture bank returned (opaque); nil = full sync.
+        var bankCursor: String? = nil
+        /// Last time a bank sync reached its end (`hasMore == false`).
+        var bankSyncedAt: Date? = nil
+        /// Last time the bank answered unavailable; the lots are used until
+        /// `bankRefreshInterval` has passed.
+        var bankUnavailableAt: Date? = nil
+        /// Ids returned so far by a full sync that has not reached its end
+        /// (interrupted, or past `maxBankPages`); nil = no full sync running.
+        /// Kept so the sync resumed from `bankCursor` still replaces the pool.
+        var bankFullSyncSeen: Set<UUID>? = nil
     }
 
     private let fileURL: URL
@@ -275,15 +302,122 @@ final class CultureQuizPoolStore {
         }
     }
 
-    /// Fetches what is missing (today's lots when stale, past lots never
-    /// fetched), merges, prunes, saves, and returns the pool. Sequential GETs;
-    /// the first transport, auth or rate-limit error stops the round (what
-    /// was fetched is kept, the rest is retried on a later call).
+    /// Syncs the culture bank when due; if the bank is unavailable, fetches
+    /// what is missing from the lots (today's when stale, past lots never
+    /// fetched). Then merges, prunes, saves, and returns the pool. Sequential
+    /// GETs; the first transport, auth or rate-limit error stops the round
+    /// (what was fetched is kept, the rest is retried on a later call).
     @discardableResult
     func refresh(client: QuizAPIClient, now: Date, calendar: Calendar) async -> [CultureQuizEntry] {
         var snapshot = load()
         let today = CalendarDay(now, calendar: calendar)
 
+        func isRecent(_ date: Date?) -> Bool {
+            date.map { now.timeIntervalSince($0) < Self.bankRefreshInterval } ?? false
+        }
+        let bank: BankOutcome
+        if isRecent(snapshot.bankUnavailableAt) {
+            bank = .unavailable
+        } else if isRecent(snapshot.bankSyncedAt) {
+            bank = .synced
+        } else {
+            bank = await syncBank(client: client, now: now, into: &snapshot)
+            if bank == .unavailable { snapshot.bankUnavailableAt = now }
+        }
+        if bank == .unavailable {
+            await refreshLots(client: client, now: now, today: today, calendar: calendar, into: &snapshot)
+        }
+
+        Self.prune(&snapshot, today: today, calendar: calendar)
+        save(snapshot)
+        return snapshot.entries
+    }
+
+    enum BankOutcome: Equatable {
+        /// Synced (or partly, the cursor carries on next time).
+        case synced
+        /// No bank on this celyn (404), or an unreadable answer: use the lots.
+        case unavailable
+        /// Offline, rate-limited or refused: try again later, lots included.
+        case stopped
+    }
+
+    /// Pages through `GET /api/quiz/v2/bank/culture` from the saved cursor.
+    /// A full sync (no cursor) that reaches its end replaces the pool; an
+    /// incremental one merges the changed rows and deletes the tombstones.
+    /// The cursor is saved after every page, so an interrupted sync resumes,
+    /// a full one included (`bankFullSyncSeen` carries the ids already seen).
+    func syncBank(client: QuizAPIClient, now: Date, into snapshot: inout Snapshot) async -> BankOutcome {
+        var cursor = snapshot.bankCursor
+        if cursor == nil { snapshot.bankFullSyncSeen = [] }
+        var isFullSync = snapshot.bankFullSyncSeen != nil
+        var returned = snapshot.bankFullSyncSeen ?? []
+        var pages = 0
+        while pages < Self.maxBankPages {
+            let page: CultureBankResponse
+            do {
+                page = try await client.cultureBank(cursor: cursor)
+            } catch QuizAPIError.badRequest where cursor != nil {
+                // A cursor celyn no longer accepts: start over with a full sync.
+                cursor = nil
+                snapshot.bankCursor = nil
+                isFullSync = true
+                returned = []
+                snapshot.bankFullSyncSeen = []
+                continue
+            } catch QuizAPIError.notFound, QuizAPIError.decoding, QuizAPIError.badRequest {
+                return pages == 0 ? .unavailable : .stopped
+            } catch {
+                logger.info("Culture bank sync stopped: \(error.localizedDescription, privacy: .public)")
+                return .stopped
+            }
+            pages += 1
+            Self.merge(page, into: &snapshot)
+            if isFullSync {
+                returned.formUnion(page.items.map(\.quiz.id))
+                snapshot.bankFullSyncSeen = returned
+            }
+            if let next = page.cursor, !next.isEmpty {
+                cursor = next
+                snapshot.bankCursor = next
+            }
+            guard page.hasMore, page.cursor != nil else {
+                if isFullSync {
+                    // The full sync is the whole pool: anything else is gone.
+                    snapshot.entries.removeAll { !returned.contains($0.id) }
+                    snapshot.bankFullSyncSeen = nil
+                }
+                snapshot.bankSyncedAt = now
+                snapshot.bankUnavailableAt = nil
+                return .synced
+            }
+        }
+        // Page cap reached: the saved cursor carries on at the next refresh.
+        return .synced
+    }
+
+    /// Adds a bank page (a known id is replaced: the bank is authoritative)
+    /// and deletes its tombstones.
+    static func merge(_ page: CultureBankResponse, into snapshot: inout Snapshot) {
+        let removed = Set(page.removed.map(\.id))
+        if !removed.isEmpty { snapshot.entries.removeAll { removed.contains($0.id) } }
+        var index = Dictionary(uniqueKeysWithValues: snapshot.entries.enumerated().map { ($1.id, $0) })
+        for item in page.items {
+            let entry = CultureQuizEntry(quiz: item.quiz, app: item.apps.first ?? bankApp,
+                                         lotDate: item.generatedOn, fromBank: true)
+            if let position = index[item.quiz.id] {
+                snapshot.entries[position] = entry
+            } else {
+                index[item.quiz.id] = snapshot.entries.count
+                snapshot.entries.append(entry)
+            }
+        }
+    }
+
+    /// The lot path (bank unavailable): today's lots when stale, then the
+    /// past lots never fetched.
+    private func refreshLots(client: QuizAPIClient, now: Date, today: CalendarDay, calendar: Calendar,
+                             into snapshot: inout Snapshot) async {
         // Today's lots first (the freshest questions, a playable pool fast),
         // then the past lots never fetched.
         var requests: [(app: String, date: String?)] = QuizAPIClient.cultureLotApps
@@ -308,10 +442,6 @@ final class CultureQuizPoolStore {
                 snapshot.todayFetchedAt[request.app] = now
             }
         }
-
-        Self.prune(&snapshot, today: today, calendar: calendar)
-        save(snapshot)
-        return snapshot.entries
     }
 
     private enum FetchOutcome { case lot(CultureLotResponse), missing, stop }
@@ -337,8 +467,9 @@ final class CultureQuizPoolStore {
         for quiz in lot.quizzes {
             let entry = CultureQuizEntry(quiz: quiz, app: app, lotDate: lot.date)
             if let position = index[quiz.id] {
-                snapshot.entries[position] = CultureQuizEntry(quiz: quiz, app: snapshot.entries[position].app,
-                                                              lotDate: snapshot.entries[position].lotDate)
+                let known = snapshot.entries[position]
+                snapshot.entries[position] = CultureQuizEntry(quiz: quiz, app: known.app,
+                                                              lotDate: known.lotDate, fromBank: known.fromBank)
             } else {
                 index[quiz.id] = snapshot.entries.count
                 snapshot.entries.append(entry)
@@ -346,13 +477,15 @@ final class CultureQuizPoolStore {
         }
     }
 
-    /// Drops out-of-date questions, questions past `retentionDays`, and
-    /// fetched-day marks outside the backfill window.
+    /// Drops out-of-date questions, lot questions past `retentionDays` (the
+    /// bank's own are kept until a tombstone), and fetched-day marks outside
+    /// the backfill window.
     static func prune(_ snapshot: inout Snapshot, today: CalendarDay, calendar: Calendar) {
         let todayKey = today.key
         let oldest = today.adding(days: -retentionDays, calendar: calendar).key
         snapshot.entries.removeAll {
-            $0.lotDate < oldest || !CultureQuizFilter.isPlayable($0, today: todayKey, calendar: calendar)
+            ($0.fromBank != true && $0.lotDate < oldest)
+                || !CultureQuizFilter.isPlayable($0, today: todayKey, calendar: calendar)
         }
         let window = today.adding(days: -backfillDays, calendar: calendar).key
         snapshot.fetchedDays = snapshot.fetchedDays.filter { key in
