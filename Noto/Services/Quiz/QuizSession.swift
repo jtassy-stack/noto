@@ -45,6 +45,23 @@ struct QuizQuestion: Identifiable, Equatable, Sendable {
     var isGenerated = false
 }
 
+/// What the question screen needs from a quiz being played, shared by the
+/// child's `QuizSession` and the parent's `ParentQuizSession` so both play
+/// exactly the same questions the same way (`QuizQuestionScreen`).
+@MainActor
+protocol QuizPlaying: AnyObject, Observable {
+    var questions: [QuizQuestion] { get }
+    var currentIndex: Int { get }
+    /// The answer chosen for the current question, nil until answered.
+    var currentAnswer: Int? { get }
+    var isLastQuestion: Bool { get }
+    /// Records the choice for the current question (first tap only).
+    /// Returns whether it was right, nil when ignored.
+    @discardableResult func answer(_ choice: Int) -> Bool?
+    /// Next question, or the end of the quiz after the last one.
+    func advance()
+}
+
 /// Outcome of a finished quiz, for `QuizResultView`.
 struct QuizSessionResult: Equatable, Sendable {
     let correctCount: Int
@@ -76,7 +93,7 @@ struct QuizSessionResult: Equatable, Sendable {
 /// touches the app group ledger.
 @MainActor
 @Observable
-final class QuizSession {
+final class QuizSession: QuizPlaying {
     static let questionCount = 5
 
     enum Phase: Equatable {
@@ -179,11 +196,14 @@ final class QuizSession {
     /// Generation requests for the homework slots the bank cannot fill, in
     /// slot order (tomorrow first), at most `QuizGenerator.maxGeneratedPerQuiz`.
     /// Empty when the bank-only draw has fewer than `minBankQuestions`.
+    ///
+    /// `playedKeys`: see `draw` (the parent quiz passes its own history).
     static func generationRequests(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                                    calendar: Calendar, seed: UInt64, now: Date,
-                                   minBankQuestions: Int = 1) -> [QuizGenerationRequest] {
+                                   minBankQuestions: Int = 1,
+                                   playedKeys: Set<String>? = nil) -> [QuizGenerationRequest] {
         let selection = select(for: child, in: context, curriculum: curriculum, calendar: calendar,
-                               seed: seed, now: now, generated: [:])
+                               seed: seed, now: now, generated: [:], playedKeys: playedKeys)
         guard !selection.unmatchedHomework.isEmpty,
               selection.questions.count >= max(1, minBankQuestions) else { return [] }
         let level = CurriculumService.canonicalLevel(child.grade)
@@ -392,11 +412,17 @@ final class QuizSession {
     /// Within each pool, items never played in a passed attempt come first
     /// (a thin bank would otherwise make every quiz an identical replay), and
     /// ties are broken by the seeded shuffle.
+    ///
+    /// `playedKeys` replaces the « already played » set (the child's passed
+    /// attempts when nil): the parent quiz passes the parent's own history,
+    /// so it plans the same slots as the child but prefers questions the
+    /// parent has not seen.
     static func draw(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                      calendar: Calendar, seed: UInt64, now: Date,
-                     generated: [String: QuizQuestion] = [:]) -> [QuizQuestion] {
+                     generated: [String: QuizQuestion] = [:],
+                     playedKeys: Set<String>? = nil) -> [QuizQuestion] {
         select(for: child, in: context, curriculum: curriculum, calendar: calendar, seed: seed, now: now,
-               generated: generated).questions
+               generated: generated, playedKeys: playedKeys).questions
     }
 
     /// A homework slot no bank item could fill.
@@ -414,7 +440,8 @@ final class QuizSession {
 
     private static func select(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                                calendar: Calendar, seed: UInt64, now: Date,
-                               generated: [String: QuizQuestion]) -> Selection {
+                               generated: [String: QuizQuestion],
+                               playedKeys playedOverride: Set<String>? = nil) -> Selection {
         let level = CurriculumService.canonicalLevel(child.grade)
         guard CurriculumService.revisionLevels.contains(level) else { return Selection() }
         var items = availableItems(level: level, in: context, now: now)
@@ -428,8 +455,8 @@ final class QuizSession {
         }
         guard !items.isEmpty else { return Selection() }
 
-        let history = child.quizAttempts.map { AttemptSnapshot($0) }
-        let playedKeys = Set(history.filter(\.passed).flatMap(\.questionKeys))
+        let playedKeys = playedOverride
+            ?? Set(child.quizAttempts.map { AttemptSnapshot($0) }.filter(\.passed).flatMap(\.questionKeys))
         var rng = SplitMix64(seed: seed)
         let shuffled = items.shuffled(using: &rng)
         let ordered = shuffled.filter { !playedKeys.contains($0.questionKey) }

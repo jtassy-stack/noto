@@ -88,6 +88,10 @@ final class Child {
     // Gamification (3.6): série jokers spent. Same additive pattern.
     @Relationship(deleteRule: .cascade, inverse: \StreakJoker.child)
     var streakJokers: [StreakJoker] = []
+    // Parent quiz on the child's programme. Same additive pattern; never
+    // read by rewards, XP or Leitner (`ParentQuizAttempt`).
+    @Relationship(deleteRule: .cascade, inverse: \ParentQuizAttempt.child)
+    var parentQuizAttempts: [ParentQuizAttempt] = []
     // Programme position (3.8): cahier de textes lessons + kept homework.
     // Local only, cascade-deleted with the child (RGPD).
     @Relationship(deleteRule: .cascade, inverse: \LessonContent.child)
