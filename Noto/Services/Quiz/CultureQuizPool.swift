@@ -271,6 +271,10 @@ final class CultureQuizPoolStore {
         /// Last time the bank answered unavailable; the lots are used until
         /// `bankRefreshInterval` has passed.
         var bankUnavailableAt: Date? = nil
+        /// Ids returned so far by a full sync that has not reached its end
+        /// (interrupted, or past `maxBankPages`); nil = no full sync running.
+        /// Kept so the sync resumed from `bankCursor` still replaces the pool.
+        var bankFullSyncSeen: Set<UUID>? = nil
     }
 
     private let fileURL: URL
@@ -341,11 +345,13 @@ final class CultureQuizPoolStore {
     /// Pages through `GET /api/quiz/v2/bank/culture` from the saved cursor.
     /// A full sync (no cursor) that reaches its end replaces the pool; an
     /// incremental one merges the changed rows and deletes the tombstones.
-    /// The cursor is saved after every page, so an interrupted sync resumes.
+    /// The cursor is saved after every page, so an interrupted sync resumes,
+    /// a full one included (`bankFullSyncSeen` carries the ids already seen).
     func syncBank(client: QuizAPIClient, now: Date, into snapshot: inout Snapshot) async -> BankOutcome {
         var cursor = snapshot.bankCursor
-        var isFullSync = cursor == nil
-        var returned = Set<UUID>()
+        if cursor == nil { snapshot.bankFullSyncSeen = [] }
+        var isFullSync = snapshot.bankFullSyncSeen != nil
+        var returned = snapshot.bankFullSyncSeen ?? []
         var pages = 0
         while pages < Self.maxBankPages {
             let page: CultureBankResponse
@@ -357,6 +363,7 @@ final class CultureQuizPoolStore {
                 snapshot.bankCursor = nil
                 isFullSync = true
                 returned = []
+                snapshot.bankFullSyncSeen = []
                 continue
             } catch QuizAPIError.notFound, QuizAPIError.decoding, QuizAPIError.badRequest {
                 return pages == 0 ? .unavailable : .stopped
@@ -366,7 +373,10 @@ final class CultureQuizPoolStore {
             }
             pages += 1
             Self.merge(page, into: &snapshot)
-            returned.formUnion(page.items.map(\.quiz.id))
+            if isFullSync {
+                returned.formUnion(page.items.map(\.quiz.id))
+                snapshot.bankFullSyncSeen = returned
+            }
             if let next = page.cursor, !next.isEmpty {
                 cursor = next
                 snapshot.bankCursor = next
@@ -375,6 +385,7 @@ final class CultureQuizPoolStore {
                 if isFullSync {
                     // The full sync is the whole pool: anything else is gone.
                     snapshot.entries.removeAll { !returned.contains($0.id) }
+                    snapshot.bankFullSyncSeen = nil
                 }
                 snapshot.bankSyncedAt = now
                 snapshot.bankUnavailableAt = nil

@@ -364,6 +364,32 @@ struct CultureQuizPoolStoreTests {
         }
     }
 
+    @Test("an interrupted full sync still replaces the pool when it resumes")
+    func bankResumedFullSync() async throws {
+        QuizStubProtocol.install { request in
+            request.queryMap["cursor"] == nil
+                ? Self.bankPage([Self.bankItem(1)], cursor: "p1", hasMore: true)
+                : .offline()
+        }
+        defer { QuizStubProtocol.reset() }
+        try await withStore { store in
+            var seeded = CultureQuizPoolStore.Snapshot()
+            seeded.entries = [CultureQuizEntry(quiz: CultureLotFixtures.quiz(CultureLotFixtures.idA),
+                                               app: "keskonfe", lotDate: "2023-11-13")]
+            store.save(seeded)
+            _ = await store.refresh(client: stubbedQuizClient(), now: now, calendar: calendar)
+            #expect(store.load().bankCursor == "p1")
+            #expect(store.load().bankFullSyncSeen == [Self.id(1)])
+
+            QuizStubProtocol.install { _ in Self.bankPage([Self.bankItem(2)], cursor: "p2", hasMore: false) }
+            let pool = await store.refresh(client: stubbedQuizClient(), now: now.addingTimeInterval(60),
+                                           calendar: calendar)
+            #expect(QuizStubProtocol.requests.map { $0.queryMap["cursor"] } == ["p1"])
+            #expect(pool.map(\.id) == [Self.id(1), Self.id(2)])
+            #expect(store.load().bankFullSyncSeen == nil)
+        }
+    }
+
     @Test("incremental bank sync: sends the saved cursor, merges and applies tombstones")
     func bankIncremental() async throws {
         QuizStubProtocol.install { _ in
