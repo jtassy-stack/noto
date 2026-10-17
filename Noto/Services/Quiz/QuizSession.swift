@@ -62,6 +62,29 @@ protocol QuizPlaying: AnyObject, Observable {
     func advance()
 }
 
+/// What a quiz chosen by the child is about: one subject, or one theme of
+/// it. Nil (the default) is the quiz of the day.
+struct QuizFocus: Equatable, Hashable, Sendable {
+    /// Curriculum subject name (or a Pronote label, alias-aware).
+    let subject: String
+    /// Exact `CurriculumTheme.theme`, nil = the whole subject.
+    var theme: String?
+}
+
+/// Where a notion played in this quiz stands after it (`QuizResultView`,
+/// « Tes notions »).
+struct NotionOutcome: Equatable, Sendable, Identifiable {
+    let notionKey: String
+    let theme: String
+    /// Leitner box after the quiz (4+ = mastered).
+    let box: Int
+    /// All of its items right in this quiz.
+    let correct: Bool
+    let nextReview: Date
+    var id: String { notionKey }
+    var isMastered: Bool { box >= 4 }
+}
+
 /// Outcome of a finished quiz, for `QuizResultView`.
 struct QuizSessionResult: Equatable, Sendable {
     let correctCount: Int
@@ -78,6 +101,10 @@ struct QuizSessionResult: Equatable, Sendable {
     var xpEarned: Int = 0
     /// Subject levels reached with this quiz.
     var levelUps: [SubjectLevelUp] = []
+    /// Notions played, in quiz order.
+    var notions: [NotionOutcome] = []
+    /// Badges this quiz unlocked.
+    var newBadges: [EarnedBadge] = []
     var minutesEarned: Int { decision.total }
 }
 
@@ -113,6 +140,7 @@ final class QuizSession: QuizPlaying {
 
     private let child: Child
     private let modelContext: ModelContext
+    private let curriculum: CurriculumSnapshot
     private let config: RewardConfig
     private let calendar: Calendar
     private let now: @Sendable () -> Date
@@ -139,18 +167,20 @@ final class QuizSession: QuizPlaying {
         seed: UInt64 = UInt64.random(in: UInt64.min ... UInt64.max),
         now: @escaping @Sendable () -> Date = { Date() },
         onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil,
-        generated: [String: QuizQuestion] = [:]
+        generated: [String: QuizQuestion] = [:],
+        focus: QuizFocus? = nil
     ) {
         self.onMinutesEarned = onMinutesEarned
         self.child = child
         self.modelContext = modelContext
+        self.curriculum = curriculum
         self.config = config
         self.calendar = calendar
         self.now = now
         let start = now()
         self.startedAt = start
         let drawn = Self.draw(for: child, in: modelContext, curriculum: curriculum, calendar: calendar,
-                              seed: seed, now: start, generated: generated)
+                              seed: seed, now: start, generated: generated, focus: focus)
         self.questions = drawn
         self.answers = Array(repeating: -1, count: drawn.count)
         self.phase = drawn.isEmpty ? .empty : .inProgress
@@ -175,13 +205,14 @@ final class QuizSession: QuizPlaying {
         now: @escaping @Sendable () -> Date = { Date() },
         onMinutesEarned: (@MainActor (Int, Date) -> Void)? = nil,
         generator: (any QuizGenerating)?,
-        generationTimeout: Duration = QuizGenerator.defaultTimeout
+        generationTimeout: Duration = QuizGenerator.defaultTimeout,
+        focus: QuizFocus? = nil
     ) async -> QuizSession {
         var generated: [String: QuizQuestion] = [:]
         if let generator {
             let requests = generationRequests(for: child, in: modelContext, curriculum: curriculum,
                                               calendar: calendar, seed: seed, now: now(),
-                                              minBankQuestions: config.minQuestionCount)
+                                              minBankQuestions: config.minQuestionCount, focus: focus)
             if !requests.isEmpty {
                 generator.prewarm()
                 generated = await QuizGenerator.questions(for: requests, using: generator,
@@ -190,7 +221,7 @@ final class QuizSession: QuizPlaying {
         }
         return QuizSession(child: child, modelContext: modelContext, curriculum: curriculum, config: config,
                            calendar: calendar, seed: seed, now: now, onMinutesEarned: onMinutesEarned,
-                           generated: generated)
+                           generated: generated, focus: focus)
     }
 
     /// Generation requests for the homework slots the bank cannot fill, in
@@ -201,9 +232,10 @@ final class QuizSession: QuizPlaying {
     static func generationRequests(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                                    calendar: Calendar, seed: UInt64, now: Date,
                                    minBankQuestions: Int = 1,
-                                   playedKeys: Set<String>? = nil) -> [QuizGenerationRequest] {
+                                   playedKeys: Set<String>? = nil,
+                                   focus: QuizFocus? = nil) -> [QuizGenerationRequest] {
         let selection = select(for: child, in: context, curriculum: curriculum, calendar: calendar,
-                               seed: seed, now: now, generated: [:], playedKeys: playedKeys)
+                               seed: seed, now: now, generated: [:], playedKeys: playedKeys, focus: focus)
         guard !selection.unmatchedHomework.isEmpty,
               selection.questions.count >= max(1, minBankQuestions) else { return [] }
         let level = CurriculumService.canonicalLevel(child.grade)
@@ -290,6 +322,8 @@ final class QuizSession: QuizPlaying {
         )
         let subjects = questions.map { $0.subject ?? "" }
         let xpBefore = Gamification.subjectXP(attempts: history)
+        let badgesBefore = Set(GamificationStore.badges(for: child, now: end, calendar: calendar,
+                                                        curriculum: curriculum).map(\.id))
 
         let attempt = QuizAttempt(
             child: child, date: end,
@@ -334,7 +368,11 @@ final class QuizSession: QuizPlaying {
                                    requiredCorrect: max(0, required),
                                    minQuestionCount: config.minQuestionCount,
                                    xpEarned: thisAttempt.xpEarned,
-                                   levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter))
+                                   levelUps: Gamification.levelUps(before: xpBefore, after: xpAfter),
+                                   notions: notionOutcomes(),
+                                   newBadges: GamificationStore.badges(for: child, now: end, calendar: calendar,
+                                                                       curriculum: curriculum)
+                                       .filter { !badgesBefore.contains($0.id) })
         phase = .finished
 
         // 3.4: credit the reward ledger only once the attempt is persisted —
@@ -375,6 +413,23 @@ final class QuizSession: QuizPlaying {
         }
     }
 
+    /// The notions of this quiz as they stand after `updateMastery`, in quiz
+    /// order.
+    private func notionOutcomes() -> [NotionOutcome] {
+        var seen = Set<String>()
+        var outcomes: [NotionOutcome] = []
+        for question in questions {
+            guard let key = question.notionKey, let theme = question.theme, seen.insert(key).inserted,
+                  let mastery = child.notionMasteries.first(where: { $0.notionKey == key }) else { continue }
+            let played = zip(questions, answers).filter { $0.0.notionKey == key }
+            outcomes.append(NotionOutcome(
+                notionKey: key, theme: theme, box: mastery.leitnerBox,
+                correct: SpacedRepetition.notionOutcome(itemsCorrect: played.map { $0.0.answerIndex == $0.1 }),
+                nextReview: mastery.nextReview))
+        }
+        return outcomes
+    }
+
     // MARK: - Draw
 
     /// Reviewed, well-formed MCQ items of `level`, in a stable order.
@@ -393,10 +448,29 @@ final class QuizSession: QuizPlaying {
     }
 
     /// Number of playable questions for a child's level (home screen empty state).
-    static func availableCount(for child: Child, in context: ModelContext, now: Date = Date()) -> Int {
+    /// With `focus`, only the items of that subject (or theme): the child app
+    /// offers a subject or theme quiz only when it would not open empty.
+    static func availableCount(for child: Child, in context: ModelContext, now: Date = Date(),
+                               focus: QuizFocus? = nil) -> Int {
         let level = CurriculumService.canonicalLevel(child.grade)
         guard CurriculumService.revisionLevels.contains(level) else { return 0 }
-        return availableItems(level: level, in: context, now: now).count
+        let items = availableItems(level: level, in: context, now: now)
+        guard let focus else { return items.count }
+        let slot = focusSlot(focus)
+        return items.filter { matches($0, slot) }.count
+    }
+
+    /// `availableCount` for several focuses, with one fetch (the child app
+    /// lists every subject / theme it can offer).
+    static func availableCounts(for child: Child, in context: ModelContext, now: Date = Date(),
+                                focuses: [QuizFocus]) -> [Int] {
+        let level = CurriculumService.canonicalLevel(child.grade)
+        guard CurriculumService.revisionLevels.contains(level) else { return focuses.map { _ in 0 } }
+        let items = availableItems(level: level, in: context, now: now)
+        return focuses.map { focus in
+            let slot = focusSlot(focus)
+            return items.filter { matches($0, slot) }.count
+        }
     }
 
     /// Picks the questions:
@@ -420,9 +494,10 @@ final class QuizSession: QuizPlaying {
     static func draw(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                      calendar: Calendar, seed: UInt64, now: Date,
                      generated: [String: QuizQuestion] = [:],
-                     playedKeys: Set<String>? = nil) -> [QuizQuestion] {
+                     playedKeys: Set<String>? = nil,
+                     focus: QuizFocus? = nil) -> [QuizQuestion] {
         select(for: child, in: context, curriculum: curriculum, calendar: calendar, seed: seed, now: now,
-               generated: generated, playedKeys: playedKeys).questions
+               generated: generated, playedKeys: playedKeys, focus: focus).questions
     }
 
     /// The slots the next quiz plans (homework, due notions, programme) and
@@ -471,7 +546,8 @@ final class QuizSession: QuizPlaying {
     private static func select(for child: Child, in context: ModelContext, curriculum: CurriculumSnapshot,
                                calendar: Calendar, seed: UInt64, now: Date,
                                generated: [String: QuizQuestion],
-                               playedKeys playedOverride: Set<String>? = nil) -> Selection {
+                               playedKeys playedOverride: Set<String>? = nil,
+                               focus: QuizFocus? = nil) -> Selection {
         let level = CurriculumService.canonicalLevel(child.grade)
         guard CurriculumService.revisionLevels.contains(level) else { return Selection() }
         var items = availableItems(level: level, in: context, now: now)
@@ -483,6 +559,12 @@ final class QuizSession: QuizPlaying {
                 items = availableItems(level: level, in: context, now: now)
             }
         }
+        // A chosen subject / theme: only its items, and only the plan slots
+        // about it (its homework, its due notions, its programme).
+        let focused = focus.map(focusSlot)
+        if let focused {
+            items = items.filter { matches($0, focused) }
+        }
         guard !items.isEmpty else { return Selection() }
 
         let playedKeys = playedOverride
@@ -492,7 +574,10 @@ final class QuizSession: QuizPlaying {
         let ordered = shuffled.filter { !playedKeys.contains($0.questionKey) }
             + shuffled.filter { playedKeys.contains($0.questionKey) }
 
-        let (plan, position) = Self.plan(for: child, curriculum: curriculum, calendar: calendar, now: now)
+        let (fullPlan, position) = Self.plan(for: child, curriculum: curriculum, calendar: calendar, now: now)
+        let plan = focused.map { focused in
+            QuizPlan(slots: fullPlan.slots.filter { slotMatches($0, focused) }, isEligible: fullPlan.isEligible)
+        } ?? fullPlan
         let period = PeriodRank.currentPeriod(now: now, level: level, calendar: calendar)
         let eligible = QuizSourceSelector.programmeEligibility(
             level: level, position: position, currentPeriod: period,
@@ -524,7 +609,11 @@ final class QuizSession: QuizPlaying {
         let anchoredSlots = plan.slots.filter { $0.isHomework || $0.origin == .dueNotion }
         for item in ordered where selection.questions.count < questionCount && !usedKeys.contains(item.questionKey) {
             let theme = item.theme.flatMap { $0.isEmpty ? nil : $0 }
-            guard eligible(item.subject ?? "", theme) || anchoredSlots.contains(where: { matches(item, $0) })
+            // A theme the child picked is played even before the cahier de
+            // textes mentions it (Parcours only offers themes already met).
+            let picked = focus?.theme != nil && focused.map { matches(item, $0) } == true
+            guard picked || eligible(item.subject ?? "", theme)
+                    || anchoredSlots.contains(where: { matches(item, $0) })
             else { continue }
             selection.questions.append(question(from: item, level: level))
             usedKeys.insert(item.questionKey)
@@ -541,6 +630,23 @@ final class QuizSession: QuizPlaying {
                             choices: item.choices, answerIndex: item.answerIndex,
                             explanation: item.explanation, subject: item.subject, theme: item.theme,
                             notionKey: notionKey, difficulty: item.difficulty)
+    }
+
+    private static func focusSlot(_ focus: QuizFocus) -> QuizPlanSlot {
+        QuizPlanSlot(origin: .programme, subject: focus.subject, theme: focus.theme, keywords: [],
+                     homeworkKey: nil, notionKey: nil)
+    }
+
+    /// A plan slot about the focused subject (and theme, when one is set).
+    /// A homework slot with no theme matches a theme focus too: its bank
+    /// items are filtered by the focus anyway.
+    private static func slotMatches(_ slot: QuizPlanSlot, _ focused: QuizPlanSlot) -> Bool {
+        let subjects = { (label: String) in
+            Set([SubjectAlias.compact(label)] + SubjectAlias.canonicalNames(for: label).map(SubjectAlias.compact))
+        }
+        guard !subjects(slot.subject).isDisjoint(with: subjects(focused.subject)) else { return false }
+        guard let theme = focused.theme, let slotTheme = slot.theme else { return true }
+        return SubjectAlias.fold(slotTheme) == SubjectAlias.fold(theme)
     }
 
     /// Subject equality is folded and alias-aware (a homework slot keeps the

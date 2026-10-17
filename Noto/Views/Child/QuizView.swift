@@ -7,6 +7,8 @@ import SwiftData
 /// Child mode: every string addresses the child (tutoiement).
 struct QuizView: View {
     let child: Child
+    /// A subject or theme the child picked; nil = the quiz of the day.
+    var focus: QuizFocus?
     /// Injected by previews / tests; production draws a random seed.
     var seed: UInt64?
 
@@ -61,10 +63,10 @@ struct QuizView: View {
         let generator = QuizGenerator()
         if let seed {
             session = await QuizSession.make(child: child, modelContext: modelContext, config: config, seed: seed,
-                                             onMinutesEarned: credit, generator: generator)
+                                             onMinutesEarned: credit, generator: generator, focus: focus)
         } else {
             session = await QuizSession.make(child: child, modelContext: modelContext, config: config,
-                                             onMinutesEarned: credit, generator: generator)
+                                             onMinutesEarned: credit, generator: generator, focus: focus)
         }
     }
 

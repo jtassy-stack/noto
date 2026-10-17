@@ -2,20 +2,29 @@ import SwiftUI
 
 /// « Réviser », the child app's second tab: everything that is played.
 /// The quiz of the day says what it is made of (`QuizSession.plan`: homework,
-/// notions to review, programme), then the themes taught in class now (from
-/// the cahier de textes, `ProgrammePosition`), then « Pour le plaisir »: the
+/// notions to review, programme), then « Une matière »: a quiz on one
+/// subject, with the theme taught in class now (cahier de textes,
+/// `ProgrammePosition`), then « Pour le plaisir »: the
 /// culture question of the day and the culture G quiz, reward-free as
 /// before. Child mode, tutoiement.
 struct ChildReviseView: View {
     let child: Child?
     let plan: (plan: QuizPlan, position: ProgrammePosition)?
+    /// Subjects with at least one question.
+    let subjects: [SubjectChoice]
     let canQuiz: Bool
     let cultureQuestion: DailyCultureQuestion?
     let cultureQuizEnabled: Bool
-    let onStartQuiz: () -> Void
+    /// Nil = the quiz of the day.
+    let onStartQuiz: (QuizFocus?) -> Void
     let onCultureAnswer: (Int) -> Void
-    /// Opens « Parcours » on that subject.
-    let onOpenSubject: (String) -> Void
+
+    struct SubjectChoice: Identifiable, Equatable, Sendable {
+        let subject: String
+        /// Theme taught in class now, when the cahier de textes says.
+        let inClass: String?
+        var id: String { subject }
+    }
 
     @State private var showCultureQuiz = false
 
@@ -30,8 +39,8 @@ struct ChildReviseView: View {
 
                 dailyQuizCard
 
-                if let position = plan?.position, position.hasAny {
-                    inClassSection(position)
+                if canQuiz, !subjects.isEmpty {
+                    subjectSection
                 }
 
                 if cultureQuestion != nil || cultureQuizEnabled {
@@ -82,7 +91,7 @@ struct ChildReviseView: View {
                     .accessibilityElement(children: .combine)
                 }
 
-                ChildPrimaryButton(title: "Commencer", systemImage: "sparkles", action: onStartQuiz)
+                ChildPrimaryButton(title: "Commencer", systemImage: "sparkles") { onStartQuiz(nil) }
                     .accessibilityHint("Lance le quiz du jour")
             }
             .padding(NotoTheme.Spacing.md)
@@ -95,27 +104,27 @@ struct ChildReviseView: View {
         }
     }
 
-    // MARK: - En classe en ce moment
+    // MARK: - Une matière
 
-    private func inClassSection(_ position: ProgrammePosition) -> some View {
+    private var subjectSection: some View {
         VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
-            Text("En classe en ce moment")
+            Text("Une matière")
                 .childSectionLabel()
                 .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
-                ForEach(Array(position.orderedSubjects.enumerated()), id: \.element.subject) { index, subject in
+                ForEach(Array(subjects.enumerated()), id: \.element.id) { index, choice in
                     if index > 0 { SettingsDivider() }
                     Button {
-                        onOpenSubject(subject.subject)
+                        onStartQuiz(QuizFocus(subject: choice.subject))
                     } label: {
                         HStack(spacing: NotoTheme.Spacing.md) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(subject.subject)
+                                Text(choice.subject)
                                     .font(ChildStyle.subject)
                                     .foregroundStyle(NotoTheme.Colors.textPrimary)
-                                if let theme = subject.current.first?.theme {
-                                    Text(theme)
+                                if let theme = choice.inClass {
+                                    Text("En classe : \(theme)")
                                         .font(ChildStyle.caption)
                                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                                         .multilineTextAlignment(.leading)
@@ -135,7 +144,7 @@ struct ChildReviseView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
-                    .accessibilityHint("Ouvre ton parcours dans cette matière")
+                    .accessibilityHint("Lance un quiz sur cette matière")
                 }
             }
             .notoCard()

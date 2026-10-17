@@ -40,6 +40,14 @@ struct QuizResultView: View {
                     xpCard
                 }
 
+                if !result.notions.isEmpty {
+                    notionsSection
+                }
+
+                ForEach(result.newBadges) { badge in
+                    newBadgeCard(badge)
+                }
+
                 VStack(spacing: NotoTheme.Spacing.sm) {
                     ChildPrimaryButton(title: "Terminer", action: onDone)
                     if let onAnotherQuiz {
@@ -108,7 +116,81 @@ struct QuizResultView: View {
         .accessibilityLabel(Self.xpAccessibilityLabel(for: result))
     }
 
+    /// « Tes notions »: where each notion of the quiz stands now, and when a
+    /// missed one comes back (Leitner). Cobalt, never red: a notion to see
+    /// again is an information.
+    private var notionsSection: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            Text("Tes notions")
+                .childSectionLabel()
+                .padding(.horizontal, NotoTheme.Spacing.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                ForEach(Array(result.notions.enumerated()), id: \.element.id) { index, notion in
+                    if index > 0 { SettingsDivider() }
+                    HStack(spacing: NotoTheme.Spacing.sm) {
+                        Circle()
+                            .fill(notion.isMastered ? NotoTheme.Colors.success : NotoTheme.Colors.info)
+                            .frame(width: 10, height: 10)
+                            .accessibilityHidden(true)
+                        Text(notion.theme)
+                            .font(ChildStyle.body)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: NotoTheme.Spacing.sm)
+                        Text(Self.notionStatus(notion, now: Date(), calendar: .current))
+                            .font(ChildStyle.caption)
+                            .foregroundStyle(notion.isMastered ? NotoTheme.Colors.success : NotoTheme.Colors.info)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .padding(.horizontal, NotoTheme.Spacing.md)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: ChildStyle.minTapTarget)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .notoCard()
+        }
+    }
+
+    private func newBadgeCard(_ badge: EarnedBadge) -> some View {
+        HStack(spacing: NotoTheme.Spacing.sm) {
+            Image(systemName: BadgeCopy.symbol(for: badge.kind))
+                .font(.system(.title2))
+                .foregroundStyle(BadgeCopy.tint(for: badge.kind))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nouveau badge")
+                    .font(ChildStyle.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                Text(BadgeCopy.title(for: badge.kind))
+                    .font(ChildStyle.body)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(NotoTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .signalCard(.info)
+        .accessibilityElement(children: .combine)
+    }
+
     // MARK: - Copy (pure, tested through `QuizResultCopyTests`)
+
+    /// « maîtrisée », « en progrès », else when the missed notion comes back.
+    static func notionStatus(_ notion: NotionOutcome, now: Date, calendar: Calendar) -> String {
+        if notion.isMastered { return "maîtrisée" }
+        if notion.correct { return "en progrès" }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
+                                           to: calendar.startOfDay(for: notion.nextReview)).day ?? 0
+        switch days {
+        case ...0: return "à revoir bientôt"
+        case 1: return "revient demain"
+        default: return "revient dans \(days) jours"
+        }
+    }
+
 
     /// « 4 bonnes réponses sur 5 ».
     static func scoreLine(for result: QuizSessionResult) -> String {
