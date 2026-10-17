@@ -119,20 +119,7 @@ enum MonLyceeMailParser {
 
     /// Reduces the webmail's HTML body to the plain text the feed renders.
     static func plainText(fromHTML html: String) -> String {
-        var text = html
-            .replacingOccurrences(of: "<(style|script)[^>]*>[\\s\\S]*?</\\1>", with: "",
-                                  options: [.regularExpression, .caseInsensitive])
-            .replacingOccurrences(of: "<br\\s*/?>", with: "\n", options: [.regularExpression, .caseInsensitive])
-            .replacingOccurrences(of: "</(p|div|li|tr|h[1-6])>", with: "\n", options: [.regularExpression, .caseInsensitive])
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        for (entity, char) in [("&nbsp;", " "), ("&quot;", "\""), ("&#039;", "'"), ("&#39;", "'"),
-                               ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")] {
-            text = text.replacingOccurrences(of: entity, with: char)
-        }
-        return text
-            .replacingOccurrences(of: "[ \\t]+\n", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        HTMLText.plainText(fromHTML: html)
     }
 
     // MARK: Helpers

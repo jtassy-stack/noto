@@ -329,6 +329,7 @@ struct SchoolbookWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
@@ -337,6 +338,28 @@ struct SchoolbookWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Un lien touché dans le carnet s'ouvre dans le navigateur (ou Mail)
+    /// au lieu de remplacer le contenu de la WebView, sans retour possible.
+    /// Seuls http/https/mailto sont suivis ; le reste est ignoré.
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated else {
+                decisionHandler(.allow)
+                return
+            }
+            if let url = navigationAction.request.url, LinkDetector.isAllowed(url) {
+                UIApplication.shared.open(url)
+            }
+            decisionHandler(.cancel)
+        }
     }
 }
 

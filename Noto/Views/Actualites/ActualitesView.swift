@@ -537,9 +537,7 @@ private struct FeedItemRow: View {
 
     /// Strip HTML tags for body preview.
     private var bodyPreview: String {
-        msg.body
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        HTMLText.plainText(fromHTML: msg.body)
     }
 
     private var relativeTimestamp: String {
@@ -686,9 +684,7 @@ struct FeedMessageDetailView: View {
     @State private var showSafari = false
 
     private var bodyText: String {
-        msg.body
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        HTMLText.plainText(fromHTML: msg.body)
     }
 
     var body: some View {
@@ -716,7 +712,7 @@ struct FeedMessageDetailView: View {
 
                 // Body
                 if !bodyText.isEmpty {
-                    Text(bodyText)
+                    LinkifiedText(bodyText)
                         .font(NotoTheme.Typography.body)
                         .foregroundStyle(NotoTheme.Colors.textPrimary)
                         .textSelection(.enabled)
