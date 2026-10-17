@@ -124,6 +124,38 @@ final class QuizAPIClient: Sendable {
         }
     }
 
+    // MARK: - Culture bank (GET)
+
+    /// Largest page the culture bank serves (contract §12, `limit` 1…500).
+    static let cultureBankLimit = 500
+
+    /// Every reviewed culture G question of the celyn pool, paged:
+    /// `GET /api/quiz/v2/bank/culture?app=noto&limit=<n>[&cursor=<c>]`
+    /// (contract §12). The request carries ONLY `app`, `limit` and the
+    /// opaque `cursor` from the previous page: nothing about the child.
+    /// Without `cursor` celyn answers a full sync (`removed` always empty);
+    /// with one, the rows changed since plus tombstones. `hasMore` is the
+    /// only end-of-sync signal (`count` may be below `limit`).
+    func cultureBank(limit: Int = cultureBankLimit, cursor: String? = nil) async throws -> CultureBankResponse {
+        let clamped = min(max(limit, 1), Self.cultureBankLimit)
+        var params = [
+            URLQueryItem(name: "app", value: Self.app),
+            URLQueryItem(name: "limit", value: String(clamped)),
+        ]
+        if let cursor, !cursor.isEmpty { params.append(URLQueryItem(name: "cursor", value: cursor)) }
+        var request = URLRequest(url: url(path: "/quiz/v2/bank/culture", params: params))
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let data = try await send(request, expecting: [200])
+        do {
+            return try JSONDecoder().decode(CultureBankResponse.self, from: data)
+        } catch {
+            throw QuizAPIError.decoding(error)
+        }
+    }
+
     // MARK: - Report (POST)
 
     /// Flags a wrong or inappropriate question:
@@ -415,6 +447,66 @@ struct CultureLotResponse: Decodable, Sendable, Equatable {
         init(from decoder: Decoder) throws {
             value = try? T(from: decoder)
         }
+    }
+}
+
+/// `GET /api/quiz/v2/bank/culture` 200 (celyn `CultureBankResponse`,
+/// contract §12). Tolerant like the lot: an unreadable item or tombstone is
+/// dropped, never the page.
+struct CultureBankResponse: Decodable, Sendable, Equatable {
+    let items: [CultureBankItem]
+    let removed: [BankRemovedDto]
+    /// Opaque keyset position after this page; keep it for the next call.
+    let cursor: String?
+    let hasMore: Bool
+
+    private enum CodingKeys: String, CodingKey { case items, removed, cursor, hasMore }
+
+    init(items: [CultureBankItem], removed: [BankRemovedDto] = [], cursor: String?, hasMore: Bool) {
+        self.items = items
+        self.removed = removed
+        self.cursor = cursor
+        self.hasMore = hasMore
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        items = (try c.decodeIfPresent([Lossy<CultureBankItem>].self, forKey: .items) ?? []).compactMap(\.value)
+        removed = (try c.decodeIfPresent([Lossy<BankRemovedDto>].self, forKey: .removed) ?? []).compactMap(\.value)
+        cursor = try? c.decodeIfPresent(String.self, forKey: .cursor)
+        hasMore = (try? c.decodeIfPresent(Bool.self, forKey: .hasMore)) ?? false
+    }
+
+    private struct Lossy<T: Decodable & Sendable>: Decodable, Sendable {
+        let value: T?
+        init(from decoder: Decoder) throws {
+            value = try? T(from: decoder)
+        }
+    }
+}
+
+/// One culture bank question (`CultureBankQuizDto`): the lot fields nōto
+/// already reads, plus the apps whose lots served it and its generation day.
+struct CultureBankItem: Decodable, Sendable, Equatable {
+    let quiz: CultureLotQuizDto
+    /// Apps whose daily lot served it, sorted; [] = pooled, never in a lot.
+    let apps: [String]
+    /// YYYY-MM-DD, Paris day the question was (re)generated.
+    let generatedOn: String
+
+    private enum CodingKeys: String, CodingKey { case apps, generatedOn }
+
+    init(quiz: CultureLotQuizDto, apps: [String] = [], generatedOn: String) {
+        self.quiz = quiz
+        self.apps = apps
+        self.generatedOn = generatedOn
+    }
+
+    init(from decoder: Decoder) throws {
+        quiz = try CultureLotQuizDto(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        apps = (try? c.decodeIfPresent([String].self, forKey: .apps)) ?? []
+        generatedOn = try c.decode(String.self, forKey: .generatedOn)
     }
 }
 

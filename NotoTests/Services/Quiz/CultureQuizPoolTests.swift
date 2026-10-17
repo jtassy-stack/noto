@@ -184,9 +184,10 @@ struct CultureQuizFilterTests {
     }
 }
 
-/// `CultureQuizPoolStore.refresh`: GET-only lots of the three Koi apps
-/// through `QuizStubProtocol`, today first then the backfill, 404 marked,
-/// offline stops the round. Nested in `QuizBankSuites` (static stub).
+/// `CultureQuizPoolStore.refresh`: GET-only culture bank sync, then the lots
+/// of the three Koi apps when the bank is unavailable (today first then the
+/// backfill, 404 marked), offline stops the round. Through
+/// `QuizStubProtocol`; nested in `QuizBankSuites` (static stub).
 extension QuizBankSuites {
 @MainActor
 @Suite("Culture G quiz — local pool")
@@ -206,6 +207,7 @@ struct CultureQuizPoolStoreTests {
     /// One quiz per lot, id derived from the app and date so merges are distinct.
     /// Nonisolated: called from the stub handler, a `@Sendable` nonisolated closure.
     nonisolated private static func lot(for request: URLRequest) -> QuizStubProtocol.Stub {
+        if request.url?.path == bankPath { return .json(#"{"error":"Not found"}"#, status: 404) }
         let query = request.queryMap
         let app = query["app"] ?? "?"
         let date = query["date"] ?? "2023-11-14"
@@ -225,13 +227,14 @@ struct CultureQuizPoolStoreTests {
         #expect(request.queryMap == ["app": "sirius", "date": "2023-11-10"])
     }
 
-    @Test("first refresh: today's 3 lots first, then 14 past days per app; second refresh is free")
+    @Test("no bank (404): today's 3 lots first, then 14 past days per app; second refresh is free")
     func backfill() async throws {
         QuizStubProtocol.install { Self.lot(for: $0) }
         defer { QuizStubProtocol.reset() }
         try await withStore { store in
             let pool = await store.refresh(client: stubbedQuizClient(), now: now, calendar: calendar)
-            let requests = QuizStubProtocol.requests
+            #expect(QuizStubProtocol.requests.first?.url?.path == Self.bankPath)
+            let requests = Array(QuizStubProtocol.requests.dropFirst())
             #expect(requests.count == 3 + 3 * CultureQuizPoolStore.backfillDays)
             #expect(requests.prefix(3).map { $0.queryMap } == QuizAPIClient.cultureLotApps.map { ["app": $0] })
             #expect(requests.dropFirst(3).allSatisfy { $0.queryMap["date"] != nil })
@@ -268,6 +271,156 @@ struct CultureQuizPoolStoreTests {
                                               calendar: calendar)
             #expect(!retried.isEmpty)
         }
+    }
+
+    // MARK: Culture bank
+
+    nonisolated static let bankPath = "/api/quiz/v2/bank/culture"
+
+    nonisolated private static func id(_ n: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-4000-8000-%012ld", n))!
+    }
+
+    /// One `CultureBankQuizDto` as JSON, every contract key present.
+    nonisolated private static func bankItem(_ n: Int, apps: [String] = ["sirius"], kind: String = "catalogue",
+                                             generatedOn: String = "2023-11-10",
+                                             validUntil: String? = nil) -> String {
+        let appsJSON = apps.map { "\"\($0)\"" }.joined(separator: ",")
+        return """
+        {"id": "\(id(n).uuidString.lowercased())", "questionKey": "k\(n)", "source": "catalogue",
+         "apps": [\(appsJSON)], "domain": "livres", "kind": "\(kind)", "tone": "histoire", "horizon": null,
+         "difficulty": 2, "question": "Question \(n) ?", "choices": ["A", "B", "C", "D"], "answerIndex": 1,
+         "explanation": null, "oeuvreId": null, "oeuvreTitle": null, "imageUrl": null,
+         "generatedOn": "\(generatedOn)", "validUntil": \(validUntil.map { "\"\($0)\"" } ?? "null"),
+         "reviewMethod": "jev", "reviewConfidence": 0.95, "updatedAt": "2023-11-14T10:00:00.000Z"}
+        """
+    }
+
+    nonisolated private static func bankPage(_ items: [String], removed: [Int] = [], cursor: String?,
+                                             hasMore: Bool) -> QuizStubProtocol.Stub {
+        let removedJSON = removed.map {
+            #"{"id": "\#(id($0).uuidString.lowercased())", "questionKey": "k\#($0)", "updatedAt": "2023-11-14T11:00:00.000Z"}"#
+        }
+        return .json("""
+        {"app": "noto", "count": \(items.count), "items": [\(items.joined(separator: ","))],
+         "removed": [\(removedJSON.joined(separator: ","))],
+         "cursor": \(cursor.map { "\"\($0)\"" } ?? "null"), "hasMore": \(hasMore)}
+        """)
+    }
+
+    @Test("cultureBank sends only app=noto, limit and the cursor")
+    func bankRequest() async throws {
+        QuizStubProtocol.install { _ in Self.bankPage([], cursor: nil, hasMore: false) }
+        defer { QuizStubProtocol.reset() }
+        let client = stubbedQuizClient()
+        _ = try await client.cultureBank()
+        _ = try await client.cultureBank(limit: 9_999, cursor: "c1")
+        let requests = QuizStubProtocol.requests
+        #expect(requests.allSatisfy { $0.httpMethod == "GET" && $0.url?.path == Self.bankPath })
+        #expect(requests.map(\.queryMap) == [["app": "noto", "limit": "500"],
+                                             ["app": "noto", "limit": "500", "cursor": "c1"]])
+    }
+
+    @Test("bank decoding drops an unreadable item, never the page")
+    func bankLossy() throws {
+        let json = """
+        {"app": "noto", "count": 2, "items": [\(Self.bankItem(1)), {"id": "nope"}], "removed": [],
+         "cursor": null, "hasMore": false}
+        """
+        let page = try JSONDecoder().decode(CultureBankResponse.self, from: Data(json.utf8))
+        #expect(page.items.map(\.quiz.id) == [Self.id(1)])
+        #expect(page.items.first?.apps == ["sirius"])
+        #expect(page.items.first?.generatedOn == "2023-11-10")
+    }
+
+    @Test("full bank sync: pages until hasMore is false, replaces the pool, skips the lots")
+    func bankFullSync() async throws {
+        QuizStubProtocol.install { request in
+            guard request.url?.path == Self.bankPath else { return Self.lot(for: request) }
+            switch request.queryMap["cursor"] {
+            case nil: return Self.bankPage([Self.bankItem(1), Self.bankItem(2, apps: [])], cursor: "p1", hasMore: true)
+            case "p1": return Self.bankPage([Self.bankItem(3, apps: ["keskonfe", "sirius"])], cursor: "p2", hasMore: false)
+            default: return .json("{}", status: 500)
+            }
+        }
+        defer { QuizStubProtocol.reset() }
+        try await withStore { store in
+            var seeded = CultureQuizPoolStore.Snapshot()
+            seeded.entries = [CultureQuizEntry(quiz: CultureLotFixtures.quiz(CultureLotFixtures.idA),
+                                               app: "keskonfe", lotDate: "2023-11-13")]
+            store.save(seeded)
+
+            let pool = await store.refresh(client: stubbedQuizClient(), now: now, calendar: calendar)
+            #expect(QuizStubProtocol.requests.allSatisfy { $0.url?.path == Self.bankPath })
+            #expect(QuizStubProtocol.requests.count == 2)
+            #expect(pool.map(\.id) == [Self.id(1), Self.id(2), Self.id(3)])
+            #expect(pool.map(\.app) == ["sirius", CultureQuizPoolStore.bankApp, "keskonfe"])
+            #expect(pool.allSatisfy { $0.fromBank == true && $0.lotDate == "2023-11-10" })
+            #expect(store.load().bankCursor == "p2")
+
+            QuizStubProtocol.install { _ in .offline() }
+            _ = await store.refresh(client: stubbedQuizClient(), now: now.addingTimeInterval(600), calendar: calendar)
+            #expect(QuizStubProtocol.requests.isEmpty)
+        }
+    }
+
+    @Test("incremental bank sync: sends the saved cursor, merges and applies tombstones")
+    func bankIncremental() async throws {
+        QuizStubProtocol.install { _ in
+            Self.bankPage([Self.bankItem(1), Self.bankItem(2)], cursor: "p1", hasMore: false)
+        }
+        defer { QuizStubProtocol.reset() }
+        try await withStore { store in
+            _ = await store.refresh(client: stubbedQuizClient(), now: now, calendar: calendar)
+            QuizStubProtocol.install { _ in Self.bankPage([Self.bankItem(3)], removed: [1], cursor: "p2", hasMore: false) }
+            let pool = await store.refresh(client: stubbedQuizClient(),
+                                           now: now.addingTimeInterval(CultureQuizPoolStore.bankRefreshInterval),
+                                           calendar: calendar)
+            #expect(QuizStubProtocol.requests.map { $0.queryMap["cursor"] } == ["p1"])
+            #expect(pool.map(\.id) == [Self.id(2), Self.id(3)])
+            #expect(store.load().bankCursor == "p2")
+        }
+    }
+
+    @Test("a refused cursor (400) restarts a full sync")
+    func bankStaleCursor() async throws {
+        QuizStubProtocol.install { request in
+            request.queryMap["cursor"] == nil
+                ? Self.bankPage([Self.bankItem(4)], cursor: "fresh", hasMore: false)
+                : .json(#"{"error":"invalid cursor"}"#, status: 400)
+        }
+        defer { QuizStubProtocol.reset() }
+        try await withStore { store in
+            var seeded = CultureQuizPoolStore.Snapshot()
+            seeded.bankCursor = "stale"
+            store.save(seeded)
+            let pool = await store.refresh(client: stubbedQuizClient(), now: now, calendar: calendar)
+            #expect(QuizStubProtocol.requests.map { $0.queryMap["cursor"] } == ["stale", nil])
+            #expect(pool.map(\.id) == [Self.id(4)])
+            #expect(store.load().bankCursor == "fresh")
+        }
+    }
+
+    @Test("bank questions skip the retention cutoff; their actus still expire")
+    func bankRetention() {
+        let today = CalendarDay(key: "2026-10-17")!
+        var snapshot = CultureQuizPoolStore.Snapshot()
+        snapshot.entries = [
+            CultureQuizEntry(quiz: CultureLotFixtures.quiz(CultureLotFixtures.idA), app: "koi",
+                             lotDate: "2020-01-01", fromBank: true),
+            CultureQuizEntry(quiz: CultureLotFixtures.quiz(CultureLotFixtures.idB, validUntil: "2026-10-12"),
+                             app: "sirius", lotDate: "2026-10-10", fromBank: true),
+        ]
+        CultureQuizPoolStore.prune(&snapshot, today: today, calendar: calendar)
+        #expect(snapshot.entries.map(\.id) == [CultureLotFixtures.idA])
+    }
+
+    @Test("a pool saved before the bank still loads")
+    func legacySnapshot() throws {
+        let json = #"{"entries": [], "fetchedDays": ["keskonfe|2023-11-13"], "todayFetchedAt": {}}"#
+        let snapshot = try JSONDecoder().decode(CultureQuizPoolStore.Snapshot.self, from: Data(json.utf8))
+        #expect(snapshot.fetchedDays == ["keskonfe|2023-11-13"])
+        #expect(snapshot.bankCursor == nil && snapshot.bankSyncedAt == nil)
     }
 
     @Test("prune drops out-of-date questions and the ones past retention")
