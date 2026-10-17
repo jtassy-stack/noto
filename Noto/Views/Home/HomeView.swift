@@ -196,6 +196,28 @@ struct HomeView: View {
                             TimelineView(children: scopedChildren)
                         }
 
+                        // MARK: Cette semaine — data viz par enfant
+                        if !scopedChildren.isEmpty {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("CETTE SEMAINE")
+                                    .sectionLabelStyle()
+                                Spacer()
+                                Text(ParentWeekReport.weekRangeText(now: .now, calendar: .current))
+                                    .font(NotoTheme.Typography.caption)
+                                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            }
+
+                            ForEach(scopedChildren) { child in
+                                if scopedChildren.count > 1 {
+                                    Text(child.firstName)
+                                        .font(NotoTheme.Typography.childName)
+                                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                ParentWeekSection(child: child)
+                            }
+                        }
+
                         // MARK: Discover teaser
                         if let teaser = engine.cards.first(where: { $0.type == .cultureReco }) {
                             Text("DÉCOUVRIR")
