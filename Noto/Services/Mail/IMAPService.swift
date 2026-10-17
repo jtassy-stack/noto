@@ -88,6 +88,26 @@ enum IMAPService {
         try saveConfigs(configs)
     }
 
+    /// Re-assigns one account in place (order preserved — `addConfig`
+    /// would move it to the end). The password never leaves the blob.
+    static func updateAssignment(id: UUID, to assignment: MailboxAssignment) throws {
+        var configs = loadConfigs()
+        guard let index = configs.firstIndex(where: { $0.id == id }),
+              configs[index].assignment != assignment else { return }
+        configs[index].assignment = assignment
+        try saveConfigs(configs)
+    }
+
+    /// Called when a child is deleted: accounts assigned to it fall back to
+    /// "Tous les enfants". Sync and UI already resolve a dangling id that
+    /// way; this keeps the stored blob truthful too.
+    static func reassignOrphans(removedChildID: String) throws {
+        let configs = loadConfigs()
+        let repaired = MailboxRouting.repairingOrphans(configs, removedChildID: removedChildID)
+        guard repaired != configs else { return }
+        try saveConfigs(repaired)
+    }
+
     static func clearAllConfigs() throws {
         var firstError: Error?
         for key in [accountsKey, keychainKey, legacyMonLyceeKey] {

@@ -1586,35 +1586,20 @@ private struct MessagesListView: View {
 
         let directorySchools = await DirectorySchoolCache.schools(for: children)
         let service = IMAPSyncService(modelContext: modelContext)
-        var accountErrors: [(account: String, detail: String)] = []
-        var anySuccess = false
+        // Each account goes where its assignment says (every child, one
+        // child, or the parent lane) — see `MailboxRouting.target`.
+        let result = await service.syncAccounts(
+            configs,
+            children: children,
+            family: children.first?.family,
+            directorySchools: directorySchools
+        )
 
-        for config in configs {
-            let fetched: [IMAPMessageInfo]
-            do {
-                fetched = try await Task.detached(priority: .userInitiated) {
-                    try await IMAPService.fetchInbox(config: config)
-                }.value
-            } catch {
-                accountErrors.append((config.username, error.localizedDescription))
-                continue
-            }
-
-            for child in children {
-                do {
-                    try await service.process(child: child, config: config, fetched: fetched, directorySchools: directorySchools)
-                    anySuccess = true
-                } catch {
-                    accountErrors.append((config.username, error.localizedDescription))
-                }
-            }
-        }
-
-        if anySuccess {
+        if result.anySuccess {
             lastSyncDateInterval = Date.now.timeIntervalSince1970
         }
-        if !accountErrors.isEmpty {
-            syncError = accountErrors.map { "\($0.account): \($0.detail)" }.joined(separator: "\n")
+        if !result.errors.isEmpty {
+            syncError = result.errors.map { "\($0.account): \($0.detail)" }.joined(separator: "\n")
         }
     }
 }

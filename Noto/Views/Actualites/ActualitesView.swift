@@ -71,20 +71,27 @@ struct ActualitesView: View {
         families.first?.children ?? []
     }
 
-    private func avatarColor(for child: Child) -> Color {
+    private typealias FeedItem = (child: Child?, msg: Message)
+
+    private func avatarColor(for child: Child?) -> Color {
+        guard let child else { return NotoTheme.Colors.textSecondary }
         let idx = children.firstIndex(where: { $0.persistentModelID == child.persistentModelID }) ?? 0
         return Self.avatarColors[idx % Self.avatarColors.count]
     }
 
     // MARK: - Filtered items
 
-    private var allItems: [(child: Child, msg: Message)] {
-        children.flatMap { child in
-            child.messages.map { (child: child, msg: $0) }
-        }.sorted { $0.msg.date > $1.msg.date }
+    /// `child == nil` marks parent-lane mail (`Family.messages`, IMAP
+    /// accounts assigned to "Parent"), shown with a "Parent" tag.
+    private var allItems: [FeedItem] {
+        let childItems: [FeedItem] = children.flatMap { child in
+            child.messages.map { (child: Optional(child), msg: $0) }
+        }
+        let parentItems: [FeedItem] = (families.first?.messages ?? []).map { (child: nil, msg: $0) }
+        return (childItems + parentItems).sorted { $0.msg.date > $1.msg.date }
     }
 
-    private var filteredItems: [(child: Child, msg: Message)] {
+    private var filteredItems: [FeedItem] {
         switch activeFilter {
         case .tous:
             return allItems
@@ -99,9 +106,9 @@ struct ActualitesView: View {
 
     // MARK: - Date grouping
 
-    private var groupedItems: [(header: String, items: [(child: Child, msg: Message)])] {
-        var groups: [(header: String, items: [(child: Child, msg: Message)])] = []
-        var current: (header: String, items: [(child: Child, msg: Message)])?
+    private var groupedItems: [(header: String, items: [FeedItem])] {
+        var groups: [(header: String, items: [FeedItem])] = []
+        var current: (header: String, items: [FeedItem])?
 
         for item in filteredItems {
             let header = sectionHeader(for: item.msg.date)
@@ -222,41 +229,33 @@ struct ActualitesView: View {
     /// Pronote child that shares the family mailbox. Previous behaviour
     /// opened a fresh connection + LOGIN + FETCH 50 for each child,
     /// adding 2-3s of round-trip per sibling.
+    ///
+    /// Every configured account is synced (previously only the first one),
+    /// each routed by its `MailboxAssignment`: "Tous les enfants" keeps the
+    /// historical Pronote-children pool, an explicit child is honoured
+    /// whatever its school type, and "Parent" lands in `Family.messages`.
     @MainActor
     private func syncIMAPOnce(for pronoteChildren: [Child]) async {
-        guard !pronoteChildren.isEmpty else { return }
-        guard let config = IMAPService.loadConfig() else { return }
+        let configs = IMAPService.loadConfigs()
+        guard !configs.isEmpty, !children.isEmpty else { return }
 
         // Pre-fetch the directory cache so each per-child whitelist uses
-        // the authoritative mailDomains when an RNE is linked.
-        let directorySchools = await DirectorySchoolCache.schools(for: pronoteChildren)
-
-        let fetched: [IMAPMessageInfo]
-        do {
-            fetched = try await IMAPService.fetchInbox(config: config)
-        } catch {
-            NSLog("[noto][error] IMAP fetch failed: %@", error.localizedDescription)
-            let detail = error.localizedDescription
-            syncError = detail.isEmpty ? "Erreur de synchronisation des messages." : detail
-            return
-        }
+        // the authoritative mailDomains when an RNE is linked. All
+        // children: an explicit assignment / the parent lane may need them.
+        let directorySchools = await DirectorySchoolCache.schools(for: children)
 
         let service = IMAPSyncService(modelContext: modelContext)
-        for child in pronoteChildren {
-            do {
-                try service.process(
-                    child: child,
-                    config: config,
-                    fetched: fetched,
-                    directorySchools: directorySchools
-                )
-            } catch {
-                NSLog("[noto][error] IMAP process failed for %@: %@", child.firstName, error.localizedDescription)
-                // `emptyWhitelist` ships actionable copy pointing to Settings;
-                // others fall through to a generic message.
-                let detail = error.localizedDescription
-                syncError = detail.isEmpty ? "Erreur de synchronisation des messages." : detail
-            }
+        let result = await service.syncAccounts(
+            configs,
+            children: children,
+            defaultChildren: pronoteChildren,
+            family: families.first,
+            directorySchools: directorySchools
+        )
+        // `emptyWhitelist` ships actionable copy pointing to Settings;
+        // others fall through to a generic message.
+        if let detail = result.errors.last?.detail {
+            syncError = detail.isEmpty ? "Erreur de synchronisation des messages." : detail
         }
     }
 
@@ -439,11 +438,12 @@ struct ActualitesView: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            path.append(
-                                item.msg.kind == .schoolbook
-                                    ? .schoolbook(child: item.child, msg: item.msg)
-                                    : .conversation(item.msg)
-                            )
+                            // Parent-lane rows are always conversations.
+                            if item.msg.kind == .schoolbook, let child = item.child {
+                                path.append(.schoolbook(child: child, msg: item.msg))
+                            } else {
+                                path.append(.conversation(item.msg))
+                            }
                         }
                         .swipeActions(edge: .leading) {
                             if !item.msg.read {
@@ -532,8 +532,11 @@ private struct FilterChip: View {
 
 private struct FeedItemRow: View {
     let msg: Message
-    let child: Child
+    /// nil → parent-lane mail (IMAP account assigned to "Parent").
+    let child: Child?
     let avatarColor: Color
+
+    private var tagName: String { child?.firstName ?? MailboxRouting.parentLabel }
 
     /// Strip HTML tags for body preview.
     private var bodyPreview: String {
@@ -558,9 +561,16 @@ private struct FeedItemRow: View {
                 Circle()
                     .fill(avatarColor.opacity(0.2))
                     .frame(width: 36, height: 36)
-                Text(String(child.firstName.prefix(1)).uppercased())
-                    .font(NotoTheme.Typography.functional(14, weight: .bold))
-                    .foregroundStyle(avatarColor)
+                if let child {
+                    Text(String(child.firstName.prefix(1)).uppercased())
+                        .font(NotoTheme.Typography.functional(14, weight: .bold))
+                        .foregroundStyle(avatarColor)
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(NotoTheme.Typography.functional(14, weight: .bold))
+                        .foregroundStyle(avatarColor)
+                        .accessibilityLabel(MailboxRouting.parentLabel)
+                }
             }
 
             // Main content
@@ -595,7 +605,7 @@ private struct FeedItemRow: View {
                 // Tags row
                 HStack(spacing: NotoTheme.Spacing.xs) {
                     // Child name chip
-                    ChildTag(name: child.firstName, color: avatarColor)
+                    ChildTag(name: tagName, color: avatarColor)
 
                     // Source badge
                     SourceBadge(source: msg.source, imapProviderID: msg.imapProvider)

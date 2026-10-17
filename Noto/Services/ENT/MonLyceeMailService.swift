@@ -327,8 +327,21 @@ enum MonLyceeMailService {
         !configuredIMAPProviderIDs.contains(imapProviderID)
     }
 
-    static var shouldSyncWithCurrentIMAPConfig: Bool {
-        shouldSync(configuredIMAPProviderIDs: IMAPService.loadConfigs().map(\.providerID))
+    /// Per-child gate: with per-account assignment, a monlycee.net IMAP box
+    /// assigned to one child must not switch off a sibling's SSO mail.
+    /// See `MailboxRouting.imapCoversMonLyceeInbox`.
+    static func shouldSync(child: Child, configs: [IMAPServerConfig]) -> Bool {
+        let siblings = child.family?.children ?? [child]
+        return !MailboxRouting.imapCoversMonLyceeInbox(
+            forChildID: MailboxRouting.childKey(child),
+            allChildIDs: siblings.map(MailboxRouting.childKey),
+            configs: configs,
+            monLyceeProviderID: imapProviderID
+        )
+    }
+
+    static func shouldSyncWithCurrentIMAPConfig(for child: Child) -> Bool {
+        shouldSync(child: child, configs: IMAPService.loadConfigs())
     }
 
     /// Children whose sync is running. The ENT login fires a sync in the

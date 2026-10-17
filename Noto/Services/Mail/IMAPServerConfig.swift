@@ -23,6 +23,12 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     /// lowercase and produced exclusively by that resolver.
     let providerID: String
 
+    /// Who this mailbox's mail belongs to — all children (default, the
+    /// pre-assignment behaviour), one child, or the parent. Stored inside
+    /// the same Keychain blob as the credentials; never leaves the device.
+    /// `var` so Réglages > Boîte mail can re-assign an existing account.
+    var assignment: MailboxAssignment
+
     /// True when the IMAP account is a school-provisioned mailbox where
     /// every message is by definition a school-parent communication.
     /// Personal email never transits here — it is a closed channel
@@ -63,28 +69,44 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     }
 
     /// Convenience: build a full config from a preset + credentials.
-    init(preset: Preset, username: String, password: String, id: UUID = UUID()) {
+    init(
+        preset: Preset,
+        username: String,
+        password: String,
+        assignment: MailboxAssignment = .allChildren,
+        id: UUID = UUID()
+    ) {
         self.id = id
         self.host = preset.host
         self.port = preset.port
         self.providerID = preset.providerID
         self.username = username
         self.password = password
+        self.assignment = assignment
     }
 
-    init(host: String, port: Int, username: String, password: String, providerID: String, id: UUID = UUID()) {
+    init(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        providerID: String,
+        assignment: MailboxAssignment = .allChildren,
+        id: UUID = UUID()
+    ) {
         self.id = id
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.providerID = providerID
+        self.assignment = assignment
     }
 
     // MARK: - Codable (backward compat)
 
     private enum CodingKeys: String, CodingKey {
-        case id, host, port, username, password, providerID
+        case id, host, port, username, password, providerID, assignment
     }
 
     init(from decoder: Decoder) throws {
@@ -97,6 +119,11 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
         username   = try c.decode(String.self, forKey: .username)
         password   = try c.decode(String.self, forKey: .password)
         providerID = try c.decode(String.self, forKey: .providerID)
+        // Blobs written before per-account assignment have no key → the
+        // historical behaviour ("every child"). An unreadable value also
+        // falls back rather than dropping the whole account (and its
+        // password) from the Keychain list.
+        assignment = (try? c.decodeIfPresent(MailboxAssignment.self, forKey: .assignment)) ?? .allChildren
     }
 
     /// Human-readable provider label shown in Settings.
@@ -111,6 +138,70 @@ struct IMAPServerConfig: Codable, Sendable, Equatable, CustomStringConvertible {
     }
 
     var description: String {
-        "IMAPServerConfig(host: \(host), port: \(port), username: \(username), password: <redacted>, providerID: \(providerID))"
+        "IMAPServerConfig(host: \(host), port: \(port), username: \(username), password: <redacted>, providerID: \(providerID), assignment: \(assignment.kind))"
+    }
+}
+
+// MARK: - Mailbox assignment
+
+/// Who an IMAP account's mail belongs to (TestFlight feedback, build 230:
+/// "décider à qui elle se rapporte (quel enfant, parent)").
+///
+/// - `allChildren`: historical behaviour — the inbox is replayed against
+///   every child, each keeping what its own whitelist matches.
+/// - `child(id:)`: only that child receives the mail. `id` is the string
+///   form of the child's SwiftData `PersistentIdentifier` (`"\(child.id)"`),
+///   the convention already used to persist a child reference
+///   (`ScreenTimeEventStore.storeLinkedChildID`, `BriefingEngine`).
+///   A dangling id (child deleted, store reset) resolves to `allChildren`.
+/// - `parent`: mail addressed to the parent, not tied to one child. Stored
+///   on `Family.messages` and shown in Actualités / Messages with a
+///   "Parent" tag. Still filtered by the family-wide whitelist.
+enum MailboxAssignment: Sendable, Hashable {
+    case allChildren
+    case child(id: String)
+    case parent
+
+    /// Log-safe discriminator — never the child id or name.
+    var kind: String {
+        switch self {
+        case .allChildren: return "all"
+        case .child: return "child"
+        case .parent: return "parent"
+        }
+    }
+
+    /// The assignment as it applies today: a `.child` whose id matches
+    /// none of `childIDs` falls back to `.allChildren`.
+    func resolved(childIDs: [String]) -> MailboxAssignment {
+        if case .child(let id) = self, !childIDs.contains(id) {
+            return .allChildren
+        }
+        return self
+    }
+}
+
+extension MailboxAssignment: Codable {
+    private enum CodingKeys: String, CodingKey { case kind, childID }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decode(String.self, forKey: .kind) {
+        case "child":
+            self = .child(id: try c.decode(String.self, forKey: .childID))
+        case "parent":
+            self = .parent
+        default:
+            // "all", and any kind a future build might add.
+            self = .allChildren
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(kind, forKey: .kind)
+        if case .child(let id) = self {
+            try c.encode(id, forKey: .childID)
+        }
     }
 }
