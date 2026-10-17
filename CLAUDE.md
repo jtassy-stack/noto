@@ -72,8 +72,10 @@
 ### View Structure (`Noto/Views/`)
 - `RootView` — authentication gate (Keychain check → onboarding or main)
 - `OnboardingView` — family setup + first child login
-- `MainTabView` — tab bar (Home / School / Insights / Discover / Settings)
-- `Home/` — `HomeView`: briefing dashboard, period picker, AI summary
+- `MainTabView` — parent tab bar: Accueil · École · Messages · Écran · Découvrir
+- `Home/` — `HomeView`: briefing dashboard (À traiter, 48 h), then « Cette semaine » per child (`ParentWeekSection`: synthesis line, 4-week revision heatmap, notions per subject, 8-week average sparkline, weakest notion → `ParentQuizView`, « Ce que X étudie » → Découvrir); figures in `Services/ParentWeekReport.swift`
+- `Actualites/` — `ActualitesView` (Messages tab): child / parent pills, week volume per source, « À traiter » (Signer / Justifier / Répondre, keyword rules in `Services/MessageTriage.swift`, unread only) then « Pour information »
+- `Ecran/` — `ScreenOverviewView` (Écran tab): quiz bonus of the day vs the cap, last 7 days, class hours the lock covers, barème; opens `RevisionSettingsView` and `ScreenTimeView`. Shows minutes earned, never app usage. Quiz and reward data exist only on the device where the child plays (no family sync yet): the revision and minute cards say so elsewhere
 - `School/` — `SchoolView` with sub-tabs: Notes · EDT · Devoirs · Messages
 - `Insights/` — `InsightsView`: trends, strengths/weaknesses, weighted averages
 - `Discover/` — `DiscoverView`: grade-filtered culture-api recommendations with curriculum tag badges
