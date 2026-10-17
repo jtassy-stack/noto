@@ -199,13 +199,15 @@ struct QuizSourceSelectorTests {
         #expect(p.slots.map(\.subject) == ["Géographie", "Histoire", "Mathématiques", "Français"])
     }
 
-    @Test("period filter: current period, \"Année\" and undated themes only")
+    @Test("period filter (3.8 PeriodRank): current period, earlier ones, \"Année\" and undated themes")
     func periodFilter() {
-        let p = plan(maxSlots: 20, period: "Trimestre 2")
+        let p = plan(maxSlots: 20, period: "Trimestre 1")
         #expect(Set(p.slots.compactMap(\.theme)) == [
-            "Le récit fantastique", "Dire l'amour", "Théorème de Pythagore",
-            "Calcul littéral et équations", "L'urbanisation du monde",
+            "Molière et le théâtre classique", "Dire l'amour", "Théorème de Pythagore",
+            "La Révolution française", "L'urbanisation du monde",
         ])
+        // In T2 the T1 themes stay eligible (they were taught already).
+        #expect(plan(maxSlots: 20, period: "Trimestre 2").slots.count == 7)
     }
 
     @Test("no current period: every theme is eligible")
@@ -308,6 +310,167 @@ struct QuizSourceSelectorTests {
         #expect(best?.theme.theme == "Le récit fantastique")
         #expect(Set(service.matchKeywords(text: text, level: "4e", subject: "FRANCAIS"))
                 == Set(QuizCurriculumFixtures.francais4e.themes[1].keywords))
+    }
+}
+
+// MARK: - Programme position (3.8)
+
+@Suite("QuizSourceSelector — programme position")
+struct QuizSourceSelectorPositionTests {
+    private let now = QuizClock.now
+    private let calendar = QuizClock.calendar
+    private let curriculum = QuizCurriculumFixtures.curriculum
+
+    private func key(_ subject: String, _ theme: String) -> String {
+        NotionKey.make(level: "4e", subject: subject, theme: theme)
+    }
+
+    private func sighting(_ subject: String, _ theme: String, weight: Double, day: Int) -> ProgrammePosition.Sighting {
+        let date = QuizClock.date(day: day, hour: 10)
+        return .init(notionKey: key(subject, theme), subject: subject, theme: theme, firstSeen: date, lastSeen: date,
+                     count: 1, weight: weight)
+    }
+
+    private func position(_ subject: String, current: [ProgrammePosition.Sighting],
+                          covered: [ProgrammePosition.Sighting] = [],
+                          confidence: ProgrammePosition.Confidence = .medium) -> ProgrammePosition {
+        ProgrammePosition(subjects: [SubjectAlias.fold(subject): .init(
+            subject: subject, current: current, covered: covered, confidence: confidence,
+            lastEvidence: (current + covered).map(\.lastSeen).max() ?? now)], unmatchedSubjects: [])
+    }
+
+    private func plan(weak: [String] = [], homework: [HomeworkSnapshot] = [], masteries: [MasterySnapshot] = [],
+                      maxSlots: Int = 20, period: String?, position: ProgrammePosition? = nil,
+                      curriculum: CurriculumSnapshot? = nil) -> QuizPlan {
+        let context = ChildRevisionContext(level: "4e", specialties: [], weakSubjects: weak)
+        if let position {
+            return QuizSourceSelector.plan(context: context, homework: homework, masteries: masteries,
+                                           curriculum: curriculum ?? self.curriculum, now: now, calendar: calendar,
+                                           maxSlots: maxSlots, currentPeriod: period, position: position)
+        }
+        return QuizSourceSelector.plan(context: context, homework: homework, masteries: masteries,
+                                       curriculum: curriculum ?? self.curriculum, now: now, calendar: calendar,
+                                       maxSlots: maxSlots, currentPeriod: period)
+    }
+
+    @Test("a subject with a position plans no theme outside current ∪ covered, even when the period allows it")
+    func positionNeverPlansUnseenTheme() {
+        let p = plan(period: "Trimestre 3",
+                     position: position("Français", current: [sighting("Français", "Le récit fantastique",
+                                                                        weight: 9, day: -1)]))
+        let francais = p.slots.filter { $0.subject == "Français" }
+        #expect(francais.map(\.theme) == ["Le récit fantastique"])
+        // Subjects without a position keep the calendar fallback (all of them in T3).
+        #expect(p.slots.contains { $0.theme == "Calcul littéral et équations" })
+        #expect(p.slots.count == 5)   // 1 Français + 2 Maths + 1 Histoire + 1 Géographie
+    }
+
+    @Test("the current theme is planned first, then covered ones by lastSeen")
+    func currentThemeFirst() {
+        let pos = position("Français",
+                           current: [sighting("Français", "Dire l'amour", weight: 8, day: -1)],
+                           covered: [sighting("Français", "Molière et le théâtre classique", weight: 3, day: -20)])
+        let p = plan(weak: ["FRANCAIS"], period: nil, position: pos)
+        #expect(p.slots.first?.theme == "Dire l'amour")
+        #expect(p.slots.filter { $0.subject == "Français" }.map(\.theme)
+            == ["Dire l'amour", "Molière et le théâtre classique"])
+        #expect(!p.slots.contains { $0.theme == "Le récit fantastique" })
+    }
+
+    @Test("a confident position puts its subject before others of equal weakness")
+    func confidentSubjectFirst() {
+        let pos = position("Géographie", current: [sighting("Géographie", "L'urbanisation du monde", weight: 6, day: -1)],
+                           confidence: .high)
+        let p = plan(maxSlots: 4, period: nil, position: pos)
+        #expect(p.slots.map(\.subject) == ["Géographie", "Français", "Mathématiques", "Histoire"])
+    }
+
+    @Test("an empty position with no period plans exactly like before 3.8")
+    func emptyPositionMatchesLegacy() {
+        let homework = [
+            QuizClock.homework("FRANCAIS", "Lire Les Fourberies de Scapin acte II", day: 1),
+            QuizClock.homework("MATHEMATIQUES", "Exercices sur le théorème de Pythagore", day: 0, hour: 8),
+            QuizClock.homework("HISTOIRE-GEOGRAPHIE", "Apprendre la leçon sur la Révolution française", day: 2),
+        ]
+        let legacy = plan(homework: homework, maxSlots: 5, period: nil)
+        let empty = plan(homework: homework, maxSlots: 5, period: nil, position: .empty)
+        #expect(legacy == empty)
+        // Snapshot of the pre-3.8 plan for this fixture.
+        #expect(empty.slots.map(\.origin) == [.homeworkTomorrow, .homeworkToday, .homeworkLater, .programme, .programme])
+        #expect(empty.slots.map(\.theme) == [
+            "Molière et le théâtre classique", "Théorème de Pythagore", "La Révolution française",
+            "Le récit fantastique", "Calcul littéral et équations",
+        ])
+        let unweighted = plan(maxSlots: 20, period: nil, position: .empty)
+        #expect(unweighted.slots.map(\.subject) == [
+            "Français", "Mathématiques", "Histoire", "Géographie", "Français", "Mathématiques", "Français",
+        ])
+    }
+
+    @Test("PeriodRank fallback: in T2, T1 and Année themes are eligible, T3 is not")
+    func periodRankFallbackIncludesEarlierTrimesters() {
+        let programme = CurriculumSnapshot(programs: [CurriculumProgram(level: "4e", cycle: 4, subjects: [
+            CurriculumSubject(name: "Français", themes: [
+                CurriculumTheme(theme: "Thème T1", keywords: [], period: "Trimestre 1"),
+                CurriculumTheme(theme: "Thème T2", keywords: [], period: "Trimestre 2"),
+                CurriculumTheme(theme: "Thème T3", keywords: [], period: "Trimestre 3"),
+                CurriculumTheme(theme: "Thème annuel", keywords: [], period: "Année"),
+                CurriculumTheme(theme: "Thème sans période", keywords: [], period: nil),
+            ]),
+        ])])
+        let p = plan(period: "Trimestre 2", curriculum: programme)
+        #expect(p.slots.compactMap(\.theme) == ["Thème T1", "Thème T2", "Thème annuel", "Thème sans période"])
+        #expect(PeriodRank.isEligible("Trimestre 1", current: "Trimestre 2"))
+        #expect(PeriodRank.isEligible("Année", current: "Trimestre 2"))
+        #expect(PeriodRank.isEligible(nil, current: "Trimestre 1"))
+        #expect(!PeriodRank.isEligible("Trimestre 3", current: "Trimestre 2"))
+        #expect(PeriodRank.isEligible("Trimestre 3", current: nil))
+    }
+
+    @Test("Tle: « Semestre 2 » is not eligible in October")
+    func tleSemesterRank() {
+        let october = QuizClock.calendar.date(from: DateComponents(year: 2023, month: 10, day: 10, hour: 12))!
+        let current = PeriodRank.currentPeriod(now: october, level: "Terminale", calendar: QuizClock.calendar)
+        #expect(current == "Semestre 1")
+        #expect(!PeriodRank.isEligible("Semestre 2", current: current))
+        #expect(PeriodRank.isEligible("Semestre 1", current: current))
+        #expect(PeriodRank.isEligible("Trimestre 1", current: current))
+        #expect(PeriodRank.rank("Semestre 1") == 2 && PeriodRank.rank("Semestre 2") == 3)
+        #expect(PeriodRank.rank("Année") == 0 && PeriodRank.rank(nil) == 0)
+    }
+
+    @Test("PeriodRank.currentPeriod boundaries (Europe/Paris)", arguments: [
+        (2023, 12, 31, "4e", "Trimestre 1"),
+        (2024, 1, 1, "4e", "Trimestre 2"),
+        (2024, 3, 31, "4e", "Trimestre 2"),
+        (2024, 4, 1, "4e", "Trimestre 3"),
+        (2024, 8, 31, "4e", "Trimestre 3"),
+        (2023, 9, 1, "4e", "Trimestre 1"),
+        (2024, 1, 31, "Tle", "Semestre 1"),
+        (2024, 2, 1, "Tle", "Semestre 2"),
+    ])
+    func currentPeriodBoundaries(year: Int, month: Int, day: Int, level: String, expected: String) {
+        // 23:30 Paris: a UTC-based month would already / still be wrong.
+        let date = QuizClock.calendar.date(from: DateComponents(year: year, month: month, day: day,
+                                                                hour: 23, minute: 30))!
+        #expect(PeriodRank.currentPeriod(now: date, level: level, calendar: QuizClock.calendar) == expected)
+    }
+
+    @Test("programmeEligibility: seen themes only for a positioned subject, calendar otherwise")
+    func eligibilityPredicate() {
+        let pos = position("Français", current: [sighting("Français", "Le récit fantastique", weight: 9, day: -1)])
+        let eligible = QuizSourceSelector.programmeEligibility(level: "4ème", position: pos,
+                                                               currentPeriod: "Trimestre 1",
+                                                               curriculum: curriculum, specialties: [])
+        #expect(eligible("Français", "Le récit fantastique"))
+        #expect(eligible("FRANCAIS", "le récit fantastique"))
+        #expect(!eligible("Français", "Molière et le théâtre classique"))
+        #expect(!eligible("Français", nil))
+        #expect(!eligible("Français", "Un thème inconnu"))
+        #expect(eligible("Mathématiques", "Théorème de Pythagore"))       // Année
+        #expect(!eligible("Mathématiques", "Calcul littéral et équations")) // T2 in T1
+        #expect(eligible("Mathématiques", nil))
+        #expect(eligible("Arts plastiques", "Perspective"))               // unknown subject
     }
 }
 

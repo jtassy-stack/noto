@@ -50,6 +50,10 @@ enum NotoSchemaV1: VersionedSchema {
             StreakJoker.self,
             // Parent quiz on the child's programme: new entity, same rule.
             ParentQuizAttempt.self,
+            // Programme position (Phase 3.8): new entity appended, lightweight
+            // (every field defaulted), plus defaulted `Child.programmeLevel` /
+            // `lessonContentsFetchedAt` and the `Child.lessonContents` to-many.
+            LessonContent.self,
         ]
     }
 }

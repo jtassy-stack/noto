@@ -9,6 +9,8 @@ private func edLog(_ message: @autoclosure () -> String) {
 
 /// REST client for the École Directe API (https://api.ecoledirecte.com/v3/).
 /// All "read" operations use POST with `data={}` body and `X-Token` header.
+/// École Directe's read verb is `POST …?verbe=get`: it changes nothing on the
+/// server. `post()` refuses any other `verbe` (never put / post / delete).
 /// Token is short-lived (~30 min idle); credentials are stored in Keychain for silent re-auth.
 actor EcoleDirecteClient {
     static let baseURL = URL(string: "https://api.ecoledirecte.com/v3")!
@@ -19,9 +21,11 @@ actor EcoleDirecteClient {
     // Credential key pattern: "ed_credentials_<accountId>"
     let accountId: String
 
-    init(accountId: String) {
+    /// - Parameter configuration: injectable for tests (a `URLProtocol` mock,
+    ///   so no request ever leaves the machine). Defaults to `.default`.
+    init(accountId: String, configuration: URLSessionConfiguration = .default) {
         self.accountId = accountId
-        let config = URLSessionConfiguration.default
+        let config = configuration
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
     }
@@ -44,7 +48,7 @@ actor EcoleDirecteClient {
         components.queryItems = [URLQueryItem(name: "data", value: jsonStr)]
         let body = components.percentEncodedQuery ?? "data={}"
 
-        let (data, _) = try await post(path: "/login.awp", body: body, token: nil)
+        let (data, _) = try await post(path: "/login.awp", query: [], body: body, token: nil)
         let response = try parseLoginResponse(data)
 
         token = response.token
@@ -98,7 +102,8 @@ actor EcoleDirecteClient {
 
     func fetchGrades(eleveId: Int) async throws -> [EDGrade] {
         try await ensureValidToken()
-        let (data, _) = try await post(path: "/eleves/\(eleveId)/notes.awp?verbe=get&", body: "data={}", token: token)
+        let (data, _) = try await post(path: "/eleves/\(eleveId)/notes.awp", query: Self.readQuery,
+                                       body: "data={}", token: token)
         return try parseGrades(data)
     }
 
@@ -112,7 +117,9 @@ actor EcoleDirecteClient {
         let dateDebut = fmt.string(from: from)
         let dateFin = fmt.string(from: to)
         let (data, _) = try await post(
-            path: "/E/\(eleveId)/emploidutemps.awp?verbe=get&dateDebut=\(dateDebut)&dateFin=\(dateFin)&",
+            path: "/E/\(eleveId)/emploidutemps.awp",
+            query: Self.readQuery + [URLQueryItem(name: "dateDebut", value: dateDebut),
+                                     URLQueryItem(name: "dateFin", value: dateFin)],
             body: "data={}",
             token: token
         )
@@ -121,20 +128,60 @@ actor EcoleDirecteClient {
 
     func fetchHomework(eleveId: Int) async throws -> [EDHomework] {
         try await ensureValidToken()
-        let (data, _) = try await post(path: "/Eleves/\(eleveId)/cahierdetextes.awp?verbe=get&", body: "data={}", token: token)
+        let (data, _) = try await post(path: "/Eleves/\(eleveId)/cahierdetextes.awp", query: Self.readQuery,
+                                       body: "data={}", token: token)
         return try parseHomework(data)
+    }
+
+    /// One day of the cahier de textes (3.8): what was done in class
+    /// (`contenuDeSeance`) and the homework set for that day. Read-only
+    /// (`verbe=get`), same host. The text stays on the device.
+    func fetchDay(eleveId: Int, date: Date) async throws -> [EDSeance] {
+        try await ensureValidToken()
+        let ymd = Self.ymd(date)
+        let (data, _) = try await post(path: "/Eleves/\(eleveId)/cahierdetextes/\(ymd).awp", query: Self.readQuery,
+                                       body: "data={}", token: token)
+        return Self.parseDay(data, date: date)
     }
 
     func fetchMessages(familleId: Int) async throws -> [EDMessage] {
         try await ensureValidToken()
-        let (data, _) = try await post(path: "/familles/\(familleId)/messages.awp?verbe=get&", body: "data={}", token: token)
+        let (data, _) = try await post(path: "/familles/\(familleId)/messages.awp", query: Self.readQuery,
+                                       body: "data={}", token: token)
         return try parseMessages(data)
     }
 
     // MARK: - HTTP
 
-    private func post(path: String, body: String, token: String?) async throws -> (Data, HTTPURLResponse) {
-        let url = Self.baseURL.appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+    /// The École Directe read verb. The only `verbe` this client ever sends.
+    static let readQuery = [URLQueryItem(name: "verbe", value: "get")]
+
+    /// `yyyy-MM-dd` in Europe/Paris with a Gregorian, POSIX formatter.
+    static func ymd(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.calendar = Calendar(identifier: .gregorian)
+        fmt.timeZone = TimeZone(identifier: "Europe/Paris") ?? .current
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: date)
+    }
+
+    /// Path + real query items. `appendingPathComponent` alone percent-encodes
+    /// a `?` inside the path (`%3F`), which is why the query is separate.
+    static func makeURL(path: String, query: [URLQueryItem]) -> URL {
+        let url = baseURL.appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        guard !query.isEmpty,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.queryItems = query
+        return components.url ?? url
+    }
+
+    private func post(path: String, query: [URLQueryItem], body: String,
+                      token: String?) async throws -> (Data, HTTPURLResponse) {
+        // Writes are forbidden: no `verbe` other than `get` (login carries none).
+        precondition(!query.contains { $0.name == "verbe" && $0.value != "get" },
+                     "École Directe: only verbe=get is allowed")
+        let url = Self.makeURL(path: path, query: query)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -261,8 +308,13 @@ actor EcoleDirecteClient {
 
     private func parseHomework(_ data: Data) throws -> [EDHomework] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let edData = root["data"] as? [String: Any],
-              let dates = edData["dates"] as? [String: Any] else { return [] }
+              let edData = root["data"] as? [String: Any] else { return [] }
+        guard let dates = edData["dates"] as? [String: Any] else {
+            // UNVERIFIED (3.8): community docs describe this endpoint as
+            // `data["yyyy-MM-dd"]: [ { matiere, codeMatiere, idDevoir, aFaire, … } ]`,
+            // which the `dates` path above never matches. Kept as a fallback.
+            return Self.parseHomeworkList(edData)
+        }
 
         var homework: [EDHomework] = []
         for (dateStr, dayData) in dates {
@@ -284,6 +336,52 @@ actor EcoleDirecteClient {
         return homework
     }
 
+    /// Homework list shape `data["yyyy-MM-dd"]: [ … ]` (unverified). The text
+    /// is only present when an item carries an inline `contenu` (base64);
+    /// otherwise the row has an empty description.
+    static func parseHomeworkList(_ edData: [String: Any]) -> [EDHomework] {
+        var homework: [EDHomework] = []
+        for (dateStr, value) in edData.sorted(by: { $0.key < $1.key }) {
+            guard let items = value as? [[String: Any]], let dueDate = edParseDate(dateStr) else { continue }
+            for item in items {
+                let subject = item["matiere"] as? String ?? item["libelle"] as? String ?? "?"
+                let inline = (item["aFaire"] as? [String: Any])?["contenu"] as? String
+                    ?? item["contenu"] as? String
+                let text = inline.map { edPlainText(edDecodeBase64HTML($0)) } ?? ""
+                let id = anyToString(item["idDevoir"]) ?? "\(dateStr)-\(item["codeMatiere"] as? String ?? subject)"
+                homework.append(EDHomework(id: id, subject: subject, description: text, dueDate: dueDate))
+            }
+        }
+        return homework
+    }
+
+    /// Parses one `cahierdetextes/<yyyy-MM-dd>.awp` response: `data.matieres[]`,
+    /// subject from `matiere` (else `libelle`), lesson text from
+    /// `contenuDeSeance.contenu` (else `aFaire.contenuDeSeance.contenu`),
+    /// homework from `aFaire.contenu`; both base64-decoded, HTML stripped.
+    /// Shape from community documentation, unverified on a live account.
+    static func parseDay(_ data: Data, date: Date) -> [EDSeance] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let edData = root["data"] as? [String: Any],
+              let matieres = edData["matieres"] as? [[String: Any]] else { return [] }
+        let day = Self.ymd(date)
+        return matieres.compactMap { m in
+            let subject = (m["matiere"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? m["libelle"] as? String ?? "?"
+            let aFaire = m["aFaire"] as? [String: Any]
+            let seanceRaw = (m["contenuDeSeance"] as? [String: Any])?["contenu"] as? String
+                ?? (aFaire?["contenuDeSeance"] as? [String: Any])?["contenu"] as? String
+                ?? ""
+            let seance = edPlainText(edDecodeBase64HTML(seanceRaw))
+            let homework = (aFaire?["contenu"] as? String).map { edPlainText(edDecodeBase64HTML($0)) }
+            let homeworkText = homework.flatMap { $0.isEmpty ? nil : $0 }
+            guard !seance.isEmpty || homeworkText != nil else { return nil }
+            let id = anyToString(m["id"]) ?? anyToString(aFaire?["idDevoir"])
+                ?? "\(day)-\(m["codeMatiere"] as? String ?? subject)"
+            return EDSeance(id: id, subject: subject, date: date, seanceText: seance, homeworkText: homeworkText)
+        }
+    }
+
     private func parseMessages(_ data: Data) throws -> [EDMessage] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let edData = root["data"] as? [String: Any],
@@ -295,13 +393,7 @@ actor EcoleDirecteClient {
             let from = (m["from"] as? [String: Any])?["name"] as? String ?? ""
             let bodyRaw = m["content"] as? String ?? ""
             // ED encodes message bodies in base64
-            let bodyDecoded: String
-            if let decoded = Data(base64Encoded: bodyRaw, options: .ignoreUnknownCharacters),
-               let str = String(data: decoded, encoding: .utf8) {
-                bodyDecoded = edStripHTML(str)
-            } else {
-                bodyDecoded = edStripHTML(bodyRaw)
-            }
+            let bodyDecoded = edStripHTML(edDecodeBase64HTML(bodyRaw))
             return EDMessage(
                 id: id,
                 from: from,

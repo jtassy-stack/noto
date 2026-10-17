@@ -67,6 +67,9 @@ struct PronoteLesson: Sendable {
     let teacherNames: [String]
     let classrooms: [String]
     let isTest: Bool
+    /// Pronote cahier de textes resource id of the lesson (`cahierDeTextes.N`),
+    /// for joining with `PronoteLessonContentEntry.id` later. Unused yet.
+    var lessonResourceID: String? = nil
 }
 
 // MARK: - Assignment
@@ -86,6 +89,42 @@ struct PronoteAssignment: Sendable {
     let done: Bool
     let difficulty: PronoteAssignmentDifficulty
     let themes: [String]
+    /// Cahier de textes resource the homework was set in (`cahierDeTextes.N`).
+    /// Join key only; nothing depends on it yet.
+    var resourceID: String? = nil
+}
+
+// MARK: - Lesson contents (cahier de textes, onglet 89)
+
+/// One cahier de textes entry as returned by `PawnoteBridge.fetchLessonContents`
+/// (hand-patched in `pawnote-bundle.js`). Every field is optional: the raw
+/// Pronote shape (`ListeCahierDeTextes` / `listeContenus` / `descriptif` /
+/// `ListeThemes`) has not been checked on a live parent account yet.
+/// The text stays on the device (`LessonContent`).
+struct PronoteLessonContentEntry: Decodable, Sendable, Equatable {
+    let id: String?
+    let subject: String?
+    let startDate: String?
+    let endDate: String?
+    let contents: [Item]?
+
+    struct Item: Decodable, Sendable, Equatable {
+        let id: String?
+        let title: String?
+        let description: String?
+        let categoryLabel: String?
+        let themes: [String]?
+    }
+}
+
+/// Wrapper returned by the JS side: the entries plus the raw key names of the
+/// first response entry / content (keys only, never values) for the DEBUG
+/// shape check.
+struct PronoteLessonContentsPayload: Decodable, Sendable {
+    let entries: [PronoteLessonContentEntry]?
+    let rawKeys: [String]?
+    let rawEntryKeys: [String]?
+    let rawContentKeys: [String]?
 }
 
 // MARK: - Discussion

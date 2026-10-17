@@ -100,8 +100,11 @@ struct ParentQuizSessionTests {
     @Test("questions the parent already played come after fresh ones")
     func prefersQuestionsNotPlayedByParent() throws {
         let child = makeChild()
-        let seen = Self.themes.prefix(5).map { addItem($0, 0) }
-        for theme in Self.themes.prefix(5) { addItem(theme, 1) }
+        // Five themes open in T1 (QuizClock.now is mid-November): T2 themes
+        // are left out of the draw by the programme filter.
+        let open = Self.themes.filter { $0.1 != "Le récit fantastique" && $0.1 != "Calcul littéral et équations" }
+        let seen = open.map { addItem($0, 0) }
+        for theme in open { addItem(theme, 1) }
         context.insert(ParentQuizAttempt(child: child, date: QuizClock.date(day: -1, hour: 20),
                                          questionKeys: seen.map(\.questionKey), notionKeys: [],
                                          answers: [1, 1, 1, 1, 1], correctCount: 5, totalCount: 5,

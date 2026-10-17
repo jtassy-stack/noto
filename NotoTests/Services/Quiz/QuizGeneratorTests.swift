@@ -430,10 +430,16 @@ struct QuizSessionGenerationTests {
     }
 
     /// Bank with every planned theme except « Le récit fantastique ».
+    /// Since 3.8 the Horla homework gives Français a programme position
+    /// (« Le récit fantastique » only), so Molière / Dire l'amour are no
+    /// longer eligible, and « Calcul littéral » (T2) is not in November: the
+    /// second Pythagore / Révolution items keep the bank-only draw at 5.
     private func addBankWithoutFantastique() {
         for theme in [Self.moliere, Self.pythagore, Self.revolution, Self.urbanisation, Self.amour, Self.calcul] {
             addItem(theme)
         }
+        addItem(Self.pythagore, 1)
+        addItem(Self.revolution, 1)
     }
 
     /// Homework on Le Horla due tomorrow: the selector maps it to « Le récit
@@ -561,7 +567,7 @@ struct QuizSessionGenerationTests {
     @Test("thin bank: no generation, the quiz stays too short to earn minutes")
     func thinBank() async throws {
         let child = makeChild()
-        addItem(Self.moliere)
+        addItem(Self.urbanisation)
         addItem(Self.pythagore)
         addHorlaHomework(child)
         try context.save()

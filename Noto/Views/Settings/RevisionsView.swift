@@ -110,6 +110,10 @@ struct RevisionsView: View {
                 notionsCard(s, child: child)
                 weeklyCard(s)
             }
+
+            // 3.8: shown even before the first quiz (cahier de textes data
+            // usually arrives before any quiz is played).
+            ProgrammePositionSection(child: child)
         }
     }
 

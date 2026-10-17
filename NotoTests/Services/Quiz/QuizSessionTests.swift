@@ -10,7 +10,10 @@ import SwiftData
 /// reads local `QuizItem` rows.
 ///
 /// With `QuizCurriculumFixtures` (4e), no homework and no mastery, the
-/// selector plans F1, M1, H1, G1, F2 (round-robin, whole year).
+/// selector plans F1, M1, H1, G1, F3 (round-robin). `QuizClock.now` is in
+/// November, so since 3.8 the session passes « Trimestre 1 »: the T2 themes
+/// (« Le récit fantastique », « Calcul littéral ») are neither planned nor
+/// topped up while no programme position exists.
 @MainActor
 @Suite("QuizSession")
 struct QuizSessionTests {
@@ -24,7 +27,7 @@ struct QuizSessionTests {
     static let calcul = ("Mathématiques", "Calcul littéral et équations")
     static let revolution = ("Histoire", "La Révolution française")
     static let urbanisation = ("Géographie", "L'urbanisation du monde")
-    static let plannedThemes = [moliere.1, pythagore.1, revolution.1, urbanisation.1, fantastique.1]
+    static let plannedThemes = [moliere.1, pythagore.1, revolution.1, urbanisation.1, amour.1]
 
     init() throws {
         let container = try ModelContainer(for: Schema(NotoSchemaV1.models),
@@ -136,9 +139,9 @@ struct QuizSessionTests {
     @Test("items already passed come after fresh ones of the same theme")
     func prefersFreshItems() throws {
         let child = makeChild()
-        let seen = [Self.moliere, Self.pythagore, Self.revolution, Self.urbanisation, Self.fantastique]
+        let seen = [Self.moliere, Self.pythagore, Self.revolution, Self.urbanisation, Self.amour]
             .map { addItem($0, 0) }
-        for theme in [Self.moliere, Self.pythagore, Self.revolution, Self.urbanisation, Self.fantastique] {
+        for theme in [Self.moliere, Self.pythagore, Self.revolution, Self.urbanisation, Self.amour] {
             addItem(theme, 1)
         }
         context.insert(QuizAttempt(child: child, date: QuizClock.date(day: -3, hour: 18), itemIDs: seen.map(\.id),
@@ -156,14 +159,16 @@ struct QuizSessionTests {
     @Test("a thin bank still makes a quiz: matched slots first, then top-up")
     func thinBank() throws {
         let child = makeChild()
-        addItem(Self.calcul)       // not planned (6th programme slot)
+        addItem(Self.calcul)       // T2: never topped up in T1 (3.8 `PeriodRank`)
         addItem(Self.pythagore)    // planned slot 2
+        addItem(Self.pythagore, 1) // top-up (same eligible theme)
         try context.save()
 
         let session = makeSession(child)
         #expect(session.phase == .inProgress)
         #expect(session.questions.count == 2)
-        #expect(session.questions.compactMap(\.theme) == [Self.pythagore.1, Self.calcul.1])
+        #expect(session.questions.compactMap(\.theme) == [Self.pythagore.1, Self.pythagore.1])
+        #expect(!session.questions.contains { $0.theme == Self.calcul.1 })
     }
 
     @Test("no question for the level → empty state, nothing saved", arguments: [
@@ -569,5 +574,53 @@ struct QuizResultCopyTests {
                                        decision: .denied(.capReached), requiredCorrect: 4)
         #expect(QuizResultView.title(for: result) == "Sans faute, bravo !")
         #expect(QuizResultView.symbol(for: result) == "star.fill")
+    }
+}
+
+// MARK: - Programme position (3.8)
+
+extension QuizSessionTests {
+    /// A cahier de textes lesson on Le Horla: Français gets a position on
+    /// « Le récit fantastique » only.
+    private func addHorlaLesson(_ child: Child) {
+        let row = LessonContent(child: child, subject: "FRANCAIS", date: QuizClock.date(day: -1, hour: 10),
+                                title: "Le Horla", text: "Lecture de Maupassant", themes: [],
+                                source: .pronoteLesson, externalID: nil, calendar: QuizClock.calendar)
+        context.insert(row)
+        row.child = child
+    }
+
+    @Test("top-up never draws a theme not seen yet when the subject has a position")
+    func topUpRespectsPosition() throws {
+        let child = makeChild()
+        addHorlaLesson(child)
+        for theme in [Self.moliere, Self.amour, Self.fantastique, Self.pythagore, Self.revolution, Self.urbanisation] {
+            addItem(theme)
+        }
+        addItem(Self.fantastique, 1)
+        addItem(Self.moliere, 1)
+        try context.save()
+
+        let session = makeSession(child)
+        #expect(session.questions.count == QuizSession.questionCount)
+        let francais = session.questions.filter { $0.subject == "Français" }
+        #expect(!francais.isEmpty)
+        #expect(francais.allSatisfy { $0.theme == Self.fantastique.1 })
+    }
+
+    @Test("filtering can leave a quiz too short: it stays .tooShort, the rule is not relaxed")
+    func topUpTooShortWhenFiltered() throws {
+        let child = makeChild()
+        addHorlaLesson(child)
+        for n in 0..<3 { addItem(Self.moliere, n) }
+        addItem(Self.amour)
+        addItem(Self.fantastique)
+        try context.save()
+
+        let session = makeSession(child)
+        #expect(session.questions.map(\.theme) == [Self.fantastique.1])
+        play(session)
+        #expect(session.result?.decision.denial == .tooShort)
+        #expect(session.result?.minutesEarned == 0)
     }
 }

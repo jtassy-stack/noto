@@ -724,7 +724,9 @@ struct GamificationPersistenceTests {
         let themes: [(String, String)] = [
             ("Français", "Molière et le théâtre classique"), ("Mathématiques", "Théorème de Pythagore"),
             ("Histoire", "La Révolution française"), ("Géographie", "L'urbanisation du monde"),
-            ("Français", "Le récit fantastique"),
+            // Undated theme: eligible in any period (the session passes the
+            // current period since 3.8; `QuizClock.now` is in T1).
+            ("Français", "Dire l'amour"),
         ]
         for (n, theme) in themes.enumerated() {
             let question = "Question \(n) sur \(theme.1) ?"

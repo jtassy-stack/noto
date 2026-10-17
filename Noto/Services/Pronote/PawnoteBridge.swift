@@ -276,7 +276,8 @@ final class PawnoteBridge {
                 status: l["status"] as? String,
                 teacherNames: l["teacherNames"] as? [String] ?? [],
                 classrooms: l["classrooms"] as? [String] ?? [],
-                isTest: l["isTest"] as? Bool ?? false
+                isTest: l["isTest"] as? Bool ?? false,
+                lessonResourceID: l["lessonResourceID"] as? String
             )
         }
     }
@@ -297,9 +298,33 @@ final class PawnoteBridge {
                 deadline: parseISO(h["deadline"] as? String) ?? .now,
                 done: h["done"] as? Bool ?? false,
                 difficulty: PronoteAssignmentDifficulty(rawValue: h["difficulty"] as? Int ?? 0) ?? .none,
-                themes: h["themes"] as? [String] ?? []
+                themes: h["themes"] as? [String] ?? [],
+                resourceID: h["resourceID"] as? String
             )
         }
+    }
+
+    /// Cahier de textes lesson contents (Pronote `PageCahierDeTexte`, onglet
+    /// 89) between two dates. Read-only request to the session's own Pronote
+    /// instance; no other host. Returns `[]` when the tab is not available.
+    func fetchLessonContents(from: Date, to: Date) async throws -> [PronoteLessonContentEntry] {
+        let startISO = ISO8601DateFormatter().string(from: from)
+        let endISO = ISO8601DateFormatter().string(from: to)
+
+        let result = try await callAsync(
+            "PawnoteBridge.fetchLessonContents(\(sessionRef), '\(startISO)', '\(endISO)')")
+        guard let object = result.toObject(), JSONSerialization.isValidJSONObject(object) else { return [] }
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let payload = try JSONDecoder().decode(PronoteLessonContentsPayload.self, from: data)
+        #if DEBUG
+        // TEMPORARY (3.8 shape check, remove once verified on a real parent
+        // account): key names only, never values — lesson text must not be logged.
+        NSLog("[noto][debug] Pronote cahier de textes keys: root=%@ entry=%@ content=%@",
+              (payload.rawKeys ?? []).joined(separator: ","),
+              (payload.rawEntryKeys ?? []).joined(separator: ","),
+              (payload.rawContentKeys ?? []).joined(separator: ","))
+        #endif
+        return payload.entries ?? []
     }
 
     func fetchDiscussions() async throws -> [PronoteDiscussion] {

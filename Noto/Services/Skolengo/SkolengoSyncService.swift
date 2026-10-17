@@ -47,6 +47,7 @@ final class SkolengoSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] Skolengo sync for %@ returned empty payload — preserving local data", child.firstName)
+            LessonContentStore.recordSync(of: child, in: modelContext)
             child.markSynced()
             try modelContext.save()
             return
@@ -57,6 +58,7 @@ final class SkolengoSyncService {
         // Wipe and insert
         for grade in child.grades { modelContext.delete(grade) }
         for entry in child.schedule { modelContext.delete(entry) }
+        LessonContentStore.captureHomework(of: child, in: modelContext)   // 3.8: keep before the wipe
         for hw in child.homework { modelContext.delete(hw) }
         for msg in child.messages { modelContext.delete(msg) }
 
@@ -64,6 +66,7 @@ final class SkolengoSyncService {
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(messages, for: child)
+        LessonContentStore.recordSync(of: child, in: modelContext)
         child.markSynced()
 
         try modelContext.save()
