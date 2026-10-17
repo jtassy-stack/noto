@@ -55,6 +55,14 @@ final class Child {
     /// keeps every spécialité eligible. Default value keeps SwiftData's
     /// automatic lightweight migration working for existing stores.
     var specialties: [String] = []
+    /// Canonical level (`CurriculumService.canonicalLevel(grade)`) the stored
+    /// `lessonContents` were collected for. `LessonContentStore.purge` wipes
+    /// them when it changes (new school year, class change). Defaulted for
+    /// lightweight migration (Phase 3.8).
+    var programmeLevel: String? = nil
+    /// Last successful cahier de textes fetch (Pronote onglet 89, École
+    /// Directe per-day). Lesson contents are refreshed at most every 24 h.
+    var lessonContentsFetchedAt: Date? = nil
     var family: Family?
     var createdAt: Date
 
@@ -80,6 +88,10 @@ final class Child {
     // Gamification (3.6): série jokers spent. Same additive pattern.
     @Relationship(deleteRule: .cascade, inverse: \StreakJoker.child)
     var streakJokers: [StreakJoker] = []
+    // Programme position (3.8): cahier de textes lessons + kept homework.
+    // Local only, cascade-deleted with the child (RGPD).
+    @Relationship(deleteRule: .cascade, inverse: \LessonContent.child)
+    var lessonContents: [LessonContent] = []
 
     init(
         firstName: String,

@@ -1,5 +1,11 @@
 // Bridge between Swift (JavaScriptCore) and pawnote
 // This file is bundled with all dependencies into pawnote-bundle.js
+//
+// WARNING: bundle hand-patched (fetchLessonContents + loginENT); do not
+// rebuild without re-applying both. pawnote-bundle.js carries the real
+// versions of these two functions (they call bundle-internal helpers:
+// `ns` / `Q.Resources` / `le` for fetchLessonContents, Identification with
+// pourENT:true for loginENT). The versions below document the intent only.
 
 import * as pronote from "@niicojs/pawnote";
 
@@ -120,6 +126,7 @@ globalThis.PawnoteBridge = {
         teacherNames: lesson.teacherNames,
         classrooms: lesson.classrooms,
         isTest: lesson.test,
+        lessonResourceID: lesson.lessonResourceID ?? null,
       }));
   },
 
@@ -137,7 +144,27 @@ globalThis.PawnoteBridge = {
       done: a.done,
       difficulty: a.difficulty,
       themes: a.themes.map((t) => t.name ?? t),
+      resourceID: a.resourceID ?? null,
     }));
+  },
+
+  // Cahier de textes lesson contents (Pronote onglet 89, PageCahierDeTexte),
+  // read-only. HAND-PATCHED in pawnote-bundle.js (search "NOTO HAND PATCH
+  // (3.8)"): the bundle calls the internal request helper directly, i.e. the
+  // equivalent of `pronote.resourcesFromIntervals(session, start, end)`, and
+  // maps the raw `ListeCahierDeTextes.V[]` entries (N, Matiere, Date, DateFin,
+  // listeContenus[] { N, L, descriptif, categorie, ListeThemes }) itself.
+  // Returns { entries, rawKeys, rawEntryKeys, rawContentKeys } — key NAMES
+  // only for the DEBUG shape check, never values. The raw shape is unverified
+  // on a live parent account. Lesson text stays on the device.
+  fetchLessonContents: async (session, startDateISO, endDateISO) => {
+    const empty = { entries: [], rawKeys: [], rawEntryKeys: [], rawContentKeys: [] };
+    const start = new Date(startDateISO);
+    const end = new Date(endDateISO);
+    // Placeholder (like loginENT below): the real fetch + mapping live in the
+    // bundle patch. A rebuild must copy that block back here.
+    await pronote.resourcesFromIntervals(session, start, end);
+    return empty;
   },
 
   // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth.

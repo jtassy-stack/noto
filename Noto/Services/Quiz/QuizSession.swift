@@ -385,7 +385,10 @@ final class QuizSession {
     ///    only when the slot has no theme). A homework slot with no bank item
     ///    takes its on-device question from `generated` when there is one
     ///    (3.3, at most `QuizGenerator.maxGeneratedPerQuiz`).
-    /// 2. Remaining places are topped up from the rest of the level's bank.
+    /// 2. Remaining places are topped up from the rest of the level's bank,
+    ///    filtered by `QuizSourceSelector.programmeEligibility` (3.8: only
+    ///    themes the child has seen when the subject has a position, else the
+    ///    current and earlier periods).
     /// Within each pool, items never played in a passed attempt come first
     /// (a thin bank would otherwise make every quiz an identical replay), and
     /// ties are broken by the seeded shuffle.
@@ -432,15 +435,27 @@ final class QuizSession {
         let ordered = shuffled.filter { !playedKeys.contains($0.questionKey) }
             + shuffled.filter { playedKeys.contains($0.questionKey) }
 
-        // `weakSubjects: []` and `currentPeriod: nil` (whole year) for now:
-        // nothing computes them yet on the child device.
+        // Programme position (3.8): computed here, on the device, from the
+        // cahier de textes rows and homework this device synced. Never stored.
+        let homework = child.homework.map { HomeworkSnapshot($0, calendar: calendar) }
+        let position = ProgrammePositionTracker.compute(
+            level: level, specialties: child.specialties,
+            lessons: child.lessonContents.map { LessonContentSnapshot($0) },
+            homework: homework,
+            curriculum: curriculum, now: now, calendar: calendar)
+        let period = PeriodRank.currentPeriod(now: now, level: level, calendar: calendar)
+
+        // `weakSubjects: []` for now: nothing computes them yet on the child device.
         let plan = QuizSourceSelector.plan(
             context: ChildRevisionContext(level: level, specialties: child.specialties, weakSubjects: []),
-            homework: child.homework.map { HomeworkSnapshot($0, calendar: calendar) },
+            homework: homework,
             masteries: child.notionMasteries.map { MasterySnapshot($0) },
             curriculum: curriculum, now: now, calendar: calendar,
-            maxSlots: questionCount, currentPeriod: nil
+            maxSlots: questionCount, currentPeriod: period, position: position
         )
+        let eligible = QuizSourceSelector.programmeEligibility(
+            level: level, position: position, currentPeriod: period,
+            curriculum: curriculum, specialties: child.specialties)
 
         var selection = Selection()
         var usedKeys = Set<String>()
@@ -462,7 +477,14 @@ final class QuizSession {
                 selection.unmatchedHomework.append(HomeworkGap(slot: slot, bankAnswers: answers))
             }
         }
+        // Top-up: same rule as the programme fill (never a theme not taught
+        // yet), unless the item matches a homework or due-notion slot. A thin
+        // result stays `.tooShort` (`RewardPolicy`); the rule is not relaxed.
+        let anchoredSlots = plan.slots.filter { $0.isHomework || $0.origin == .dueNotion }
         for item in ordered where selection.questions.count < questionCount && !usedKeys.contains(item.questionKey) {
+            let theme = item.theme.flatMap { $0.isEmpty ? nil : $0 }
+            guard eligible(item.subject ?? "", theme) || anchoredSlots.contains(where: { matches(item, $0) })
+            else { continue }
             selection.questions.append(question(from: item, level: level))
             usedKeys.insert(item.questionKey)
         }

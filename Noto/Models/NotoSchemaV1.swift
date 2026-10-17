@@ -48,6 +48,10 @@ enum NotoSchemaV1: VersionedSchema {
             // `Child.streakJokers`, `NotionMastery.masteredAt`). A rename, a type change or a field
             // without default would need the V2 freeze described above.
             StreakJoker.self,
+            // Programme position (Phase 3.8): new entity appended, lightweight
+            // (every field defaulted), plus defaulted `Child.programmeLevel` /
+            // `lessonContentsFetchedAt` and the `Child.lessonContents` to-many.
+            LessonContent.self,
         ]
     }
 }

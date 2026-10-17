@@ -38,13 +38,20 @@ struct QuizPlan: Sendable, Equatable {
 ///
 /// Order: homework due within 72 h (tomorrow, then today, then later), then
 /// due Leitner notions, then new programme material.
+///
+/// Programme material (3.8): for a subject with a `ProgrammePosition`, only
+/// themes already seen in the cahier de textes / homework (current first,
+/// then covered) — never a theme not taught yet. A subject without a
+/// position falls back to the official calendar (`PeriodRank`: the current
+/// period and every earlier one).
 enum QuizSourceSelector {
     /// Homework window: today, tomorrow and the day after (< start of day + 3).
     static let homeworkWindowDays = 3
 
     static func plan(context: ChildRevisionContext, homework: [HomeworkSnapshot], masteries: [MasterySnapshot],
                      curriculum: some CurriculumLookup, now: Date, calendar: Calendar,
-                     maxSlots: Int = 5, currentPeriod: String?) -> QuizPlan {
+                     maxSlots: Int = 5, currentPeriod: String?,
+                     position: ProgrammePosition = .empty) -> QuizPlan {
         // 1. Gate: collège + lycée only.
         let level = CurriculumService.canonicalLevel(context.level)
         guard CurriculumService.revisionLevels.contains(level) else {
@@ -112,29 +119,48 @@ enum QuizSourceSelector {
             ))
         }
 
-        // 6. Programme fill: weak subjects first, themes of the current period
-        //    (or the whole year), new material only (no NotionMastery yet).
-        //    Round-robin across subjects so one subject cannot fill the quiz.
+        // 6. Programme fill: weak subjects first, new material only (no
+        //    NotionMastery yet). Round-robin across subjects so one subject
+        //    cannot fill the quiz.
+        //    - Subject with a position: its seen themes only (current by
+        //      weight, then covered by lastSeen), period ignored. Covered
+        //      themes already played come back through step 5.
+        //    - Subject without one: `PeriodRank` (current + earlier periods,
+        //      "Année" / undated always), curriculum order.
         let known = Set(masteries.map(\.notionKey)).union(slots.compactMap(\.notionKey))
-        let periodOK: (CurriculumTheme) -> Bool = { theme in
-            guard let currentPeriod, let period = theme.period else { return true }
-            return period == currentPeriod || period == "Année"
-        }
         let weakRank = weakSubjectRank(context.weakSubjects)
-        var queues: [[ProgrammeEntry]] = []
+        var queues: [(queue: [ProgrammeEntry], confident: Bool)] = []
         for subject in orderedUnique(programme.map(\.subject)) {
-            let queue = programme.filter { $0.subject == subject && periodOK($0.theme) && !known.contains($0.key) }
-            if !queue.isEmpty { queues.append(queue) }
+            let entries = programme.filter { $0.subject == subject && !known.contains($0.key) }
+            let queue: [ProgrammeEntry]
+            let subjectPosition = position.subjects[SubjectAlias.fold(subject)]
+            if let subjectPosition {
+                let rank = Dictionary(subjectPosition.all.map(\.notionKey).enumerated().map { ($1, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+                queue = entries
+                    .filter { rank[$0.key] != nil }
+                    .sorted { rank[$0.key]! < rank[$1.key]! }
+            } else {
+                queue = entries.filter { PeriodRank.isEligible($0.theme.period, current: currentPeriod) }
+            }
+            if !queue.isEmpty {
+                queues.append((queue, (subjectPosition?.confidence ?? .low) >= .medium))
+            }
         }
+        // Weak rank, then subjects with a position of at least medium
+        // confidence, then curriculum order (kept instead of the subject name
+        // so an empty position plans exactly like before 3.8).
         queues = queues.enumerated()
             .sorted { a, b in
-                let (wa, wb) = (weakRank(a.element[0].subject), weakRank(b.element[0].subject))
-                return wa != wb ? wa < wb : a.offset < b.offset
+                let (wa, wb) = (weakRank(a.element.queue[0].subject), weakRank(b.element.queue[0].subject))
+                if wa != wb { return wa < wb }
+                if a.element.confident != b.element.confident { return a.element.confident }
+                return a.offset < b.offset
             }
             .map(\.element)
         var depth = 0
-        while slots.count < maxSlots, queues.contains(where: { $0.count > depth }) {
-            for queue in queues where queue.count > depth && slots.count < maxSlots {
+        while slots.count < maxSlots, queues.contains(where: { $0.queue.count > depth }) {
+            for (queue, _) in queues where queue.count > depth && slots.count < maxSlots {
                 let entry = queue[depth]
                 slots.append(QuizPlanSlot(origin: .programme, subject: entry.subject, theme: entry.theme.theme,
                                           keywords: entry.theme.keywords, homeworkKey: nil, notionKey: entry.key))
@@ -153,6 +179,48 @@ enum QuizSourceSelector {
                           curriculum: some CurriculumLookup) -> (theme: CurriculumTheme, score: Int)? {
         bestMatch(text: text, level: level, subjectLabel: subject, specialties: specialties, curriculum: curriculum)
             .map { ($0.theme, $0.score) }
+    }
+
+    /// Shared predicate "may a quiz ask about (subject, theme)?" for the
+    /// programme part (also `QuizSession`'s top-up). `subject` is a bank or
+    /// connector label, resolved through `CurriculumLookup.subjectThemes`.
+    /// - The owning subject has a position: only its seen themes (`current ∪
+    ///   covered`); a nil theme is refused (it cannot be shown to be seen).
+    /// - No position: `PeriodRank.isEligible(theme.period, currentPeriod)`.
+    /// - Label or theme unknown to the curriculum: accepted only when no
+    ///   matching subject has a position.
+    static func programmeEligibility(level rawLevel: String, position: ProgrammePosition, currentPeriod: String?,
+                                     curriculum: some CurriculumLookup, specialties: [String])
+        -> (_ subject: String, _ theme: String?) -> Bool {
+        let level = CurriculumService.canonicalLevel(rawLevel)
+        var cache: [String: [(name: String, themes: [CurriculumTheme])]] = [:]
+        let lookup = curriculum
+        return { subject, theme in
+            let candidates: [(name: String, themes: [CurriculumTheme])]
+            if let cached = cache[subject] {
+                candidates = cached
+            } else {
+                candidates = lookup.subjectThemes(for: level, subject: subject, specialties: specialties)
+                cache[subject] = candidates
+            }
+            let positioned = candidates.filter { position.subjects[SubjectAlias.fold($0.name)] != nil }
+            guard let theme, !theme.isEmpty else { return positioned.isEmpty }
+            let foldedTheme = SubjectAlias.fold(theme)
+            for candidate in candidates {
+                guard let owned = candidate.themes.first(where: { SubjectAlias.fold($0.theme) == foldedTheme })
+                else { continue }
+                if let keys = position.eligibleKeys(forSubject: SubjectAlias.fold(candidate.name)) {
+                    if keys.contains(NotionKey.make(level: level, subject: candidate.name, theme: owned.theme)) {
+                        return true
+                    }
+                } else if PeriodRank.isEligible(owned.period, current: currentPeriod) {
+                    return true
+                }
+            }
+            // Theme found nowhere eligible; unknown themes pass only without a position.
+            let known = candidates.contains { c in c.themes.contains { SubjectAlias.fold($0.theme) == foldedTheme } }
+            return !known && positioned.isEmpty
+        }
     }
 
     // MARK: - Helpers

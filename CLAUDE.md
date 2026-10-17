@@ -56,6 +56,7 @@
 - `Insight` — generated insights per Child
 - `CultureReco` — culture-api recommendations per Child
 - `Curriculum` — curriculum reference data
+- `LessonContent` — cahier de textes lesson contents + homework kept across syncs (local only, never sent anywhere; purged at the school-year start or on a level change)
 
 ### Services (`Noto/Services/`)
 - `PawnoteBridge` — JavaScriptCore wrapper around `pawnote-bundle.js`; exposes async Swift API
@@ -66,6 +67,7 @@
 - `CultureAPIClient` — REST client for `https://celyn.io` with grade-filtered thematic search
 - `CurriculumService` — loads bundled `curriculum.json` (subjects carry `track` `tronc_commun`/`specialite` + optional `specialty`), maps grades to API format (`3e` → `3eme`), extracts BO culture topics. Revisions path = `CurriculumService.revisionLevels` (6e → Tle; CP → CM2 kept in the JSON for Discover only). `themes`/`matchKeywords` take the child's `specialties` (`Child.specialties`, empty = unknown → all spécialités eligible), resolve Pronote labels through the `SubjectAlias` table (`HISTOIRE-GEOGRAPHIE` → Histoire + Géographie union, `SC. ECONO.& SOCIALES` → SES…), and match keywords < 4 chars (`adn`, `pib`) on whole words only
 - `CurriculumMatcher` — matches homework/chapter text to curriculum keywords for culture-api queries
+- `ProgrammePositionTracker` — pure, on-device: from `LessonContent` + homework, infers per subject the current and already-covered programme themes; `QuizSourceSelector` / `QuizSession` only quiz on those (subjects without a position fall back to the current + earlier periods). Fed by `LessonContentStore` (Pronote onglet 89 via the hand-patched `fetchLessonContents` in `pawnote-bundle.js`, École Directe per-day `cahierdetextes/<date>.awp`, every connector's homework)
 
 ### View Structure (`Noto/Views/`)
 - `RootView` — authentication gate (Keychain check → onboarding or main)

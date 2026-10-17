@@ -22,8 +22,12 @@ final class PronoteSyncService {
         bridge.setActiveChild(index: childIndex)
 
         let today = Date.now
-        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: today)!
-        let twoWeeks = Calendar.current.date(byAdding: .day, value: 14, to: today)!
+        let calendar = Calendar.current
+        let nextWeek = calendar.date(byAdding: .day, value: 7, to: today)!
+        let twoWeeks = calendar.date(byAdding: .day, value: 14, to: today)!
+        // Programme position (3.8): cahier de textes + past homework window.
+        let lookback = calendar.date(byAdding: .day, value: -LessonContentStore.lookbackDays, to: today)!
+        let lessonFetchDue = !LessonContentStore.isFresh(child, now: today)
 
         // Fetch all four categories concurrently — they are independent network
         // calls with no shared mutable state. Results are collected into local
@@ -35,7 +39,21 @@ final class PronoteSyncService {
         async let homeworkTask = fetchSafe("Homework") { try await bridge.fetchHomework(from: today, to: twoWeeks) }
         async let discussionsTask = fetchSafe("Messages") { try await bridge.fetchDiscussions() }
 
+        // Quiet, read-only fetches (onglet 89 PageCahierDeTexte + homework
+        // already past due): a failure is logged, never added to
+        // `failedCategories` (no "partial sync" for a still-unverified
+        // feature), and never part of `hasData`. Past homework goes to
+        // `LessonContent` only, never to `Homework` (the on-screen list does
+        // not change). Skipped when fetched less than 24 h ago.
+        async let contentsTask = fetchQuiet("LessonContents", enabled: lessonFetchDue) {
+            try await bridge.fetchLessonContents(from: lookback, to: today)
+        }
+        async let pastHomeworkTask = fetchQuiet("PastHomework", enabled: lessonFetchDue) {
+            try await bridge.fetchHomework(from: lookback, to: today)
+        }
+
         let (grades, lessons, homework, discussions) = await (gradesTask, lessonsTask, homeworkTask, discussionsTask)
+        let (contents, pastHomework) = await (contentsTask, pastHomeworkTask)
 
         NSLog("[noto] Fetched: \(grades.count) grades, \(lessons.count) lessons, \(homework.count) homework, \(discussions.count) messages")
 
@@ -49,6 +67,8 @@ final class PronoteSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] Pronote sync for \(child.firstName) returned all-empty — preserving existing local data")
+            recordLessonContents(contents: contents, pastHomework: pastHomework, upcoming: [],
+                                 fetched: lessonFetchDue, for: child, now: today, calendar: calendar)
             child.markSynced()
             try? modelContext.save()
             return
@@ -57,11 +77,15 @@ final class PronoteSyncService {
             return
         }
 
+        // Keep the homework about to be wiped (it may have left the window).
+        LessonContentStore.captureHomework(of: child, in: modelContext, calendar: calendar, now: today)
         clearExistingData(for: child)
         syncGrades(grades, for: child)
         syncSchedule(lessons, for: child)
         syncHomework(homework, for: child)
         syncMessages(discussions, for: child)
+        recordLessonContents(contents: contents, pastHomework: pastHomework, upcoming: homework,
+                             fetched: lessonFetchDue, for: child, now: today, calendar: calendar)
         child.markSynced()
 
         try? modelContext.save()
@@ -140,6 +164,43 @@ final class PronoteSyncService {
         }
     }
 
+    // MARK: - Lesson contents (programme position, 3.8)
+
+    /// Upserts the cahier de textes contents and the homework (past + upcoming,
+    /// with Pronote's teacher-tagged themes, which `syncHomework` does not
+    /// keep) into `LessonContent`, then captures the fresh `Homework` rows and
+    /// purges. Stamps `lessonContentsFetchedAt` only when both quiet fetches
+    /// ran and succeeded. Local only: nothing here is sent anywhere.
+    private func recordLessonContents(contents: [PronoteLessonContentEntry]?, pastHomework: [PronoteAssignment]?,
+                                      upcoming: [PronoteAssignment], fetched: Bool, for child: Child,
+                                      now: Date, calendar: Calendar) {
+        var incoming: [LessonContentStore.Incoming] = []
+        for entry in contents ?? [] {
+            guard let date = Self.parseISO(entry.startDate) else { continue }
+            for item in entry.contents ?? [] {
+                incoming.append(.init(subject: entry.subject ?? "?", date: date, title: item.title ?? "",
+                                      text: item.description ?? "", themes: item.themes ?? [],
+                                      source: .pronoteLesson, externalID: item.id))
+            }
+        }
+        for a in (pastHomework ?? []) + upcoming {
+            incoming.append(.init(subject: a.subjectName, date: a.deadline, title: "", text: a.description,
+                                  themes: a.themes, source: .homework, externalID: a.id))
+        }
+        LessonContentStore.upsert(incoming, for: child, in: modelContext, calendar: calendar, now: now)
+        LessonContentStore.recordSync(of: child, in: modelContext, now: now, calendar: calendar)
+        if fetched, contents != nil, pastHomework != nil {
+            child.lessonContentsFetchedAt = now
+        }
+    }
+
+    private static func parseISO(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return withFraction.date(from: string) ?? ISO8601DateFormatter().date(from: string)
+    }
+
     // MARK: - Messages
 
     private func syncMessages(_ discussions: [PronoteDiscussion], for child: Child) {
@@ -158,6 +219,21 @@ final class PronoteSyncService {
     }
 
     // MARK: - Safe Fetch
+
+    /// Like `fetchSafe`, but a failure is only logged: it never lands in
+    /// `failedCategories`. Returns nil when the fetch failed or was skipped.
+    private func fetchQuiet<T>(_ label: String, enabled: Bool,
+                               _ fetch: () async throws -> [T]) async -> [T]? {
+        guard enabled else { return nil }
+        do {
+            let result = try await fetch()
+            NSLog("[noto] ✅ \(label) (quiet): \(result.count) items")
+            return result
+        } catch {
+            NSLog("[noto] ⚠️ \(label) (quiet) failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
 
     private func fetchSafe<T>(_ label: String, _ fetch: () async throws -> [T]) async -> [T] {
         do {

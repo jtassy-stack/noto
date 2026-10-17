@@ -55,6 +55,7 @@ final class ENTSyncService {
             break
         case .preserve:
             NSLog("[noto][warn] ENT sync for %@ returned empty payload — preserving existing local data", child.firstName)
+            LessonContentStore.recordSync(of: child, in: modelContext)
             child.markSynced()
             try modelContext.save()
             return
@@ -64,6 +65,7 @@ final class ENTSyncService {
 
         // Now safe to delete old data and insert new
         for msg in child.messages { modelContext.delete(msg) }
+        LessonContentStore.captureHomework(of: child, in: modelContext)   // 3.8: keep before the wipe
         for hw in child.homework { modelContext.delete(hw) }
         // Keep existing photos not in new set to avoid re-download; only add new ones.
         // Exception: delete entries that are NOT in the fresh sync AND never successfully cached
@@ -83,6 +85,7 @@ final class ENTSyncService {
         await syncSchoolbook(words, for: child)
         syncHomework(homework, for: child)
         syncPhotos(newPhotos, for: child)
+        LessonContentStore.recordSync(of: child, in: modelContext)
         child.markSynced()
 
         try modelContext.save()

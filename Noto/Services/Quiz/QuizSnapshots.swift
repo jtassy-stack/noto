@@ -22,10 +22,50 @@ struct HomeworkSnapshot: Sendable, Equatable {
         self.descriptionText = descriptionText
         self.dueDate = dueDate
         self.done = done
-        let day = calendar.dateComponents([.year, .month, .day], from: calendar.startOfDay(for: dueDate))
+        self.dedupKey = LessonDedupKey.make(subject: subject, date: dueDate, text: descriptionText, calendar: calendar)
+    }
+}
+
+/// Shared dedup hash of a homework row and of a `LessonContent` row:
+/// SHA256(fold(subject) + "|" + ymd(startOfDay(date)) + "|" + fold(text)), hex.
+/// Moved out of `HomeworkSnapshot.init` unchanged, so existing homework keys
+/// (and the `QuizPlanSlot.homeworkKey`s built from them) stay identical.
+enum LessonDedupKey {
+    static func make(subject: String, date: Date, text: String, calendar: Calendar) -> String {
+        let day = calendar.dateComponents([.year, .month, .day], from: calendar.startOfDay(for: date))
         let ymd = String(format: "%04d-%02d-%02d", day.year ?? 0, day.month ?? 0, day.day ?? 0)
-        let raw = SubjectAlias.fold(subject) + "|" + ymd + "|" + SubjectAlias.fold(descriptionText)
-        self.dedupKey = SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        let raw = SubjectAlias.fold(subject) + "|" + ymd + "|" + SubjectAlias.fold(text)
+        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Hashed body of a `LessonContent`: title and text joined by a space,
+    /// empty parts dropped. A homework row (empty title) therefore hashes as
+    /// its bare description, exactly like `HomeworkSnapshot.dedupKey`.
+    static func body(title: String, text: String) -> String {
+        [title, text]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+}
+
+/// One `LessonContent` row (cahier de textes lesson or kept homework), for
+/// `ProgrammePositionTracker`. The text stays on the device.
+struct LessonContentSnapshot: Sendable, Equatable {
+    let subject: String
+    let date: Date
+    let title: String
+    let text: String
+    let themes: [String]
+    let source: LessonContentSource
+
+    init(subject: String, date: Date, title: String, text: String, themes: [String], source: LessonContentSource) {
+        self.subject = subject
+        self.date = date
+        self.title = title
+        self.text = text
+        self.themes = themes
+        self.source = source
     }
 }
 
@@ -188,6 +228,13 @@ extension HomeworkSnapshot {
     @MainActor init(_ homework: Homework, calendar: Calendar) {
         self.init(subject: homework.subject, descriptionText: homework.descriptionText,
                   dueDate: homework.dueDate, done: homework.done, calendar: calendar)
+    }
+}
+
+extension LessonContentSnapshot {
+    @MainActor init(_ m: LessonContent) {
+        self.init(subject: m.subject, date: m.date, title: m.title, text: m.text, themes: m.themes,
+                  source: m.source)
     }
 }
 

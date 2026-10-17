@@ -1,0 +1,61 @@
+{
+  "code": 200,
+  "token": "",
+  "host": "HTTP",
+  "data": {
+    "date": "2023-11-10",
+    "matieres": [
+      {
+        "entityCode": "4A",
+        "entityLibelle": "4EME A",
+        "entityType": "C",
+        "matiere": "HISTOIRE-GEOGRAPHIE",
+        "codeMatiere": "HG",
+        "nomProf": " M. Exemple",
+        "id": 1001,
+        "interrogation": false,
+        "blogActif": false,
+        "nbJourMaxRenduDevoir": 0,
+        "contenuDeSeance": {
+          "contenu": "PHA+TGEgUsOpdm9sdXRpb24gZnJhbsOnYWlzZSA6IDE3ODksPC9wPjxwPnByaXNlIGRlIGxhIEJhc3RpbGxlLjwvcD4=",
+          "documents": [],
+          "commentaires": []
+        },
+        "aFaire": {
+          "idDevoir": 2002,
+          "contenu": "PHA+QXBwcmVuZHJlIGxhIGxlw6dvbiZuYnNwO3N1ciBsYSBSw6l2b2x1dGlvbi48L3A+",
+          "rendreEnLigne": false,
+          "donneLe": "2023-11-10",
+          "effectue": false,
+          "ressource": "",
+          "documents": []
+        }
+      },
+      {
+        "entityCode": "4A",
+        "matiere": "",
+        "libelle": "MATHEMATIQUES",
+        "codeMatiere": "MATHS",
+        "id": 1002,
+        "aFaire": {
+          "idDevoir": 2003,
+          "contenu": "",
+          "contenuDeSeance": {
+            "contenu": "PGRpdj5UaMOpb3LDqG1lIGRlIFB5dGhhZ29yZSA6IGh5cG90w6ludXNlPC9kaXY+"
+          }
+        }
+      },
+      {
+        "matiere": "EPS",
+        "codeMatiere": "EPS",
+        "id": 1003,
+        "contenuDeSeance": {
+          "contenu": ""
+        },
+        "aFaire": {
+          "contenu": ""
+        }
+      }
+    ]
+  }
+}

@@ -30,6 +30,9 @@ final class MonLyceeSyncService {
             syncNews(news, for: child)
         }
 
+        // 3.8: no lesson contents here (the logbook is a login-time snapshot);
+        // it only feeds the homework capture.
+        LessonContentStore.recordSync(of: child, in: modelContext)
         child.markSynced()
         try? modelContext.save()
         return true
@@ -51,7 +54,8 @@ final class MonLyceeSyncService {
                 // Match by entChildId or firstName
                 guard id == child.entChildId || firstName == child.firstName else { continue }
 
-                // Clear existing data
+                // Clear existing data (homework kept in LessonContent first, 3.8)
+                LessonContentStore.captureHomework(of: child, in: modelContext)
                 for hw in child.homework { modelContext.delete(hw) }
                 for grade in child.grades { modelContext.delete(grade) }
 

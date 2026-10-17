@@ -22775,7 +22775,8 @@
         status: lesson.status ?? null,
         teacherNames: lesson.teacherNames,
         classrooms: lesson.classrooms,
-        isTest: lesson.test
+        isTest: lesson.test,
+        lessonResourceID: lesson.lessonResourceID ?? null
       }));
     },
     // Fetch homework
@@ -22790,8 +22791,62 @@
         deadline: a2.deadline.toISOString(),
         done: a2.done,
         difficulty: a2.difficulty,
-        themes: a2.themes.map((t) => t.name ?? t)
+        themes: a2.themes.map((t) => t.name ?? t),
+        resourceID: a2.resourceID ?? null
       }));
+    },
+    // NOTO HAND PATCH (3.8) — cahier de textes lesson contents (onglet 89,
+    // PageCahierDeTexte). Read-only. Re-apply after any bundle rebuild (see
+    // pawnote-bridge.js). Raw shape (ListeCahierDeTextes / listeContenus /
+    // descriptif / ListeThemes) unverified on a live parent account: every
+    // field is optional, and only key NAMES are returned for the shape check.
+    fetchLessonContents: async (session, startDateISO, endDateISO) => {
+      const empty = { entries: [], rawKeys: [], rawEntryKeys: [], rawContentKeys: [] };
+      const resourceTabs = session.userResource?.tabs;
+      const userTabs = session.user?.authorizations?.tabs;
+      const hasTab = (resourceTabs?.has?.(Q.Resources) ?? false) || (Array.isArray(userTabs) && userTabs.includes(Q.Resources));
+      if (!hasTab) return empty;
+      let start = new Date(startDateISO);
+      const end = new Date(endDateISO);
+      const firstMonday = session.instance?.firstMonday;
+      if (firstMonday instanceof Date && start < firstMonday) start = firstMonday;
+      if (!(start <= end)) return empty;
+      const raw = await ns(session, Q.Resources, start, end);
+      const list = raw?.ListeCahierDeTextes?.V ?? [];
+      const strip = (h) => String(h ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+      const parseDate = (v) => {
+        try {
+          const d = typeof v === "string" ? le(v) : null;
+          return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+        } catch (e) {
+          return null;
+        }
+      };
+      const entries = list.map((r) => {
+        const startDate = parseDate(r?.Date?.V);
+        const endDate = parseDate(r?.DateFin?.V);
+        return {
+          id: r?.N ?? null,
+          subject: r?.Matiere?.V?.L ?? null,
+          startDate: startDate ? startDate.toISOString() : null,
+          endDate: endDate ? endDate.toISOString() : null,
+          contents: (r?.listeContenus?.V ?? []).map((c3) => ({
+            id: c3?.N ?? null,
+            title: strip(c3?.L),
+            description: strip(c3?.descriptif?.V),
+            categoryLabel: c3?.categorie?.V?.L ?? null,
+            themes: (c3?.ListeThemes?.V ?? []).map((t) => t?.L).filter(Boolean)
+          }))
+        };
+      }).filter((r) => r.startDate && start <= new Date(r.startDate) && new Date(r.startDate) <= end);
+      const first = list[0];
+      const firstContent = first?.listeContenus?.V?.[0];
+      return {
+        entries,
+        rawKeys: raw && typeof raw === "object" ? Object.keys(raw) : [],
+        rawEntryKeys: first && typeof first === "object" ? Object.keys(first) : [],
+        rawContentKeys: firstContent && typeof firstContent === "object" ? Object.keys(firstContent) : []
+      };
     },
     // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth
     // Performs Identification with pourENT:true, then Authentification

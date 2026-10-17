@@ -1,0 +1,53 @@
+{
+  "entries": [
+    {
+      "id": "CDT-1",
+      "subject": "HISTOIRE-GEOGRAPHIE",
+      "startDate": "2023-11-06T08:00:00.000Z",
+      "endDate": "2023-11-06T09:00:00.000Z",
+      "contents": [
+        {
+          "id": "C-1",
+          "title": "Chapitre 2 : la Révolution française",
+          "description": "1789 : les états généraux. Exemple fictif.",
+          "categoryLabel": "Cours",
+          "themes": [
+            "La Révolution française"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CDT-2",
+      "subject": "FRANCAIS",
+      "startDate": "2023-11-07T10:00:00.000Z",
+      "endDate": null,
+      "contents": [
+        {
+          "id": "C-2",
+          "title": "Le Horla",
+          "description": "Lecture de Maupassant, récit fantastique.",
+          "categoryLabel": null,
+          "themes": []
+        }
+      ]
+    }
+  ],
+  "rawKeys": [
+    "ListeCahierDeTextes"
+  ],
+  "rawEntryKeys": [
+    "N",
+    "Matiere",
+    "Date",
+    "DateFin",
+    "listeContenus"
+  ],
+  "rawContentKeys": [
+    "N",
+    "L",
+    "descriptif",
+    "categorie",
+    "ListeThemes"
+  ]
+}

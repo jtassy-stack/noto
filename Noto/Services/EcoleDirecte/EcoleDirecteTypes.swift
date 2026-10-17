@@ -51,6 +51,17 @@ struct EDHomework: Sendable {
     let dueDate: Date
 }
 
+/// One subject of one cahier de textes day (3.8). Local only.
+struct EDSeance: Sendable, Equatable {
+    let id: String
+    let subject: String
+    let date: Date
+    /// `contenuDeSeance.contenu`, base64-decoded, HTML stripped.
+    let seanceText: String
+    /// `aFaire.contenu`, same treatment; nil when there is none.
+    let homeworkText: String?
+}
+
 struct EDMessage: Sendable {
     let id: Int
     let from: String
@@ -113,4 +124,25 @@ func edParseDate(_ string: String) -> Date? {
 func edStripHTML(_ html: String) -> String {
     html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// École Directe base64-encodes rich text (messages, cahier de textes). Returns
+/// the decoded UTF-8 string, or the input unchanged when it is not base64.
+func edDecodeBase64HTML(_ raw: String) -> String {
+    if let decoded = Data(base64Encoded: raw, options: .ignoreUnknownCharacters),
+       let str = String(data: decoded, encoding: .utf8) {
+        return str
+    }
+    return raw
+}
+
+/// `edStripHTML` that keeps word boundaries (tags become spaces), decodes the
+/// common entities and collapses whitespace: `<p>a</p><p>b</p>` → "a b".
+func edPlainText(_ html: String) -> String {
+    var text = edStripHTML(html.replacingOccurrences(of: "<", with: " <"))
+    for (entity, char) in [("&nbsp;", " "), ("&#39;", "'"), ("&apos;", "'"), ("&quot;", "\""),
+                           ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")] {
+        text = text.replacingOccurrences(of: entity, with: char)
+    }
+    return text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
 }
