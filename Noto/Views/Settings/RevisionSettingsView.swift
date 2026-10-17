@@ -241,12 +241,14 @@ struct RevisionSettingsView: View {
             VStack(spacing: 0) {
                 Toggle(isOn: $cultureQuestion) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Question culture du jour")
+                        Text("Culture générale")
                             .font(NotoTheme.Typography.body)
                             .foregroundStyle(NotoTheme.Colors.textPrimary)
-                        Text("Une question de culture générale par jour (films, séries, livres, jeux…). "
-                             + "Contenu tout public, non spécifiquement conçu pour les enfants : "
-                             + "activez-la si cela vous convient. Ne rapporte ni minutes ni points.")
+                        Text("La question culture du jour et le quiz culture G (cinéma, livres, musique, "
+                             + "sport, sciences…). Seules les questions adaptées à son âge sont proposées "
+                             + "(pas d'actualité ni de sujet sensible), mais le contenu n'est pas relu "
+                             + "spécialement pour les enfants : activez-la si cela vous convient. "
+                             + "Ne rapporte ni minutes ni points.")
                             .font(NotoTheme.Typography.caption)
                             .foregroundStyle(NotoTheme.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

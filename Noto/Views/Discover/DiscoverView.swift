@@ -14,6 +14,7 @@ struct DiscoverView: View {
     @State private var loadError: String? = nil
     @State private var selectedReco: CultureSearchResult? = nil
     @State private var showFavoritesOnly = false
+    @State private var showCultureQuiz = false
     @StateObject private var locationService = LocationService()
     @AppStorage("bookmarkedRecoIds") private var bookmarkedIdsRaw: String = "[]"
 
@@ -303,6 +304,19 @@ struct DiscoverView: View {
             }
             .sheet(item: $selectedReco) { reco in
                 RecoDetailView(reco: reco)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCultureQuiz = true
+                    } label: {
+                        Label("Quiz culture G", systemImage: "lightbulb")
+                    }
+                    .accessibilityHint("Dix questions de culture générale pour vous")
+                }
+            }
+            .fullScreenCover(isPresented: $showCultureQuiz) {
+                CultureQuizView(audience: .parent)
             }
         }
     }

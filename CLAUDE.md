@@ -75,6 +75,7 @@
 - `School/` — `SchoolView` with sub-tabs: Notes · EDT · Devoirs · Messages
 - `Insights/` — `InsightsView`: trends, strengths/weaknesses, weighted averages
 - `Discover/` — `DiscoverView`: grade-filtered culture-api recommendations with curriculum tag badges
+- `Culture/` — `CultureQuizView`: culture G quiz (10 questions) for the parent (Découvrir) and the child (child home, behind the parent's « Culture générale » toggle), drawn from every celyn « Koi ? » lot (Keskonfé, Sirius, Le Club) accumulated on device; child pool filtered by `CultureQuizFilter` (domains, no actu, difficulty, `ChildSafeText`); reward-free; logic in `Services/Quiz/CultureQuizPool.swift`
 - `AddChild/` — child onboarding flow (QR scan + Keychain storage)
 - `Child/` — `DeviceMode.child` app (tutoiement): `ChildHomeView` (cagnotte, série, « Réviser », EDT, Réglages behind `ParentGateView`), `QuizView`, `QuizResultView`, `SubjectPathView`; quiz logic in `Services/Quiz/QuizSession.swift`
 
