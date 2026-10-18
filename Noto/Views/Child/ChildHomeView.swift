@@ -44,6 +44,12 @@ struct ChildHomeView: View {
     /// The child the parent is looking at; nil on a child device.
     var previewChild: Child? = nil
 
+    /// Explicit: the private wrapped properties make the synthesized
+    /// memberwise init private, so `ParentWeekSection` could not reach it.
+    init(previewChild: Child? = nil) {
+        self.previewChild = previewChild
+    }
+
     @Query private var families: [Family]
     @Query private var attempts: [QuizAttempt]
     @Query private var jokerRows: [StreakJoker]
