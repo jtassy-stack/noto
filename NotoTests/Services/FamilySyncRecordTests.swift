@@ -10,16 +10,16 @@ struct FamilySyncRecordTests {
     private let zone = CKRecordZone.ID(zoneName: "enfant-test", ownerName: CKCurrentUserDefaultName)
     private let date = QuizClock.date(day: 0, hour: 17)
 
-    private var attempt: SyncedAttempt {
-        SyncedAttempt(id: UUID(), date: date, correctCount: 4, totalCount: 5, durationSec: 92, minutesEarned: 15,
-                      bonusApplied: true, bonusMinutes: 5, denialReason: nil,
+    // Stored, not computed: one id per test, so two reads compare equal.
+    private let attempt =
+        SyncedAttempt(id: UUID(), date: QuizClock.date(day: 0, hour: 17), correctCount: 4, totalCount: 5,
+                      durationSec: 92, minutesEarned: 15, bonusApplied: true, bonusMinutes: 5, denialReason: nil,
                       itemSubjects: ["Histoire", "", "SVT", "SVT", "Histoire"], itemXP: [10, 0, 10, 15, 10])
-    }
 
-    private var notion: SyncedNotion {
+    private let notion =
         SyncedNotion(id: UUID(), notionKey: "4e|histoire|la revolution francaise", leitnerBox: 4,
-                     nextReview: date, streakCorrect: 3, lastReviewedAt: date, masteredAt: nil)
-    }
+                     nextReview: QuizClock.date(day: 0, hour: 17), streakCorrect: 3,
+                     lastReviewedAt: QuizClock.date(day: 0, hour: 17), masteredAt: nil)
 
     private var rules: SyncedRules {
         SyncedRules(config: RewardConfig(tiers: [10, 10, 5], passThreshold: 0.6, dailyCap: 30, examEveBonus: 0,
