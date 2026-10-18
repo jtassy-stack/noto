@@ -6,7 +6,9 @@ import Foundation
 /// (the child for attempts, notions, jokers and day minutes, the parent for
 /// the rules), so the engine never merges: last write wins.
 ///
-/// Privacy: only results. Never credentials, messages, grades, timetable,
+/// Privacy: only results, every field encrypted. Record names stay in clear
+/// on CloudKit, so they are opaque (a UUID or a fixed word), never a date or
+/// a notion. Never credentials, messages, grades, timetable,
 /// cahier de textes, photos, question texts or question keys (the anti-replay
 /// hashes stay on the child's device, where the anti-cheat runs). See
 /// `/mnt/project-files/sync-famille/CADRAGE.md`.
@@ -37,8 +39,8 @@ struct FamilySyncRecord: Sendable, Equatable {
     static let versionField = "v"
 
     let kind: Kind
-    /// Unique within the child's zone, ASCII: « attempt-<uuid> »,
-    /// « joker-2026-10-18 », « rules »…
+    /// Unique within the child's zone, ASCII and opaque (kept in clear by
+    /// CloudKit): « attempt-<uuid> », « joker-<uuid> », « minutes », « rules ».
     let name: String
     var fields: [String: Value]
 
@@ -211,32 +213,42 @@ struct SyncedNotion: Sendable, Equatable {
     }
 }
 
-/// A série joker: the covered day only (`CalendarDay.key`).
+/// A série joker: the covered day only (`CalendarDay.key`). Named by the
+/// child's `StreakJoker.id`: the day stays in an encrypted field, never in
+/// the record name, which CloudKit keeps in clear.
 struct SyncedJoker: Sendable, Equatable {
+    let id: UUID
     let dayKey: String
     let createdAt: Date
 
     var record: FamilySyncRecord {
-        FamilySyncRecord(kind: .joker, name: Self.recordName(dayKey), fields: ["created": .date(createdAt)])
+        FamilySyncRecord(kind: .joker, name: Self.recordName(id), fields: [
+            "day": .string(dayKey),
+            "created": .date(createdAt),
+        ])
     }
 
-    static func recordName(_ dayKey: String) -> String { "joker-\(dayKey)" }
+    static func recordName(_ id: UUID) -> String { "joker-\(id.uuidString)" }
 
-    init(dayKey: String, createdAt: Date) {
+    init(id: UUID, dayKey: String, createdAt: Date) {
+        self.id = id
         self.dayKey = dayKey
         self.createdAt = createdAt
     }
 
     init?(record: FamilySyncRecord) {
-        let dayKey = String(record.name.dropFirst("joker-".count))
-        guard record.kind == .joker, record.name == Self.recordName(dayKey), CalendarDay(key: dayKey) != nil,
+        guard record.kind == .joker,
+              let id = UUID(uuidString: String(record.name.dropFirst("joker-".count))),
+              record.name == Self.recordName(id),
+              let dayKey = record.string("day"), CalendarDay(key: dayKey) != nil,
               let created = record.date("created") else { return nil }
-        self.init(dayKey: dayKey, createdAt: created)
+        self.init(id: id, dayKey: dayKey, createdAt: created)
     }
 }
 
-/// The day's reward counters (`RewardLedger`), for « Bonus du jour ». Totals
-/// only: no activity names, no log.
+/// Today's reward counters (`RewardLedger`), for « Bonus du jour ». Totals
+/// only: no activity names, no log. One record per zone, overwritten each
+/// day, so no date ever appears in a record name.
 struct SyncedDayMinutes: Sendable, Equatable {
     /// `RewardLedger.day`, « yyyy-MM-dd ».
     let day: String
@@ -244,15 +256,16 @@ struct SyncedDayMinutes: Sendable, Equatable {
     let pending: Int
     let reserve: Int
 
+    static let recordName = "minutes"
+
     var record: FamilySyncRecord {
-        FamilySyncRecord(kind: .dayMinutes, name: Self.recordName(day), fields: [
+        FamilySyncRecord(kind: .dayMinutes, name: Self.recordName, fields: [
+            "day": .string(day),
             "credited": .int(credited),
             "pending": .int(pending),
             "reserve": .int(reserve),
         ])
     }
-
-    static func recordName(_ day: String) -> String { "day-\(day)" }
 
     init(day: String, credited: Int, pending: Int, reserve: Int) {
         self.day = day
@@ -266,8 +279,8 @@ struct SyncedDayMinutes: Sendable, Equatable {
     }
 
     init?(record: FamilySyncRecord) {
-        let day = String(record.name.dropFirst("day-".count))
-        guard record.kind == .dayMinutes, record.name == Self.recordName(day), CalendarDay(key: day) != nil,
+        guard record.kind == .dayMinutes, record.name == Self.recordName,
+              let day = record.string("day"), CalendarDay(key: day) != nil,
               let credited = record.int("credited") else { return nil }
         self.init(day: day, credited: credited, pending: record.int("pending") ?? 0,
                   reserve: record.int("reserve") ?? 0)

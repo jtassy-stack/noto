@@ -35,7 +35,7 @@ struct FamilySyncRecordTests {
         #expect(SyncedAttempt(record: a.record) == a)
         let n = notion
         #expect(SyncedNotion(record: n.record) == n)
-        let j = SyncedJoker(dayKey: "2026-10-17", createdAt: date)
+        let j = SyncedJoker(id: UUID(), dayKey: "2026-10-17", createdAt: date)
         #expect(SyncedJoker(record: j.record) == j)
         let d = SyncedDayMinutes(day: "2026-10-18", credited: 20, pending: 5, reserve: 10)
         #expect(SyncedDayMinutes(record: d.record) == d)
@@ -58,7 +58,18 @@ struct FamilySyncRecordTests {
         ledger.namesToStop = ["noto.reward.1"]
         let synced = SyncedDayMinutes(ledger: ledger)
         #expect(synced == SyncedDayMinutes(day: "2026-10-18", credited: 25, pending: 5, reserve: 10))
-        #expect(Set(synced.record.fields.keys) == ["v", "credited", "pending", "reserve"])
+        #expect(Set(synced.record.fields.keys) == ["v", "day", "credited", "pending", "reserve"])
+    }
+
+    @Test func recordNamesCarryNoDateOrNotion() {
+        let names = [attempt.record.name, notion.record.name,
+                     SyncedJoker(id: UUID(), dayKey: "2026-10-17", createdAt: date).record.name,
+                     SyncedDayMinutes(day: "2026-10-18", credited: 0, pending: 0, reserve: 0).record.name,
+                     SyncedRules.recordName]
+        for name in names {
+            #expect(!name.contains("2026-10-1"))
+            #expect(!name.contains("histoire"))
+        }
     }
 
     @Test func badRecordsAreDropped() {
@@ -69,8 +80,8 @@ struct FamilySyncRecordTests {
         var missing = attempt.record
         missing.fields["total"] = nil
         #expect(SyncedAttempt(record: missing) == nil)
-        #expect(SyncedJoker(record: FamilySyncRecord(kind: .joker, name: "joker-hier",
-                                                     fields: ["created": .date(date)])) == nil)
+        #expect(SyncedJoker(record: FamilySyncRecord(kind: .joker, name: SyncedJoker.recordName(UUID()),
+                                                     fields: ["day": .string("hier"), "created": .date(date)])) == nil)
     }
 
     @Test func newerFieldsAreIgnoredAndRulesSanitized() {
