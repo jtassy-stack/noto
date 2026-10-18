@@ -13,6 +13,7 @@ struct RevisionSettingsView: View {
     @State private var config = RewardConfigStore.load()
     @State private var cultureQuestion = CultureQuestionSettings.isEnabled()
     @State private var familyChallenge = FamilyChallengeSettings.isEnabled()
+    @State private var gradesVisible = ChildGradesSettings.isVisible()
     @State private var showResetConfirmation = false
 
     /// Defaults to restore: the guided setup's profile (barème + plafond) when
@@ -72,7 +73,7 @@ struct RevisionSettingsView: View {
                     } message: {
                         Text("Le barème, le plafond et les règles reprennent leurs valeurs par défaut"
                              + (ScreenTimePlanStore.load().map { " (profil \($0.profile.label))" } ?? "")
-                             + ". La question culture et le défi familial ne changent pas.")
+                             + ". La question culture, le défi familial et l'affichage des notes ne changent pas.")
                     }
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
@@ -89,6 +90,7 @@ struct RevisionSettingsView: View {
             .onChange(of: config) { _, newValue in RewardConfigStore.save(newValue) }
             .onChange(of: cultureQuestion) { _, on in CultureQuestionSettings.setEnabled(on) }
             .onChange(of: familyChallenge) { _, on in FamilyChallengeSettings.setEnabled(on) }
+            .onChange(of: gradesVisible) { _, on in ChildGradesSettings.setVisible(on) }
         }
     }
 
@@ -239,6 +241,23 @@ struct RevisionSettingsView: View {
                 .padding(.horizontal, NotoTheme.Spacing.xs)
 
             VStack(spacing: 0) {
+                Toggle(isOn: $gradesVisible) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Afficher les notes")
+                            .font(NotoTheme.Typography.body)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text("Dans l'onglet « Mes cours », à côté des devoirs et de l'emploi du temps. "
+                             + "Désactivez-le pour que votre enfant n'y voie que ses devoirs et ses cours.")
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(NotoTheme.Colors.brand)
+                .padding(.horizontal, NotoTheme.Spacing.md)
+                .padding(.vertical, 12)
+
+                SettingsDivider()
                 Toggle(isOn: $cultureQuestion) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Culture générale")

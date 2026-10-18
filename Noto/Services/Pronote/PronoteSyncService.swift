@@ -23,7 +23,6 @@ final class PronoteSyncService {
 
         let today = Date.now
         let calendar = Calendar.current
-        let nextWeek = calendar.date(byAdding: .day, value: 7, to: today)!
         let twoWeeks = calendar.date(byAdding: .day, value: 14, to: today)!
         // Programme position (3.8): cahier de textes + past homework window.
         let lookback = calendar.date(byAdding: .day, value: -LessonContentStore.lookbackDays, to: today)!
@@ -35,7 +34,9 @@ final class PronoteSyncService {
         // MainActor (ModelContext is not Sendable, so it must not be touched
         // from these concurrent tasks).
         async let gradesTask = fetchSafe("Grades") { try await bridge.fetchGrades() }
-        async let lessonsTask = fetchSafe("Timetable") { try await bridge.fetchTimetable(from: today, to: nextWeek) }
+        // 14 days like the other connectors, so the child « Mes cours » day
+        // picker gets 7 school days even across a weekend or a holiday.
+        async let lessonsTask = fetchSafe("Timetable") { try await bridge.fetchTimetable(from: today, to: twoWeeks) }
         async let homeworkTask = fetchSafe("Homework") { try await bridge.fetchHomework(from: today, to: twoWeeks) }
         async let discussionsTask = fetchSafe("Messages") { try await bridge.fetchDiscussions() }
 

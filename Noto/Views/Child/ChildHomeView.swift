@@ -6,13 +6,15 @@ private let logger = Logger(subsystem: "com.pmf.noto", category: "ChildHomeView"
 
 /// The child app's tabs (`DeviceMode.child`).
 enum ChildTab: Hashable {
-    case today, revise, path, me
+    case today, courses, revise, path, me
 }
 
-/// Child-facing app for devices set to `DeviceMode.child`, in four tabs:
+/// Child-facing app for devices set to `DeviceMode.child`, in five tabs:
 /// - « Aujourd'hui » (`ChildTodayView`): cagnotte, série, tomorrow's
 ///   contrôle and the school day, lessons with their homework and the class
 ///   lock, ending on the quiz of the day.
+/// - « Mes cours » (`ChildCoursesView`): all homework to do, the timetable
+///   and the grades (hidden when the parent turns « Afficher les notes » off).
 /// - « Réviser » (`ChildReviseView`): the quiz of the day and what it is made
 ///   of, the themes taught in class now, and the reward-free culture corner.
 /// - « Parcours » (`SubjectPathView`): themes, XP and levels per subject.
@@ -68,6 +70,7 @@ struct ChildHomeView: View {
     @State private var quizFocus: QuizFocus?
     @State private var cultureQuestion: DailyCultureQuestion?
     @State private var cultureQuizEnabled = false
+    @State private var gradesVisible = ChildGradesSettings.isVisible()
     @State private var rewardStatus: RewardStatus = .neutral
     /// Device day the home was last refreshed for. Bumped on return to the
     /// foreground and at midnight, so a home left mounted overnight reloads
@@ -120,6 +123,16 @@ struct ChildHomeView: View {
             }
             .tabItem { Label("Aujourd'hui", systemImage: "calendar") }
             .tag(ChildTab.today)
+
+            NavigationStack {
+                if let child {
+                    ChildCoursesView(child: child, gradesVisible: gradesVisible)
+                } else {
+                    noChildState
+                }
+            }
+            .tabItem { Label("Mes cours", systemImage: "book") }
+            .tag(ChildTab.courses)
 
             NavigationStack {
                 let plan = child.map { QuizSession.plan(for: $0, now: now) }
@@ -190,6 +203,7 @@ struct ChildHomeView: View {
         // The parent may have flipped « Culture générale » there: re-read
         // it now rather than at the next day change.
         .sheet(isPresented: $showSettings, onDismiss: {
+            gradesVisible = ChildGradesSettings.isVisible()
             Task { await loadCultureQuestion() }
         }) {
             SettingsView()
@@ -205,6 +219,7 @@ struct ChildHomeView: View {
         .onAppear {
             screenTimeManager.refresh()
             refreshRewardStatus()
+            gradesVisible = ChildGradesSettings.isVisible()
         }
         .task(id: child?.persistentModelID) {
             recordDueJokers()
