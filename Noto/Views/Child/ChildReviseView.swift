@@ -18,6 +18,9 @@ struct ChildReviseView: View {
     /// Nil = the quiz of the day.
     let onStartQuiz: (QuizFocus?) -> Void
     let onCultureAnswer: (Int) -> Void
+    /// Set in « vision enfant »: the culture quiz shows the parent's notice
+    /// instead of opening (it would mark questions as seen on this device).
+    var onPreviewAction: (() -> Void)? = nil
 
     struct SubjectChoice: Identifiable, Equatable, Sendable {
         let subject: String
@@ -171,7 +174,11 @@ struct ChildReviseView: View {
     /// reward-free), shown when the parent turned culture on.
     private var cultureQuizCard: some View {
         Button {
-            showCultureQuiz = true
+            if let onPreviewAction {
+                onPreviewAction()
+            } else {
+                showCultureQuiz = true
+            }
         } label: {
             HStack(spacing: NotoTheme.Spacing.sm) {
                 Image(systemName: "sparkles")

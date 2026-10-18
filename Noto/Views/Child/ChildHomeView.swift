@@ -131,7 +131,8 @@ struct ChildHomeView: View {
                     cultureQuestion: cultureQuestion,
                     cultureQuizEnabled: cultureQuizEnabled,
                     onStartQuiz: { startQuiz($0) },
-                    onCultureAnswer: { answerCultureQuestion($0) }
+                    onCultureAnswer: { answerCultureQuestion($0) },
+                    onPreviewAction: isPreview ? { showPreviewNotice = true } : nil
                 )
             }
             .tabItem { Label("Réviser", systemImage: "sparkles") }
