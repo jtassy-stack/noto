@@ -14,6 +14,7 @@ struct ParentWeekSection: View {
     let child: Child
     @Query private var recos: [CultureReco]
     @State private var showParentQuiz = false
+    @State private var showChildView = false
 
     var body: some View {
         let now = Date()
@@ -78,10 +79,28 @@ struct ParentWeekSection: View {
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
             }
+
+            childViewButton
         }
         .fullScreenCover(isPresented: $showParentQuiz) {
             ParentQuizView(child: child)
         }
+        // Vision enfant: the child app, read only, on this child's data.
+        .fullScreenCover(isPresented: $showChildView) {
+            ChildHomeView(previewChild: child)
+        }
+    }
+
+    private var childViewButton: some View {
+        Button {
+            showChildView = true
+        } label: {
+            Label(ChildPreviewBanner.entryTitle(child.firstName), systemImage: "eye")
+                .font(NotoTheme.Typography.body.weight(.semibold))
+                .foregroundStyle(NotoTheme.Colors.info)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        }
+        .accessibilityHint("Affiche ce que \(child.firstName) voit dans nōto, en lecture seule.")
     }
 
     static func noRevisionText(_ name: String) -> String {

@@ -142,3 +142,21 @@ struct ChildPathCopyTests {
         #expect(QuizResultView.scoreLine(for: one) == "1 bonne réponse sur 5")
     }
 }
+
+@MainActor
+@Suite("Vision enfant")
+struct ChildPreviewCopyTests {
+    @Test func bannerAddressesTheParent() {
+        #expect(ChildPreviewBanner.title("Joseph") == "Vision enfant : l'appli de Joseph")
+        #expect(ChildPreviewBanner.entryTitle("Joseph") == "Voir l'appli de Joseph")
+        // Parent tone: no tutoiement in the parent's bar and alert.
+        for text in [ChildPreviewBanner.detail("Joseph"), ChildPreviewBanner.actionMessage("Joseph")] {
+            #expect(text.contains("Joseph"))
+            #expect(!text.contains(" tu ") && !text.contains(" ton ") && !text.contains(" tes "))
+        }
+    }
+
+    @Test func bannerSaysWhereTheProgressLives() {
+        #expect(ChildPreviewBanner.detail("Joseph").contains("synchro famille"))
+    }
+}
