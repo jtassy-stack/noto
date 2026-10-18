@@ -33,7 +33,25 @@ enum ChildTab: Hashable {
 /// minutes t'attendent après les cours »…), read from the reward ledger
 /// (`RewardUnlockService.status`), and only when Screen Time is authorized
 /// with watched apps; otherwise the neutral wording stays.
+///
+/// « Vision enfant »: the parent app opens this same view with
+/// `previewChild` to show a parent what that child sees. It is read only:
+/// nothing that writes the child's progress runs (quiz, culture answer,
+/// jokers), the reward status stays neutral and the class lock is not
+/// claimed (both describe the device the child plays on), and every action
+/// shows `previewNotice` instead. Only the question bank refresh runs, as on
+/// any device (questions come down, nothing goes up). Quiz, série and badges
+/// are empty until the family sync brings them to the parent's device.
 struct ChildHomeView: View {
+    /// The child the parent is looking at; nil on a child device.
+    var previewChild: Child? = nil
+
+    /// Explicit: the private wrapped properties make the synthesized
+    /// memberwise init private, so `ParentWeekSection` could not reach it.
+    init(previewChild: Child? = nil) {
+        self.previewChild = previewChild
+    }
+
     @Query private var families: [Family]
     @Query private var attempts: [QuizAttempt]
     @Query private var jokerRows: [StreakJoker]
@@ -58,9 +76,14 @@ struct ChildHomeView: View {
     /// foreground and at midnight, so a home left mounted overnight reloads
     /// the culture question and re-renders the série for the new day.
     @State private var dayKey = CalendarDay(Date(), calendar: .current).key
+    @State private var showPreviewNotice = false
+    @Environment(\.dismiss) private var dismiss
     private let cultureStore = DailyCultureQuestionStore()
 
+    private var isPreview: Bool { previewChild != nil }
+
     private var child: Child? {
+        if let previewChild { return previewChild }
         guard let linkedID = ScreenTimeEventStore.loadLinkedChildID() else {
             return families.first?.children.first
         }
@@ -92,7 +115,8 @@ struct ChildHomeView: View {
                     rewardStatus: rewardStatus,
                     exam: child.flatMap { examTomorrow(for: $0) },
                     examBonus: Self.examBonusMinutes(RewardConfigStore.load()),
-                    classLockActive: screenTimeManager.isAuthorized && ScreenTimeEventStore.isClassLockEnabled(),
+                    classLockActive: !isPreview && screenTimeManager.isAuthorized
+                        && ScreenTimeEventStore.isClassLockEnabled(),
                     canQuiz: canQuiz,
                     onStartQuiz: { startQuiz(nil) }
                 )
@@ -153,6 +177,17 @@ struct ChildHomeView: View {
             .tag(ChildTab.me)
         }
         .tint(ChildStyle.accent)
+        // Vision enfant: the parent's bar above every tab.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let previewChild {
+                ChildPreviewBanner(firstName: previewChild.firstName, onClose: { dismiss() })
+            }
+        }
+        .alert(ChildPreviewBanner.actionTitle, isPresented: $showPreviewNotice) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(ChildPreviewBanner.actionMessage(child?.firstName ?? "Votre enfant"))
+        }
         // Réglages (restrictions, déconnexion des comptes, etc.) est un
         // écran parent — un enfant qui tient ce téléphone ne doit pas
         // pouvoir désactiver son propre contrôle parental d'un tap.
@@ -218,7 +253,9 @@ struct ChildHomeView: View {
     /// existed): fail open rather than permanently locking Settings out of
     /// reach.
     private func openSettings() {
-        if ParentGateService.isConfigured {
+        if isPreview {
+            showPreviewNotice = true
+        } else if ParentGateService.isConfigured {
             showParentGate = true
         } else {
             showSettings = true
@@ -226,6 +263,7 @@ struct ChildHomeView: View {
     }
 
     private func startQuiz(_ focus: QuizFocus?) {
+        guard !isPreview else { showPreviewNotice = true; return }
         quizFocus = focus
         showQuiz = true
     }
@@ -246,6 +284,7 @@ struct ChildHomeView: View {
     }
 
     private func answerCultureQuestion(_ choice: Int) {
+        guard !isPreview else { showPreviewNotice = true; return }
         if let updated = cultureStore.recordAnswer(choice, now: Date(), calendar: .current) {
             cultureQuestion = updated
         } else if cultureStore.cached(now: Date(), calendar: .current) == nil {
@@ -285,14 +324,14 @@ struct ChildHomeView: View {
     /// nothing saved, before that). Runs on appear, on a new day and when the
     /// quiz cover closes.
     private func recordDueJokers() {
-        guard let child, !ProcessInfo.processInfo.isRunningForPreviews else { return }
+        guard let child, !isPreview, !ProcessInfo.processInfo.isRunningForPreviews else { return }
         GamificationStore.recordDueJokers(for: child, in: modelContext, now: Date(), calendar: .current)
     }
 
     /// Reward wording, re-read on appear, foreground and after a quiz (the
     /// extension updates the ledger in the background).
     private func refreshRewardStatus() {
-        guard !ProcessInfo.processInfo.isRunningForPreviews else { return }
+        guard !isPreview, !ProcessInfo.processInfo.isRunningForPreviews else { return }
         rewardStatus = RewardUnlockService.status(schedule: child?.schedule ?? [])
     }
 
@@ -412,4 +451,19 @@ struct ExamTomorrow: Equatable, Sendable {
 #Preview("App enfant") {
     ChildHomeView()
         .withPreviewData()
+}
+
+#Preview("Vision enfant (parent)") {
+    PreviewChildHomeView()
+        .withPreviewData()
+}
+
+/// Preview helper: the parent's « vision enfant » on the first child.
+private struct PreviewChildHomeView: View {
+    @Query private var families: [Family]
+    var body: some View {
+        if let child = families.first?.children.first {
+            ChildHomeView(previewChild: child)
+        }
+    }
 }
