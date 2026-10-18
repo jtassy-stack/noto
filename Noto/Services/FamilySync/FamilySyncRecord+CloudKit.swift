@@ -38,14 +38,22 @@ extension FamilySyncRecord {
         let values = ckRecord.encryptedValues
         var fields: [String: Value] = [:]
         for key in values.allKeys() {
-            // NSNumber reads as Int when integral, so Int comes before
-            // Double; `FamilySyncRecord.double` accepts both.
-            if let v: Date = values[key] { fields[key] = .date(v) }
-            else if let v: String = values[key] { fields[key] = .string(v) }
-            else if let v: [String] = values[key] { fields[key] = .strings(v) }
-            else if let v: [Int] = values[key] { fields[key] = .ints(v) }
-            else if let v: Int = values[key] { fields[key] = .int(v) }
-            else if let v: Double = values[key] { fields[key] = .double(v) }
+            // Untyped read: the typed subscript force-casts and would trap
+            // on a type mismatch.
+            let raw: Any? = values[key]
+            switch raw {
+            case let v as Date: fields[key] = .date(v)
+            case let v as String: fields[key] = .string(v)
+            case let v as NSNumber:
+                fields[key] = CFNumberIsFloatType(v as CFNumber) ? .double(v.doubleValue) : .int(v.intValue)
+            case let v as [Any]:
+                if let strings = v as? [String] {
+                    fields[key] = .strings(strings)
+                } else if let numbers = v as? [NSNumber] {
+                    fields[key] = .ints(numbers.map(\.intValue))
+                }
+            default: break
+            }
         }
         self.init(kind: kind, name: ckRecord.recordID.recordName, decodedFields: fields)
     }
