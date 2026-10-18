@@ -192,6 +192,8 @@ jobs:
     # workflow_dispatch. startsWith, not contains: a commit that merely
     # MENTIONS the marker in its body can't trigger an upload. Keeps a
     # multi-merge day from burning Apple's daily upload quota.
+    # The [tf] commit must change a file outside paths-ignore: an empty
+    # commit (or a docs-only one) never starts this workflow at all.
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event_name != 'pull_request' &&
