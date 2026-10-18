@@ -26,16 +26,9 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             HomeView(onAddChild: { showAddChild = true })
                 .tabItem {
-                    Label("Aujourd'hui", systemImage: "house")
+                    Label("Accueil", systemImage: "house")
                 }
                 .tag(Tab.home)
-
-            ActualitesView()
-                .tabItem {
-                    Label("Messages", systemImage: "envelope")
-                }
-                .badge(unreadMessagesBadge + unsignedCarnetsCount)
-                .tag(Tab.actualites)
 
             SchoolView()
                 .tabItem {
@@ -44,9 +37,22 @@ struct MainTabView: View {
                 .badge(urgentHomeworkBadge)
                 .tag(Tab.school)
 
+            ActualitesView()
+                .tabItem {
+                    Label("Messages", systemImage: "envelope")
+                }
+                .badge(unreadMessagesBadge + unsignedCarnetsCount)
+                .tag(Tab.actualites)
+
+            ScreenOverviewView()
+                .tabItem {
+                    Label("Écran", systemImage: "iphone")
+                }
+                .tag(Tab.screen)
+
             DiscoverView()
                 .tabItem {
-                    Label("Sorties", systemImage: "safari")
+                    Label("Découvrir", systemImage: "safari")
                 }
                 .tag(Tab.discover)
         }
@@ -86,6 +92,7 @@ enum Tab: String {
     case home
     case actualites
     case school
+    case screen
     case discover
 }
 

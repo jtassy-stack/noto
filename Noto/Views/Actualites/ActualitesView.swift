@@ -11,6 +11,13 @@ private enum FeedFilter: String, CaseIterable {
     case photos   = "Photos"
 }
 
+/// Whose messages are shown: everyone, one child, or the parent lane.
+private enum AudienceFilter: Hashable {
+    case all
+    case child(PersistentIdentifier)
+    case parent
+}
+
 // MARK: - Navigation Destination
 
 private enum FeedDestination: Hashable {
@@ -47,6 +54,7 @@ struct ActualitesView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var activeFilter: FeedFilter = .tous
+    @State private var audience: AudienceFilter = .all
     @State private var isRefreshing = false
     /// Stored in UserDefaults so the 60-second cooldown survives tab
     /// recreation, background/foreground cycles, and memory-pressure
@@ -91,26 +99,65 @@ struct ActualitesView: View {
         return (childItems + parentItems).sorted { $0.msg.date > $1.msg.date }
     }
 
+    private var hasParentLane: Bool { !(families.first?.messages ?? []).isEmpty }
+
+    /// The audience pills only make sense with two lanes or more.
+    private var showsAudienceFilter: Bool { children.count + (hasParentLane ? 1 : 0) > 1 }
+
+    private var scopedItems: [FeedItem] {
+        switch audience {
+        case .all:
+            return allItems
+        case .child(let id):
+            return allItems.filter { $0.child?.persistentModelID == id }
+        case .parent:
+            return allItems.filter { $0.child == nil }
+        }
+    }
+
     private var filteredItems: [FeedItem] {
         switch activeFilter {
         case .tous:
-            return allItems
+            return scopedItems
         case .messages:
-            return allItems.filter { $0.msg.kind == .conversation }
+            return scopedItems.filter { $0.msg.kind == .conversation }
         case .carnets:
-            return allItems.filter { $0.msg.kind == .schoolbook }
+            return scopedItems.filter { $0.msg.kind == .schoolbook }
         case .photos:
             return []
         }
     }
 
+    // MARK: - Triage
+
+    private typealias PendingItem = (item: FeedItem, action: MessageTriage.Action)
+
+    /// Unread messages that ask the parent to sign, justify or reply.
+    private var pendingItems: [PendingItem] {
+        let now = Date.now
+        return filteredItems.compactMap { item -> PendingItem? in
+            guard !item.msg.read else { return nil }
+            return MessageTriage.action(subject: item.msg.subject,
+                                        plainBody: HTMLText.plainText(fromHTML: item.msg.body),
+                                        kind: item.msg.kind, read: item.msg.read, date: item.msg.date,
+                                        now: now, calendar: .current)
+                .map { (item: item, action: $0) }
+        }
+    }
+
+    private var weekVolume: MessageTriage.WeekVolume {
+        MessageTriage.weekVolume(filteredItems.map { (source: $0.msg.source, date: $0.msg.date) },
+                                 now: .now, calendar: .current)
+    }
+
     // MARK: - Date grouping
 
-    private var groupedItems: [(header: String, items: [FeedItem])] {
+    private func groupedItems(excluding pending: [PendingItem]) -> [(header: String, items: [FeedItem])] {
+        let pendingIDs = Set(pending.map(\.item.msg.persistentModelID))
         var groups: [(header: String, items: [FeedItem])] = []
         var current: (header: String, items: [FeedItem])?
 
-        for item in filteredItems {
+        for item in filteredItems where !pendingIDs.contains(item.msg.persistentModelID) {
             let header = sectionHeader(for: item.msg.date)
             if current?.header == header {
                 current!.items.append(item)
@@ -264,6 +311,10 @@ struct ActualitesView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
+                if showsAudienceFilter {
+                    AudienceChipsBar(audience: $audience, children: children, hasParentLane: hasParentLane)
+                }
+
                 // Filter chips
                 FilterChipsBar(activeFilter: $activeFilter)
 
@@ -427,8 +478,31 @@ struct ActualitesView: View {
     }
 
     private var feedList: some View {
-        List {
-            ForEach(groupedItems, id: \.header) { group in
+        let pending = pendingItems
+        let groups = groupedItems(excluding: pending)
+        let infoCount = groups.reduce(0) { $0 + $1.items.count }
+        let volume = weekVolume
+        return List {
+            Section {
+                WeekSummaryRow(volume: volume, pending: pending.count)
+            }
+
+            if !pending.isEmpty {
+                Section {
+                    ForEach(pending, id: \.item.msg.persistentModelID) { entry in
+                        PendingItemRow(msg: entry.item.msg, child: entry.item.child, action: entry.action) {
+                            open(entry.item)
+                        }
+                    }
+                } header: {
+                    Text("À traiter · \(pending.count)")
+                        .font(NotoTheme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        .textCase(nil)
+                }
+            }
+
+            ForEach(Array(groups.enumerated()), id: \.element.header) { index, group in
                 Section {
                     ForEach(group.items, id: \.msg.persistentModelID) { item in
                         FeedItemRow(
@@ -437,14 +511,7 @@ struct ActualitesView: View {
                             avatarColor: avatarColor(for: item.child)
                         )
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            // Parent-lane rows are always conversations.
-                            if item.msg.kind == .schoolbook, let child = item.child {
-                                path.append(.schoolbook(child: child, msg: item.msg))
-                            } else {
-                                path.append(.conversation(item.msg))
-                            }
-                        }
+                        .onTapGesture { open(item) }
                         .swipeActions(edge: .leading) {
                             if !item.msg.read {
                                 Button {
@@ -463,15 +530,177 @@ struct ActualitesView: View {
                         }
                     }
                 } header: {
-                    Text(group.header)
-                        .font(NotoTheme.Typography.caption)
-                        .foregroundStyle(NotoTheme.Colors.textSecondary)
-                        .textCase(nil)
+                    VStack(alignment: .leading, spacing: NotoTheme.Spacing.xs) {
+                        if index == 0, !pending.isEmpty {
+                            Text("Pour information · \(infoCount)")
+                                .font(NotoTheme.Typography.caption.weight(.semibold))
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        }
+                        Text(group.header)
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    }
+                    .textCase(nil)
                 }
             }
         }
         .listStyle(.plain)
         .refreshable { await syncAll() }
+    }
+
+    private func open(_ item: FeedItem) {
+        // Parent-lane rows are always conversations.
+        if item.msg.kind == .schoolbook, let child = item.child {
+            path.append(.schoolbook(child: child, msg: item.msg))
+        } else {
+            path.append(.conversation(item.msg))
+        }
+    }
+}
+
+// MARK: - Audience Chips Bar
+
+private struct AudienceChipsBar: View {
+    @Binding var audience: AudienceFilter
+    let children: [Child]
+    let hasParentLane: Bool
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NotoTheme.Spacing.sm) {
+                AudienceChip(title: "Tous", isActive: audience == .all) { audience = .all }
+                ForEach(children) { child in
+                    let filter = AudienceFilter.child(child.persistentModelID)
+                    AudienceChip(title: child.firstName, isActive: audience == filter) { audience = filter }
+                }
+                if hasParentLane {
+                    AudienceChip(title: MailboxRouting.parentLabel, isActive: audience == .parent) {
+                        audience = .parent
+                    }
+                }
+            }
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.top, NotoTheme.Spacing.sm)
+        }
+        .background(NotoTheme.Colors.background)
+    }
+}
+
+/// Child / parent pill: filled brand when active, like the Accueil child picker.
+private struct AudienceChip: View {
+    let title: String
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(NotoTheme.Typography.body.weight(isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? Color.white : NotoTheme.Colors.textPrimary)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 36)
+                .background(isActive ? NotoTheme.Colors.brand : NotoTheme.Colors.surface,
+                            in: RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                .overlay(
+                    RoundedRectangle(cornerRadius: NotoTheme.Radius.sm)
+                        .stroke(isActive ? Color.clear : NotoTheme.Colors.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+}
+
+// MARK: - Week Summary
+
+private struct WeekSummaryRow: View {
+    let volume: MessageTriage.WeekVolume
+    let pending: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Cette semaine")
+                    .font(NotoTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                Text(MessageTriage.summaryLine(total: volume.total, pending: pending))
+                    .font(NotoTheme.Typography.headline)
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+            }
+            if !volume.perChannel.isEmpty {
+                HStack(spacing: NotoTheme.Spacing.sm) {
+                    ForEach(volume.perChannel, id: \.channel) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.channel.label)
+                                .font(NotoTheme.Typography.caption)
+                                .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            Text("\(entry.count)")
+                                .font(NotoTheme.Typography.headline.monospacedDigit())
+                                .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, NotoTheme.Spacing.sm)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(NotoTheme.Colors.surfaceSecondary,
+                                    in: RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, NotoTheme.Spacing.xs)
+        .listRowSeparator(.hidden)
+    }
+}
+
+// MARK: - Pending Row
+
+private struct PendingItemRow: View {
+    let msg: Message
+    let child: Child?
+    let action: MessageTriage.Action
+    let onOpen: () -> Void
+
+    private var originLine: String {
+        let who = child?.firstName ?? MailboxRouting.parentLabel
+        let kind = msg.kind == .schoolbook ? "Carnet de liaison" : SourceBadge.label(msg.source, imapProviderID: msg.imapProvider)
+        return "\(who) · \(kind)"
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: NotoTheme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(originLine)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: NotoTheme.Spacing.xs)
+                    Text(FeedItemRow.relativeTimestamp(msg.date))
+                        .font(NotoTheme.Typography.dataSmall)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                }
+                Text(msg.subject)
+                    .font(NotoTheme.Typography.body.weight(.semibold))
+                    .foregroundStyle(NotoTheme.Colors.textPrimary)
+                    .lineLimit(2)
+            }
+            Button(action: onOpen) {
+                Text(action.label)
+                    .font(NotoTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 32)
+                    .background(NotoTheme.Colors.brand, in: RoundedRectangle(cornerRadius: NotoTheme.Radius.sm))
+            }
+            .buttonStyle(.borderless)
+            .frame(minHeight: 44)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpen)
+        .padding(.vertical, NotoTheme.Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityAction(named: Text(action.label), onOpen)
     }
 }
 
@@ -543,15 +772,17 @@ private struct FeedItemRow: View {
         HTMLText.plainText(fromHTML: msg.body)
     }
 
-    private var relativeTimestamp: String {
+    private var relativeTimestamp: String { Self.relativeTimestamp(msg.date) }
+
+    static func relativeTimestamp(_ date: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(msg.date) {
-            return msg.date.formatted(.dateTime.hour().minute())
+        if cal.isDateInToday(date) {
+            return date.formatted(.dateTime.hour().minute())
         }
-        if cal.isDateInYesterday(msg.date) {
+        if cal.isDateInYesterday(date) {
             return "Hier"
         }
-        return msg.date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR")))
+        return date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR")))
     }
 
     var body: some View {
@@ -645,7 +876,9 @@ private struct SourceBadge: View {
     /// "MonLycée". Extend this switch when adding one.
     let imapProviderID: String?
 
-    private var label: String {
+    private var label: String { Self.label(source, imapProviderID: imapProviderID) }
+
+    static func label(_ source: MessageSource, imapProviderID: String?) -> String {
         switch source {
         case .ent:      return "ENT"
         case .imap:     return imapProviderID == "monlycee" ? "MonLycée" : "IMAP"
