@@ -52,8 +52,14 @@ struct ParentWeekSection: View {
                                                                          calendar: calendar),
                                  revisedDays: revisedDays ?? 0)
                     if !bars.isEmpty { notionsCard(bars) }
+                    if child.receivesFamilySync {
+                        syncedLine
+                    }
                 } else {
-                    Text(Self.noRevisionText(child.firstName))
+                    Text(child.receivesFamilySync
+                         ? FamilySyncLink.noRevisionsText(firstName: child.firstName,
+                                                          receivedAt: child.familySyncReceivedAt)
+                         : Self.noRevisionText(child.firstName))
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .padding(NotoTheme.Spacing.md)
@@ -105,6 +111,15 @@ struct ParentWeekSection: View {
 
     static func noRevisionText(_ name: String) -> String {
         "Les révisions de \(name) s'affichent sur l'appareil où \(name) fait ses quiz."
+    }
+
+    private var syncedLine: some View {
+        Label(FamilySyncLink.receivedText(child.familySyncReceivedAt, firstName: child.firstName,
+                                          now: .now, calendar: .current),
+              systemImage: "arrow.triangle.2.circlepath")
+            .font(NotoTheme.Typography.caption)
+            .foregroundStyle(NotoTheme.Colors.textSecondary)
+            .padding(.horizontal, NotoTheme.Spacing.xs)
     }
 
     // MARK: - Révisions

@@ -29,6 +29,23 @@ struct FamilyLinkView: View {
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                 }
 
+                if case .linked = state {
+                    Section {
+                        Text(FamilySyncLink.syncedText(child.familySyncLastSyncedAt, now: .now, calendar: .current))
+                            .font(NotoTheme.Typography.body)
+                            .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text(FamilySyncLink.receivedText(child.familySyncReceivedAt, firstName: child.firstName,
+                                                         now: .now, calendar: .current))
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        Button("Synchroniser maintenant") { syncNow() }
+                            .disabled(isWorking)
+                    } footer: {
+                        Text("nōto se synchronise à l'ouverture de l'app et de temps en temps en arrière-plan, "
+                             + "quand iOS le permet.")
+                    }
+                }
+
                 if let zoneName = child.familySyncZoneName {
                     Section {
                         if case .linked = state {
@@ -95,6 +112,14 @@ struct FamilyLinkView: View {
             }
         } catch {
             NSLog("[noto][warn] family sync: checking the share failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func syncNow() {
+        isWorking = true
+        Task {
+            await FamilySyncEngine.sync(context: modelContext, force: true)
+            isWorking = false
         }
     }
 

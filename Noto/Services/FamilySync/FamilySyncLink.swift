@@ -116,4 +116,67 @@ enum FamilySyncLink {
         style.timeZone = calendar.timeZone
         return style.format(date)
     }
+
+    // MARK: - Sync status (phase 9.4)
+
+    /// « il y a 5 min », « hier à 21h30 », « le 12 octobre ».
+    static func relativeText(_ date: Date, now: Date, calendar: Calendar) -> String {
+        let elapsed = now.timeIntervalSince(date)
+        if elapsed < 60 { return "à l'instant" }
+        if elapsed < 3600 { return "il y a \(Int(elapsed / 60)) min" }
+        let time = String(format: "%dh%02d", calendar.component(.hour, from: date),
+                          calendar.component(.minute, from: date))
+        if calendar.isDate(date, inSameDayAs: now) { return "aujourd'hui à \(time)" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "hier à \(time)"
+        }
+        return "le \(dayText(date, calendar: calendar))"
+    }
+
+    /// This device's last sync (« Relier le téléphone », the child's Réglages).
+    static func syncedText(_ date: Date?, now: Date, calendar: Calendar) -> String {
+        guard let date else { return "Pas encore synchronisé" }
+        return "Synchronisé " + relativeText(date, now: now, calendar: calendar)
+    }
+
+    /// Parent side: how fresh the child's data is, from when the child's
+    /// phone last sent something (`Child.familySyncReceivedAt`), not from
+    /// the parent's own poll.
+    static func receivedText(_ date: Date?, firstName: String, now: Date, calendar: Calendar) -> String {
+        guard let date else { return "Rien reçu du téléphone de \(firstName) pour l'instant" }
+        return "Dernières données du téléphone de \(firstName) : " + relativeText(date, now: now, calendar: calendar)
+    }
+
+    /// Parent side, linked, no quiz in the last 30 days (vouvoiement):
+    /// waiting while the child's phone has sent nothing yet, then a plain
+    /// « no quiz ».
+    static func noRevisionsText(firstName: String, receivedAt: Date?) -> String {
+        receivedAt == nil
+            ? "Les révisions de \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+            : "\(firstName) n'a pas fait de quiz de révision ces 30 derniers jours."
+    }
+
+    static func noMinutesText(firstName: String, receivedAt: Date?) -> String {
+        receivedAt == nil
+            ? "Les minutes gagnées par \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+            : "\(firstName) n'a pas gagné de minutes avec les quiz ces 30 derniers jours."
+    }
+
+    /// Today's minutes earned during class, kept until the class block ends
+    /// (the class lock is never lifted by them). Nil when none, or when the
+    /// figures are from another day.
+    static func reserveText(_ minutes: SyncedDayMinutes?, now: Date, calendar: Calendar) -> String? {
+        guard let minutes, minutes.reserve > 0,
+              minutes.day == RewardLedger.dayKey(for: now, calendar: calendar) else { return nil }
+        return "\(minutes.reserve) min gagnées pendant les cours, gardées pour après les cours."
+    }
+}
+
+extension Child {
+    /// Parent's device, child's phone linked: quizzes, notions, jokers and
+    /// minutes arrive from that phone (phase 9.3).
+    var receivesFamilySync: Bool {
+        familySyncZoneOwner == nil && familySyncZoneName != nil && familySyncLinkedAt != nil
+    }
 }

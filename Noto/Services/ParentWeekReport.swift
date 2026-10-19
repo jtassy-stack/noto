@@ -6,9 +6,9 @@ import Foundation
 /// in. Every string addresses the parent (vouvoiement, the child in the
 /// third person).
 ///
-/// Data locality (V1): quizzes and notions exist only on the device where
-/// the child plays (no family sync yet), grades on every device that syncs
-/// the school account.
+/// Data locality: quizzes and notions exist on the device where the child
+/// plays, and on the parent's when the child's phone is linked (family sync,
+/// phase 9.3); grades on every device that syncs the school account.
 enum ParentWeekReport {
     // MARK: - Revision activity
 

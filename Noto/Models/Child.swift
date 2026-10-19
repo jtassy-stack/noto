@@ -76,6 +76,10 @@ final class Child {
     var familySyncLinkedAt: Date? = nil
     /// Last family sync that completed (phase 9.3), for « Synchronisé il y a… ».
     var familySyncLastSyncedAt: Date? = nil
+    /// Parent side: when the child's phone last sent something (latest
+    /// CloudKit modification date of its records), so the parent screens
+    /// date the child's data, not the parent's own poll (phase 9.4).
+    var familySyncReceivedAt: Date? = nil
     var family: Family?
     var createdAt: Date
 

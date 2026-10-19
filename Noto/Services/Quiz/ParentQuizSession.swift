@@ -35,9 +35,10 @@ struct ParentQuizResult: Equatable, Sendable {
 /// mastered = `SpacedRepetition.isMastered`, en cours = box 3, fragile =
 /// box ≤ 2). Pure.
 ///
-/// V1 has no sync between devices: the masteries exist only on the device
-/// where the child revises, so on the parent's own phone every notion is
-/// « pas encore travaillée » and `hasChildData` is false.
+/// The masteries exist on the device where the child revises, and on the
+/// parent's once the child's phone is linked and has synced (family sync);
+/// otherwise every notion is « pas encore travaillée » there and
+/// `hasChildData` is false (`ChildData` picks the wording).
 struct ParentQuizComparison: Equatable, Sendable {
     let notionCount: Int
     let mastered: Int
@@ -66,11 +67,29 @@ struct ParentQuizComparison: Equatable, Sendable {
 
     /// Parent tone (vouvoiement), the child named by first name. Nil when
     /// the quiz had no notion (questions without a theme).
-    func sentence(firstName: String) -> String? {
+    /// Where the child's masteries are, seen from the parent's phone.
+    enum ChildData: Sendable {
+        /// Not linked: only on the device where the child revises.
+        case elsewhere
+        /// Linked, the child's phone has sent nothing yet.
+        case awaitingSync
+        /// Linked and received: an empty comparison means « not worked yet ».
+        case synced
+    }
+
+    func sentence(firstName: String, childData: ChildData = .elsewhere) -> String? {
         guard notionCount > 0 else { return nil }
-        guard hasChildData else {
-            return "Les révisions de \(firstName) ne sont pas sur cet appareil : la comparaison "
-                + "s'affiche sur l'appareil où votre enfant fait ses quiz."
+        if !hasChildData {
+            switch childData {
+            case .elsewhere:
+                return "Les révisions de \(firstName) ne sont pas sur cet appareil : la comparaison "
+                    + "s'affiche sur l'appareil où votre enfant fait ses quiz."
+            case .awaitingSync:
+                return "Les révisions de \(firstName) ne sont pas encore arrivées sur ce téléphone : "
+                    + "la comparaison s'affichera après la prochaine synchronisation."
+            case .synced:
+                break
+            }
         }
         var parts: [String] = []
         if mastered > 0 { parts.append("\(mastered) \(mastered == 1 ? "maîtrisée" : "maîtrisées")") }

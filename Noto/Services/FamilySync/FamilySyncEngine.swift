@@ -118,6 +118,10 @@ enum FamilySyncEngine {
         if let minutes = result.minutes { state.setReceivedMinutes(minutes, zoneName: zoneID.zoneName) }
         state.addIngestedIDs(result.insertedIDs, zoneName: zoneID.zoneName)
         if !result.isEmpty, child.familySyncLinkedAt == nil { child.familySyncLinkedAt = .now }
+        if let latest = fetched.latestChildChange,
+           child.familySyncReceivedAt.map({ latest > $0 }) ?? true {
+            child.familySyncReceivedAt = latest
+        }
         try context.save()
         // Only once the records are saved: a failed save fetches them again.
         state.setChangeToken(fetched.token, zoneName: zoneID.zoneName)
@@ -143,6 +147,7 @@ enum FamilySyncEngine {
         child.familySyncZoneOwner = nil
         child.familySyncLinkedAt = nil
         child.familySyncLastSyncedAt = nil
+        child.familySyncReceivedAt = nil
         state.clear(zoneName: zoneName)
         try? context.save()
     }
@@ -185,6 +190,9 @@ enum FamilySyncEngine {
     private struct Fetched {
         var records: [FamilySyncRecord]
         var token: Data?
+        /// Latest server modification date of a record the child's phone
+        /// wrote (rules records are the parent's own).
+        var latestChildChange: Date?
     }
 
     private static func fetchChanges(zoneID: CKRecordZone.ID, database: CKDatabase,
@@ -193,6 +201,7 @@ enum FamilySyncEngine {
             try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: $0)
         }
         var records: [FamilySyncRecord] = []
+        var latestChildChange: Date?
         var restarted = false
         while true {
             do {
@@ -201,6 +210,10 @@ enum FamilySyncEngine {
                     if case .success(let modification) = result,
                        let record = FamilySyncRecord(ckRecord: modification.record) {
                         records.append(record)
+                        if record.kind != .rules, let date = modification.record.modificationDate,
+                           latestChildChange.map({ date > $0 }) ?? true {
+                            latestChildChange = date
+                        }
                     }
                 }
                 token = changes.changeToken
@@ -209,10 +222,11 @@ enum FamilySyncEngine {
                 // Start over from the beginning: ingest is idempotent.
                 token = nil
                 records = []
+                latestChildChange = nil
                 restarted = true
             }
         }
         let data = token.flatMap { try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true) }
-        return Fetched(records: records, token: data)
+        return Fetched(records: records, token: data, latestChildChange: latestChildChange)
     }
 }

@@ -40,8 +40,11 @@ struct RevisionsView: View {
                     }
 
                     PrivacyNoticeCard(
-                        text: "Les résultats des quiz restent sur cet appareil. Ils ne sont visibles que sur "
-                            + "l'appareil où votre enfant révise (derrière le code parent en mode enfant)."
+                        text: children.contains(where: \.receivesFamilySync)
+                            ? "Les résultats des quiz arrivent du téléphone relié de votre enfant, chiffrés de "
+                                + "bout en bout dans votre iCloud : nōto n'y a pas accès."
+                            : "Les résultats des quiz restent sur cet appareil. Ils ne sont visibles que sur "
+                                + "l'appareil où votre enfant révise (derrière le code parent en mode enfant)."
                     )
                 }
                 .padding(.horizontal, NotoTheme.Spacing.md)
@@ -78,7 +81,12 @@ struct RevisionsView: View {
             }
 
             if s.lastQuizDate == nil {
-                emptyCard("Votre enfant n'a pas encore fait de quiz de révision sur cet appareil.")
+                emptyCard(!child.receivesFamilySync
+                          ? "Votre enfant n'a pas encore fait de quiz de révision sur cet appareil."
+                          : child.familySyncReceivedAt == nil
+                          ? "Les révisions de \(child.firstName) s'afficheront ici après la prochaine "
+                              + "synchronisation de son téléphone."
+                          : "Votre enfant n'a pas encore fait de quiz de révision.")
             } else {
                 VStack(spacing: 0) {
                     RevisionStatRow(label: "Quiz faits (7 jours)", value: "\(s.quizzes7d) · \(s.passed7d) réussis")

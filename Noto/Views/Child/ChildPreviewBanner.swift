@@ -6,6 +6,8 @@ import SwiftUI
 /// the alerts are the parent's.
 struct ChildPreviewBanner: View {
     let firstName: String
+    /// The child's phone is linked to this one (family sync, phase 9.3).
+    var linked = false
     let onClose: () -> Void
 
     var body: some View {
@@ -17,7 +19,7 @@ struct ChildPreviewBanner: View {
                 Text(Self.title(firstName))
                     .font(NotoTheme.Typography.headline)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Text(Self.detail(firstName))
+                Text(Self.detail(firstName, linked: linked))
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -40,11 +42,13 @@ struct ChildPreviewBanner: View {
         "Vision enfant : l'appli de \(firstName)"
     }
 
-    /// Quiz, série, minutes and badges live on the child's device until the
-    /// family sync exists (sync-famille/CADRAGE.md): say it rather than let
-    /// empty cards read as « hasn't revised ».
-    static func detail(_ firstName: String) -> String {
-        "Lecture seule. Les quiz, la série et les minutes de \(firstName) restent sur son appareil tant que la synchro famille n'est pas activée."
+    /// Quiz, série, minutes and badges live on the child's device unless
+    /// the phones are linked (sync-famille/CADRAGE.md): say it rather than
+    /// let empty cards read as « hasn't revised ».
+    static func detail(_ firstName: String, linked: Bool = false) -> String {
+        linked
+            ? "Lecture seule. Les quiz, la série et les minutes de \(firstName) viennent de son téléphone relié."
+            : "Lecture seule. Les quiz, la série et les minutes de \(firstName) restent sur son appareil tant que la synchro famille n'est pas activée."
     }
 
     static let actionTitle = "Aperçu seulement"
