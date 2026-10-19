@@ -66,9 +66,15 @@ struct ParentQuizComparison: Equatable, Sendable {
 
     /// Parent tone (vouvoiement), the child named by first name. Nil when
     /// the quiz had no notion (questions without a theme).
-    func sentence(firstName: String) -> String? {
+    /// `linked`: the child's phone is linked (phase 9.3), so the revisions
+    /// arrive here at its next sync.
+    func sentence(firstName: String, linked: Bool = false) -> String? {
         guard notionCount > 0 else { return nil }
         guard hasChildData else {
+            if linked {
+                return "Les révisions de \(firstName) ne sont pas encore arrivées sur ce téléphone : "
+                    + "la comparaison s'affichera après la prochaine synchronisation."
+            }
             return "Les révisions de \(firstName) ne sont pas sur cet appareil : la comparaison "
                 + "s'affiche sur l'appareil où votre enfant fait ses quiz."
         }

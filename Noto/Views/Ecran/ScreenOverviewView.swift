@@ -8,7 +8,8 @@ import SwiftData
 ///
 /// nōto reads no app usage: this screen shows minutes earned, never time
 /// spent. Quizzes and the reward rules live on the device where the child
-/// plays (no family sync yet); on another device the minute cards say so.
+/// plays; on the parent's device they arrive with the family sync when the
+/// child's phone is linked (phase 9.3), otherwise the minute cards say so.
 struct ScreenOverviewView: View {
     @Query private var families: [Family]
     @State private var selectedChildID: PersistentIdentifier?
@@ -107,9 +108,14 @@ struct ScreenOverviewView: View {
             todayCard(earned: summary.minutesEarnedToday)
             weekCard(ScreenOverviewReport.earnedPerDay(attempts: GamificationStore.attempts(of: child),
                                                        now: now, calendar: calendar))
+            if child.receivesFamilySync {
+                syncedCaption(child, now: now, calendar: calendar)
+            }
         } else {
-            Text("Les minutes gagnées par \(child.firstName) s'affichent sur l'appareil où \(child.firstName) "
-                 + "fait ses quiz.")
+            Text(child.receivesFamilySync
+                 ? FamilySyncLink.waitingMinutesText(firstName: child.firstName)
+                 : "Les minutes gagnées par \(child.firstName) s'affichent sur l'appareil où \(child.firstName) "
+                    + "fait ses quiz.")
                 .font(NotoTheme.Typography.caption)
                 .foregroundStyle(NotoTheme.Colors.textSecondary)
                 .padding(NotoTheme.Spacing.md)
@@ -120,6 +126,23 @@ struct ScreenOverviewView: View {
         if let span {
             lockCard(span, now: now, calendar: calendar)
         }
+    }
+
+    /// Linked: when the figures last came from the child's phone, and the
+    /// minutes it keeps in reserve during class.
+    private func syncedCaption(_ child: Child, now: Date, calendar: Calendar) -> some View {
+        let reserve = child.familySyncZoneName.flatMap { FamilySyncStateStore().receivedMinutes(zoneName: $0) }
+        return VStack(alignment: .leading, spacing: 2) {
+            if let line = FamilySyncLink.reserveText(reserve, now: now, calendar: calendar) {
+                Text(line)
+            }
+            Label(FamilySyncLink.syncedText(child.familySyncLastSyncedAt, now: now, calendar: calendar)
+                      + " avec le téléphone de \(child.firstName)",
+                  systemImage: "arrow.triangle.2.circlepath")
+        }
+        .font(NotoTheme.Typography.caption)
+        .foregroundStyle(NotoTheme.Colors.textSecondary)
+        .padding(.horizontal, NotoTheme.Spacing.xs)
     }
 
     private func todayCard(earned: Int) -> some View {

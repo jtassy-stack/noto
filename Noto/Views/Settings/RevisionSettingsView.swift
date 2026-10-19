@@ -63,6 +63,12 @@ struct RevisionSettingsView: View {
                             text: "Ce téléphone est relié au vôtre : le barème, les règles, la question culture "
                                 + "et le défi familial viennent de votre téléphone. Modifiez-les depuis celui-ci."
                         )
+                        Text(FamilySyncLink.syncedText(
+                            children.first { $0.familySyncZoneOwner != nil }?.familySyncLastSyncedAt,
+                            now: .now, calendar: .current))
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
+                            .padding(.horizontal, NotoTheme.Spacing.xs)
                     } else if rulesReachChild {
                         PrivacyNoticeCard(
                             text: "Ces règles s'appliquent aussi sur le téléphone relié de votre enfant, "

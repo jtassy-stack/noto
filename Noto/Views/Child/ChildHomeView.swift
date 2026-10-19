@@ -41,7 +41,7 @@ enum ChildTab: Hashable {
 /// claimed (both describe the device the child plays on), and every action
 /// shows `previewNotice` instead. Only the question bank refresh runs, as on
 /// any device (questions come down, nothing goes up). Quiz, série and badges
-/// are empty until the family sync brings them to the parent's device.
+/// are empty unless the child's phone is linked (family sync, phase 9.3).
 struct ChildHomeView: View {
     /// The child the parent is looking at; nil on a child device.
     var previewChild: Child? = nil
@@ -181,7 +181,8 @@ struct ChildHomeView: View {
         // Vision enfant: the parent's bar above every tab.
         .safeAreaInset(edge: .top, spacing: 0) {
             if let previewChild {
-                ChildPreviewBanner(firstName: previewChild.firstName, onClose: { dismiss() })
+                ChildPreviewBanner(firstName: previewChild.firstName, linked: previewChild.receivesFamilySync,
+                                   onClose: { dismiss() })
             }
         }
         .alert(ChildPreviewBanner.actionTitle, isPresented: $showPreviewNotice) {

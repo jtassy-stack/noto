@@ -78,6 +78,7 @@ struct ParentQuizView: View {
         case .finished:
             if let result = session.result {
                 ParentQuizResultView(result: result, childName: child.firstName,
+                                     childLinked: child.receivesFamilySync,
                                      onDone: { dismiss() },
                                      onAnotherQuiz: {
                                          self.session = nil
@@ -92,6 +93,7 @@ struct ParentQuizView: View {
 struct ParentQuizResultView: View {
     let result: ParentQuizResult
     let childName: String
+    var childLinked = false
     let onDone: () -> Void
     var onAnotherQuiz: (() -> Void)?
 
@@ -113,7 +115,7 @@ struct ParentQuizResultView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, NotoTheme.Spacing.lg)
 
-                if let sentence = result.comparison.sentence(firstName: childName) {
+                if let sentence = result.comparison.sentence(firstName: childName, linked: childLinked) {
                     Label(sentence, systemImage: "person.2")
                         .font(ChildStyle.body)
                         .foregroundStyle(NotoTheme.Colors.textPrimary)

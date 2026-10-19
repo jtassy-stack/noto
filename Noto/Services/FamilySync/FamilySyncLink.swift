@@ -116,4 +116,48 @@ enum FamilySyncLink {
         style.timeZone = calendar.timeZone
         return style.format(date)
     }
+
+    // MARK: - Sync status (phase 9.4)
+
+    /// « Synchronisé il y a 5 min », under what came from the other phone.
+    static func syncedText(_ date: Date?, now: Date, calendar: Calendar) -> String {
+        guard let date else { return "Pas encore synchronisé" }
+        let elapsed = now.timeIntervalSince(date)
+        if elapsed < 60 { return "Synchronisé à l'instant" }
+        if elapsed < 3600 { return "Synchronisé il y a \(Int(elapsed / 60)) min" }
+        let time = String(format: "%dh%02d", calendar.component(.hour, from: date),
+                          calendar.component(.minute, from: date))
+        if calendar.isDate(date, inSameDayAs: now) { return "Synchronisé aujourd'hui à \(time)" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Synchronisé hier à \(time)"
+        }
+        return "Synchronisé le \(dayText(date, calendar: calendar))"
+    }
+
+    /// Parent side, linked, nothing received yet (vouvoiement).
+    static func waitingRevisionsText(firstName: String) -> String {
+        "Les révisions de \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+    }
+
+    static func waitingMinutesText(firstName: String) -> String {
+        "Les minutes gagnées par \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+    }
+
+    /// Today's minutes earned during class, kept until the class block ends
+    /// (the class lock is never lifted by them). Nil when none, or when the
+    /// figures are from another day.
+    static func reserveText(_ minutes: SyncedDayMinutes?, now: Date, calendar: Calendar) -> String? {
+        guard let minutes, minutes.reserve > 0,
+              minutes.day == RewardLedger.dayKey(for: now, calendar: calendar) else { return nil }
+        return "\(minutes.reserve) min gagnées pendant les cours, gardées pour après les cours."
+    }
+}
+
+extension Child {
+    /// Parent's device, child's phone linked: quizzes, notions, jokers and
+    /// minutes arrive from that phone (phase 9.3).
+    var receivesFamilySync: Bool {
+        familySyncZoneOwner == nil && familySyncZoneName != nil && familySyncLinkedAt != nil
+    }
 }
