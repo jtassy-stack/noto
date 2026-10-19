@@ -116,6 +116,7 @@ enum FamilySyncEngine {
         let fetched = try await fetchChanges(zoneID: zoneID, database: database, state: state)
         let result = FamilySyncIngest.apply(fetched.records, to: child, context: context)
         if let minutes = result.minutes { state.setReceivedMinutes(minutes, zoneName: zoneID.zoneName) }
+        state.addIngestedIDs(result.insertedIDs, zoneName: zoneID.zoneName)
         if !result.isEmpty, child.familySyncLinkedAt == nil { child.familySyncLinkedAt = .now }
         try context.save()
         // Only once the records are saved: a failed save fetches them again.
@@ -127,8 +128,17 @@ enum FamilySyncEngine {
     /// again. Parent side, only a zone that was linked is forgotten.
     private static func zoneGone(_ child: Child, zoneName: String, context: ModelContext,
                                  state: FamilySyncStateStore) {
-        let childSide = child.familySyncZoneOwner != nil
-        guard childSide || child.familySyncLinkedAt != nil else { return }
+        guard child.familySyncZoneOwner != nil || child.familySyncLinkedAt != nil else { return }
+        forget(child, zoneName: zoneName, context: context, state: state)
+    }
+
+    /// Unlinked: clears the link and the sync state. Parent side, the
+    /// results received from the child's phone are removed too.
+    static func forget(_ child: Child, zoneName: String, context: ModelContext,
+                       state: FamilySyncStateStore = FamilySyncStateStore()) {
+        if child.familySyncZoneOwner == nil {
+            FamilySyncIngest.purge(ids: state.ingestedIDs(zoneName: zoneName), from: child, context: context)
+        }
         child.familySyncZoneName = nil
         child.familySyncZoneOwner = nil
         child.familySyncLinkedAt = nil

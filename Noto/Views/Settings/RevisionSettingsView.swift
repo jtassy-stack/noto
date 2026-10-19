@@ -332,8 +332,12 @@ struct RevisionSettingsView: View {
             .notoCard()
 
             PrivacyNoticeCard(
-                text: "Ces réglages et les résultats des quiz restent sur cet appareil. La question culture "
-                    + "du jour est téléchargée sans aucune information sur votre enfant."
+                text: rulesFromParent || rulesReachChild
+                    ? "Ces réglages et les résultats des quiz passent entre le téléphone de votre enfant et le "
+                        + "vôtre, chiffrés de bout en bout dans votre iCloud : nōto n'y a pas accès. La question "
+                        + "culture du jour est téléchargée sans aucune information sur votre enfant."
+                    : "Ces réglages et les résultats des quiz restent sur cet appareil. La question culture "
+                        + "du jour est téléchargée sans aucune information sur votre enfant."
             )
         }
     }

@@ -67,6 +67,7 @@ enum FamilySyncShareService {
         guard FamilySyncLink.isEnabled(), child.familySyncZoneOwner == nil,
               let zoneName = child.familySyncZoneName else { return }
         FamilySyncLink.addPendingDeletion(zoneName)
+        FamilySyncStateStore().clear(zoneName: zoneName)
         Task { await retryPendingDeletions() }
     }
 

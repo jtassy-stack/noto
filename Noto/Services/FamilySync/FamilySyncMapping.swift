@@ -89,6 +89,9 @@ enum FamilySyncIngest {
         var notions = 0
         var jokers = 0
         var minutes: SyncedDayMinutes?
+        /// Ids of the quizzes, notions and jokers this call created, kept by
+        /// the engine so unlinking removes them (`purge`).
+        var insertedIDs: Set<UUID> = []
 
         var isEmpty: Bool { attempts == 0 && notions == 0 && jokers == 0 && minutes == nil }
     }
@@ -117,6 +120,7 @@ enum FamilySyncIngest {
                     denialReason: synced.denialReason, itemSubjects: synced.itemSubjects, itemXP: synced.itemXP)
                 context.insert(attempt)
                 attemptIDs.insert(synced.id)
+                result.insertedIDs.insert(synced.id)
                 result.attempts += 1
             case .notion:
                 guard let synced = SyncedNotion(record: record) else { continue }
@@ -128,6 +132,7 @@ enum FamilySyncIngest {
                                             calendar: .current)
                     mastery.id = synced.id
                     context.insert(mastery)
+                    result.insertedIDs.insert(synced.id)
                     notions[synced.id] = mastery
                 }
                 mastery.notionKey = synced.notionKey
@@ -144,6 +149,7 @@ enum FamilySyncIngest {
                 joker.id = synced.id
                 context.insert(joker)
                 jokerIDs.insert(synced.id)
+                result.insertedIDs.insert(synced.id)
                 result.jokers += 1
             case .dayMinutes:
                 if let synced = SyncedDayMinutes(record: record) { result.minutes = synced }
@@ -152,6 +158,18 @@ enum FamilySyncIngest {
             }
         }
         return result
+    }
+}
+
+extension FamilySyncIngest {
+    /// Unlinked: removes what came from the child's phone, so the parent's
+    /// screens stop showing it. Only the ids `apply` created: anything played
+    /// on this device stays.
+    static func purge(ids: Set<UUID>, from child: Child, context: ModelContext) {
+        guard !ids.isEmpty else { return }
+        for attempt in child.quizAttempts where ids.contains(attempt.id) { context.delete(attempt) }
+        for mastery in child.notionMasteries where ids.contains(mastery.id) { context.delete(mastery) }
+        for joker in child.streakJokers where ids.contains(joker.id) { context.delete(joker) }
     }
 }
 
@@ -175,7 +193,7 @@ enum FamilySyncRulesApplier {
 
 /// What each device remembers between syncs, per zone: the CloudKit change
 /// token and the fingerprints of the records sent. Parent side, the child's
-/// latest day minutes. In UserDefaults: none of it is a credential, and zone
+/// latest day minutes and the ids of the records written from the child's. In UserDefaults: none of it is a credential, and zone
 /// names are opaque.
 struct FamilySyncStateStore {
     let defaults: UserDefaults
@@ -217,8 +235,18 @@ struct FamilySyncStateStore {
                       "reserve": minutes.reserve], forKey: key("minutes", zoneName))
     }
 
+    func ingestedIDs(zoneName: String) -> Set<UUID> {
+        Set((defaults.stringArray(forKey: key("ingested", zoneName)) ?? []).compactMap(UUID.init(uuidString:)))
+    }
+
+    func addIngestedIDs(_ ids: Set<UUID>, zoneName: String) {
+        guard !ids.isEmpty else { return }
+        let all = ingestedIDs(zoneName: zoneName).union(ids)
+        defaults.set(all.map(\.uuidString).sorted(), forKey: key("ingested", zoneName))
+    }
+
     /// Unlinked: forget everything about the zone.
     func clear(zoneName: String) {
-        for kind in ["sent", "token", "minutes"] { defaults.removeObject(forKey: key(kind, zoneName)) }
+        for kind in ["sent", "token", "minutes", "ingested"] { defaults.removeObject(forKey: key(kind, zoneName)) }
     }
 }

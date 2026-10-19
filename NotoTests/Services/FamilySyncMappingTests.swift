@@ -101,18 +101,40 @@ struct FamilySyncMappingTests {
 
         let first = FamilySyncIngest.apply(records, to: child, context: context)
         try context.save()
-        #expect(first == FamilySyncIngest.Result(attempts: 1, notions: 1, jokers: 1, minutes: minutes))
+        #expect(first.attempts == 1 && first.notions == 1 && first.jokers == 1)
+        #expect(first.minutes == minutes)
+        #expect(first.insertedIDs == [attempt.id, notion.id, joker.id])
         #expect(child.quizAttempts.count == 1)
         #expect(child.quizAttempts.first?.id == attempt.id)
         #expect(child.quizAttempts.first?.itemSubjects == attempt.itemSubjects)
         #expect(child.quizAttempts.first?.questionKeys.isEmpty == true)
         #expect(child.streakJokers.first?.id == joker.id)
 
-        FamilySyncIngest.apply(records, to: child, context: context)
+        let second = FamilySyncIngest.apply(records, to: child, context: context)
         try context.save()
+        #expect(second.insertedIDs.isEmpty)
         #expect(child.quizAttempts.count == 1)
         #expect(child.streakJokers.count == 1)
         #expect(child.notionMasteries.count == 1)
+    }
+
+    @Test func purgeRemovesOnlyWhatCameFromTheChild() throws {
+        let context = try makeContext()
+        let child = makeChild(in: context)
+        let local = QuizAttempt(child: child, date: date, itemIDs: [UUID()], questionKeys: ["k"], answers: [0],
+                                correctCount: 1, totalCount: 1, durationSec: 30, minutesEarned: 0,
+                                bonusApplied: false)
+        context.insert(local)
+        let joker = SyncedJoker(id: UUID(), dayKey: "2026-10-17", createdAt: date)
+        let result = FamilySyncIngest.apply([attempt.record, notion.record, joker.record], to: child,
+                                            context: context)
+        try context.save()
+
+        FamilySyncIngest.purge(ids: result.insertedIDs, from: child, context: context)
+        try context.save()
+        #expect(try context.fetch(FetchDescriptor<QuizAttempt>()).map(\.id) == [local.id])
+        #expect(try context.fetch(FetchDescriptor<NotionMastery>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<StreakJoker>()).isEmpty)
     }
 
     @Test func ingestUpdatesAKnownNotion() throws {
@@ -167,7 +189,12 @@ struct FamilySyncMappingTests {
         #expect(store.receivedMinutes(zoneName: zone) == minutes)
         #expect(store.sent(zoneName: other).isEmpty)
 
+        let ids: Set<UUID> = [attempt.id, notion.id]
+        store.addIngestedIDs(ids, zoneName: zone)
+        #expect(store.ingestedIDs(zoneName: zone) == ids)
+
         store.clear(zoneName: zone)
+        #expect(store.ingestedIDs(zoneName: zone).isEmpty)
         #expect(store.sent(zoneName: zone).isEmpty)
         #expect(store.changeToken(zoneName: zone) == nil)
         #expect(store.receivedMinutes(zoneName: zone) == nil)
