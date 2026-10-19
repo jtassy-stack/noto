@@ -5,4 +5,9 @@
 DIRECTORY_API_KEY =
 CULTURE_API_KEY =
 
+// Family sync (CloudKit, phase 9). Stays NO until the iCloud container
+// iCloud.fr.noto.app exists and the app carries the iCloud entitlement:
+// CKContainer(identifier:) traps without it.
+FAMILY_SYNC_ENABLED = NO
+
 #include? "Config.xcconfig"

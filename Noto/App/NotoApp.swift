@@ -4,6 +4,7 @@ import TipKit
 
 @main
 struct NotoApp: App {
+    @UIApplicationDelegateAdaptor(NotoAppDelegate.self) private var appDelegate
     private let appearance = AppearanceManager.shared
 
     private let modelContainer: ModelContainer = {

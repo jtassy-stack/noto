@@ -44,6 +44,10 @@
     <string>$(DIRECTORY_API_KEY)</string>
     <key>CultureAPIKey</key>
     <string>$(CULTURE_API_KEY)</string>
+    <key>NotoFamilySyncEnabled</key>
+    <string>$(FAMILY_SYNC_ENABLED)</string>
+    <key>CKSharingSupported</key>
+    <true/>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleIconName</key>

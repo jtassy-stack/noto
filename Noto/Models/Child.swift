@@ -63,6 +63,17 @@ final class Child {
     /// Last successful cahier de textes fetch (Pronote onglet 89, École
     /// Directe per-day). Lesson contents are refreshed at most every 24 h.
     var lessonContentsFetchedAt: Date? = nil
+    /// Family sync (phase 9.2): the CloudKit zone shared between the parent's
+    /// and the child's phones (« enfant-<uuid> », random, see
+    /// `FamilySyncLink`). On the parent device the zone lives in the private
+    /// database; on the child device it is a shared zone owned by the parent
+    /// (`familySyncZoneOwner`). Nil = not linked. Defaulted for lightweight
+    /// migration.
+    var familySyncZoneName: String? = nil
+    var familySyncZoneOwner: String? = nil
+    /// When the child's device accepted the share (child side) or first sent
+    /// data (parent side, set by the engine in 9.3).
+    var familySyncLinkedAt: Date? = nil
     var family: Family?
     var createdAt: Date
 

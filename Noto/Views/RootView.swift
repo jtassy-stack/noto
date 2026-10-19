@@ -18,6 +18,10 @@ struct RootView: View {
     /// in concurrently with that setup.
     @State private var launchSetupDone = false
 
+    /// Family sync invitations opened on this device (phase 9.2).
+    @State private var familyInbox = FamilySyncInbox.shared
+    @State private var familyAcceptFailed = false
+
     private var family: Family? { families.first }
 
     /// Children that have never completed a sync (any connector).
@@ -152,9 +156,35 @@ struct RootView: View {
             // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
 
+            // Family sync: revoke the zones of children removed while offline.
+            if DeviceMode.current == .parent {
+                await FamilySyncShareService.retryPendingDeletions()
+            }
+
             // Sessions are up: give never-synced children their first sync.
             launchSetupDone = true
             await runInitialSyncIfNeeded()
+        }
+        .alert(
+            familyInvitationTitle,
+            isPresented: Binding(
+                get: { familyInbox.pending != nil },
+                set: { if !$0 { familyInbox.pending = nil } }
+            )
+        ) {
+            if DeviceMode.current == .child {
+                Button("Relier") { acceptFamilyInvitation() }
+                Button("Plus tard", role: .cancel) { familyInbox.pending = nil }
+            } else {
+                Button("OK", role: .cancel) { familyInbox.pending = nil }
+            }
+        } message: {
+            Text(DeviceMode.current == .child
+                 ? FamilySyncLink.childConfirmMessage
+                 : FamilySyncLink.parentDeviceInvitationMessage)
+        }
+        .alert(FamilySyncLink.childAcceptFailed, isPresented: $familyAcceptFailed) {
+            Button("OK", role: .cancel) { }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -166,6 +196,35 @@ struct RootView: View {
             // coordinator's cooldown so failed logins are not hammered.
             guard launchSetupDone else { return }
             Task { await runInitialSyncIfNeeded() }
+        }
+    }
+
+    private var familyInvitationTitle: String {
+        DeviceMode.current == .child
+            ? FamilySyncLink.childConfirmTitle
+            : FamilySyncLink.parentDeviceInvitationTitle
+    }
+
+    /// Child device: the child confirmed, accept the parent's share and
+    /// remember its zone on this device's child (same resolution as
+    /// `refreshRewards`).
+    private func acceptFamilyInvitation() {
+        guard let metadata = familyInbox.pending else { return }
+        familyInbox.pending = nil
+        let children = family?.children ?? []
+        let linkedID = ScreenTimeEventStore.loadLinkedChildID()
+        guard let child = children.first(where: { "\($0.id)" == linkedID }) ?? children.first else { return }
+        Task {
+            do {
+                let zone = try await FamilySyncShareService.accept(metadata)
+                child.familySyncZoneName = zone.zoneName
+                child.familySyncZoneOwner = zone.ownerName
+                child.familySyncLinkedAt = .now
+                try modelContext.save()
+            } catch {
+                NSLog("[noto][warn] family sync: accepting the invitation failed: %@", error.localizedDescription)
+                familyAcceptFailed = true
+            }
         }
     }
 

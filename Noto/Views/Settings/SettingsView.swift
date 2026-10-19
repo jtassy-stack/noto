@@ -537,6 +537,7 @@ struct SettingsView: View {
         // falls back to "Tous les enfants" (sync/UI also resolve a dangling
         // id that way; this keeps the Keychain blob truthful).
         let childKey = MailboxRouting.childKey(child)
+        FamilySyncShareService.revokeOnChildRemoval(child)
         modelContext.delete(child)
         try? modelContext.save()
         do {
@@ -571,6 +572,7 @@ struct SettingsView: View {
     private func clearAllData() {
         if let children = family?.children {
             for child in children {
+                FamilySyncShareService.revokeOnChildRemoval(child)
                 try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
                 if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
                     try? KeychainService.delete(key: "ed_credentials_\(accountId)")
@@ -718,6 +720,12 @@ private struct ChildSettingsRow: View {
     let onDisconnect: (Child) -> Void
     @State private var showDisconnectConfirm = false
     @State private var showSchoolPicker = false
+    @State private var showFamilyLink = false
+
+    /// Family sync (phase 9.2): parent devices only, behind the build flag.
+    private var familyLinkAvailable: Bool {
+        FamilySyncLink.isEnabled() && DeviceMode.current == .parent
+    }
 
     private var systemName: String {
         switch child.schoolType {
@@ -735,6 +743,9 @@ private struct ChildSettingsRow: View {
             mainRow
             if !isLinkedToDirectory {
                 linkCTA
+            }
+            if familyLinkAvailable {
+                familyLinkCTA
             }
         }
         .sheet(isPresented: $showSchoolPicker) {
@@ -757,6 +768,33 @@ private struct ChildSettingsRow: View {
                     child.rneCode = nil
                 }
             }
+        }
+    }
+
+    private var familyLinkCTA: some View {
+        Button {
+            showFamilyLink = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "iphone.gen3")
+                    .font(.system(size: 11))
+                Text(child.familySyncLinkedAt == nil
+                     ? "Relier le téléphone de \(child.firstName)"
+                     : "Téléphone de \(child.firstName) relié")
+                    .font(NotoTheme.Typography.caption)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(0.5)
+            }
+            .foregroundStyle(NotoTheme.Colors.info)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.bottom, 12)
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showFamilyLink) {
+            FamilyLinkView(child: child)
         }
     }
 
