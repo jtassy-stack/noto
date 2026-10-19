@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// « Révisions & récompenses » (plan §3.7): the parent edits `RewardConfig`
@@ -10,11 +11,26 @@ import SwiftUI
 /// Minutes are recorded only; the actual unlock arrives with phase 3.4.
 struct RevisionSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var config = RewardConfigStore.load()
     @State private var cultureQuestion = CultureQuestionSettings.isEnabled()
     @State private var familyChallenge = FamilyChallengeSettings.isEnabled()
     @State private var gradesVisible = ChildGradesSettings.isVisible()
     @State private var showResetConfirmation = false
+    @Query private var children: [Child]
+
+    /// Family sync (9.3): on the child's linked phone, the rules come from
+    /// the parent's phone and are read only here.
+    private var rulesFromParent: Bool {
+        FamilySyncLink.isEnabled() && DeviceMode.current == .child
+            && children.contains { $0.familySyncZoneOwner != nil && $0.familySyncZoneName != nil }
+    }
+
+    /// Parent side: a linked child's phone applies the rules set here.
+    private var rulesReachChild: Bool {
+        FamilySyncLink.isEnabled() && DeviceMode.current == .parent
+            && children.contains { $0.familySyncZoneOwner == nil && $0.familySyncLinkedAt != nil }
+    }
 
     /// Defaults to restore: the guided setup's profile (barème + plafond) when
     /// one was applied, so « Rétablir » does not contradict « Profil … appliqué »
@@ -42,7 +58,17 @@ struct RevisionSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, NotoTheme.Spacing.xs)
 
-                    if DeviceMode.current == .parent {
+                    if rulesFromParent {
+                        PrivacyNoticeCard(
+                            text: "Ce téléphone est relié au vôtre : le barème, les règles, la question culture "
+                                + "et le défi familial viennent de votre téléphone. Modifiez-les depuis celui-ci."
+                        )
+                    } else if rulesReachChild {
+                        PrivacyNoticeCard(
+                            text: "Ces règles s'appliquent aussi sur le téléphone relié de votre enfant, "
+                                + "à sa prochaine synchronisation."
+                        )
+                    } else if DeviceMode.current == .parent {
                         // Quizzes are played on the child-mode device and there is
                         // no cross-device sync: rules edited here do not reach it.
                         PrivacyNoticeCard(
@@ -52,7 +78,9 @@ struct RevisionSettingsView: View {
                     }
 
                     tiersSection
+                        .disabled(rulesFromParent)
                     rulesSection
+                        .disabled(rulesFromParent)
                     childFeaturesSection
 
                     Button {
@@ -66,6 +94,7 @@ struct RevisionSettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .notoCard()
+                    .disabled(rulesFromParent)
                     .confirmationDialog("Rétablir le barème et les règles par défaut ?",
                                         isPresented: $showResetConfirmation, titleVisibility: .visible) {
                         Button("Rétablir", role: .destructive) { config = resetTarget }
@@ -91,6 +120,10 @@ struct RevisionSettingsView: View {
             .onChange(of: cultureQuestion) { _, on in CultureQuestionSettings.setEnabled(on) }
             .onChange(of: familyChallenge) { _, on in FamilyChallengeSettings.setEnabled(on) }
             .onChange(of: gradesVisible) { _, on in ChildGradesSettings.setVisible(on) }
+            .onDisappear {
+                guard rulesReachChild else { return }
+                Task { await FamilySyncEngine.sync(context: modelContext, force: true) }
+            }
         }
     }
 
@@ -276,6 +309,7 @@ struct RevisionSettingsView: View {
                 .tint(NotoTheme.Colors.brand)
                 .padding(.horizontal, NotoTheme.Spacing.md)
                 .padding(.vertical, 12)
+                .disabled(rulesFromParent)
 
                 SettingsDivider()
                 Toggle(isOn: $familyChallenge) {
@@ -293,12 +327,17 @@ struct RevisionSettingsView: View {
                 .tint(NotoTheme.Colors.brand)
                 .padding(.horizontal, NotoTheme.Spacing.md)
                 .padding(.vertical, 12)
+                .disabled(rulesFromParent)
             }
             .notoCard()
 
             PrivacyNoticeCard(
-                text: "Ces réglages et les résultats des quiz restent sur cet appareil. La question culture "
-                    + "du jour est téléchargée sans aucune information sur votre enfant."
+                text: rulesFromParent || rulesReachChild
+                    ? "Ces réglages et les résultats des quiz passent entre le téléphone de votre enfant et le "
+                        + "vôtre, chiffrés de bout en bout dans votre iCloud : nōto n'y a pas accès. La question "
+                        + "culture du jour est téléchargée sans aucune information sur votre enfant."
+                    : "Ces réglages et les résultats des quiz restent sur cet appareil. La question culture "
+                        + "du jour est téléchargée sans aucune information sur votre enfant."
             )
         }
     }

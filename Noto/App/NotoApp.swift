@@ -23,6 +23,7 @@ struct NotoApp: App {
     }()
 
     init() {
+        FamilySyncEngine.modelContainer = modelContainer
         try? Tips.configure()
         configureAppearance()
     }
@@ -34,6 +35,11 @@ struct NotoApp: App {
                 .environment(appearance)
         }
         .modelContainer(modelContainer)
+        // Family sync (phase 9.3): best-effort refresh, scheduled only when
+        // the flag is on.
+        .backgroundTask(.appRefresh(FamilySyncEngine.backgroundTaskIdentifier)) {
+            await FamilySyncEngine.backgroundRefresh()
+        }
     }
 
     // MARK: - Global UIKit appearance

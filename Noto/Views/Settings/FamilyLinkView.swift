@@ -105,10 +105,7 @@ struct FamilyLinkView: View {
         Task {
             do {
                 try await FamilySyncShareService.deleteZone(zoneName: zoneName)
-                child.familySyncZoneName = nil
-                child.familySyncZoneOwner = nil
-                child.familySyncLinkedAt = nil
-                try? modelContext.save()
+                FamilySyncEngine.forget(child, zoneName: zoneName, context: modelContext)
                 dismiss()
             } catch {
                 NSLog("[noto][warn] family sync: unlinking failed: %@", error.localizedDescription)

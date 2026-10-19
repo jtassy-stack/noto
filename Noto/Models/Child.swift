@@ -74,6 +74,8 @@ final class Child {
     /// When the child's device accepted the share (child side) or first sent
     /// data (parent side, set by the engine in 9.3).
     var familySyncLinkedAt: Date? = nil
+    /// Last family sync that completed (phase 9.3), for « Synchronisé il y a… ».
+    var familySyncLastSyncedAt: Date? = nil
     var family: Family?
     var createdAt: Date
 
