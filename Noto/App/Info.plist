@@ -48,6 +48,14 @@
     <string>$(FAMILY_SYNC_ENABLED)</string>
     <key>CKSharingSupported</key>
     <true/>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>fr.noto.app.familySync</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+    </array>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleIconName</key>

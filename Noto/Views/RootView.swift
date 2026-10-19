@@ -160,6 +160,8 @@ struct RootView: View {
             if DeviceMode.current == .parent {
                 await FamilySyncShareService.retryPendingDeletions()
             }
+            await FamilySyncEngine.sync(context: modelContext, force: true)
+            FamilySyncEngine.scheduleBackgroundRefresh()
 
             // Sessions are up: give never-synced children their first sync.
             launchSetupDone = true
@@ -192,6 +194,8 @@ struct RootView: View {
             refreshRewards()
             // Weekly revision summary (3.7): local, idempotent, never prompts.
             Task { await RevisionReportStore.syncWeeklyNotification(children: family?.children ?? []) }
+            // Family sync (9.3): throttled by the engine's cooldown.
+            Task { await FamilySyncEngine.sync(context: modelContext) }
             // Retry a pending first sync on foreground, throttled by the
             // coordinator's cooldown so failed logins are not hammered.
             guard launchSetupDone else { return }
@@ -221,6 +225,7 @@ struct RootView: View {
                 child.familySyncZoneOwner = zone.ownerName
                 child.familySyncLinkedAt = .now
                 try modelContext.save()
+                await FamilySyncEngine.sync(context: modelContext, force: true)
             } catch {
                 NSLog("[noto][warn] family sync: accepting the invitation failed: %@", error.localizedDescription)
                 familyAcceptFailed = true
