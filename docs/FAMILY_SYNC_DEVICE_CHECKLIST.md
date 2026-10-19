@@ -45,7 +45,7 @@ La synchro famille relie le téléphone de l'enfant (mode enfant) à celui du pa
 | # | Étape | Attendu | OK |
 |---|---|---|---|
 | 2.1 | Enfant : faire et réussir un quiz, puis passer nōto en arrière-plan et le rouvrir | — | |
-| 2.2 | Parent : ouvrir nōto (ou « Synchroniser maintenant ») | Accueil › « Cette semaine » : jours de révision, notions, « Synchronisé il y a … avec le téléphone de X » | |
+| 2.2 | Parent : ouvrir nōto (ou « Synchroniser maintenant ») | Accueil › « Cette semaine » : jours de révision, notions, « Dernières données du téléphone de X : il y a … » (date de l'envoi par le téléphone de l'enfant, pas de la synchro du parent) | |
 | 2.3 | Parent : onglet Écran | Minutes du jour et 7 derniers jours ; plus de « sur l'appareil où X fait ses quiz » | |
 | 2.4 | Enfant : quiz réussi **pendant un cours** | Parent, Écran : « N min gagnées pendant les cours, gardées pour après les cours » ; sur l'enfant, le verrou des cours reste en place | |
 | 2.5 | Parent : Réglages › Révisions (stats) | Quiz faits, série, dernier quiz ; carte confidentialité « arrivent du téléphone relié … nōto n'y a pas accès » | |
@@ -65,7 +65,8 @@ La synchro famille relie le téléphone de l'enfant (mode enfant) à celui du pa
 
 | # | Étape | Attendu | OK |
 |---|---|---|---|
-| 4.1 | Laisser les deux téléphones quelques heures sans ouvrir nōto, actualisation en arrière-plan activée | En rouvrant chez le parent, « Synchronisé … » indique une heure où l'app était fermée (best effort : iOS décide) | |
+| 4.1 | Laisser les deux téléphones quelques heures sans ouvrir nōto, actualisation en arrière-plan activée, faire un quiz juste avant | En rouvrant chez le parent, « Dernières données … » indique une heure où l'app de l'enfant était fermée (best effort : iOS décide) | |
+| 4.3 | Enfant en mode avion, parent : « Synchroniser maintenant » | « Synchronisé à l'instant » mais « Dernières données » garde l'heure du dernier envoi de l'enfant | |
 | 4.2 | Xcode : `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"fr.noto.app.familySync"]` | La synchro tourne, `familySyncLastSyncedAt` change | |
 
 ## 5. Délier

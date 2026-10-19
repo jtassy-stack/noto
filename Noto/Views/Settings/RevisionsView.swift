@@ -81,9 +81,12 @@ struct RevisionsView: View {
             }
 
             if s.lastQuizDate == nil {
-                emptyCard(child.receivesFamilySync
-                          ? FamilySyncLink.waitingRevisionsText(firstName: child.firstName)
-                          : "Votre enfant n'a pas encore fait de quiz de révision sur cet appareil.")
+                emptyCard(!child.receivesFamilySync
+                          ? "Votre enfant n'a pas encore fait de quiz de révision sur cet appareil."
+                          : child.familySyncReceivedAt == nil
+                          ? "Les révisions de \(child.firstName) s'afficheront ici après la prochaine "
+                              + "synchronisation de son téléphone."
+                          : "Votre enfant n'a pas encore fait de quiz de révision.")
             } else {
                 VStack(spacing: 0) {
                     RevisionStatRow(label: "Quiz faits (7 jours)", value: "\(s.quizzes7d) · \(s.passed7d) réussis")

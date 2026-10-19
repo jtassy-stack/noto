@@ -56,7 +56,10 @@ struct ParentWeekSection: View {
                         syncedLine
                     }
                 } else {
-                    Text(Self.noRevisionText(child.firstName, linked: child.receivesFamilySync))
+                    Text(child.receivesFamilySync
+                         ? FamilySyncLink.noRevisionsText(firstName: child.firstName,
+                                                          receivedAt: child.familySyncReceivedAt)
+                         : Self.noRevisionText(child.firstName))
                         .font(NotoTheme.Typography.caption)
                         .foregroundStyle(NotoTheme.Colors.textSecondary)
                         .padding(NotoTheme.Spacing.md)
@@ -106,16 +109,13 @@ struct ParentWeekSection: View {
         .accessibilityHint("Affiche ce que \(child.firstName) voit dans nōto, en lecture seule.")
     }
 
-    /// Linked (phase 9.3): the revisions arrive from the child's phone.
-    static func noRevisionText(_ name: String, linked: Bool = false) -> String {
-        linked
-            ? FamilySyncLink.waitingRevisionsText(firstName: name)
-            : "Les révisions de \(name) s'affichent sur l'appareil où \(name) fait ses quiz."
+    static func noRevisionText(_ name: String) -> String {
+        "Les révisions de \(name) s'affichent sur l'appareil où \(name) fait ses quiz."
     }
 
     private var syncedLine: some View {
-        Label(FamilySyncLink.syncedText(child.familySyncLastSyncedAt, now: .now, calendar: .current)
-                  + " avec le téléphone de \(child.firstName)",
+        Label(FamilySyncLink.receivedText(child.familySyncReceivedAt, firstName: child.firstName,
+                                          now: .now, calendar: .current),
               systemImage: "arrow.triangle.2.circlepath")
             .font(NotoTheme.Typography.caption)
             .foregroundStyle(NotoTheme.Colors.textSecondary)

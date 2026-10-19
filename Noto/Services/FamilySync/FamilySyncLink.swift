@@ -119,29 +119,48 @@ enum FamilySyncLink {
 
     // MARK: - Sync status (phase 9.4)
 
-    /// « Synchronisé il y a 5 min », under what came from the other phone.
-    static func syncedText(_ date: Date?, now: Date, calendar: Calendar) -> String {
-        guard let date else { return "Pas encore synchronisé" }
+    /// « il y a 5 min », « hier à 21h30 », « le 12 octobre ».
+    static func relativeText(_ date: Date, now: Date, calendar: Calendar) -> String {
         let elapsed = now.timeIntervalSince(date)
-        if elapsed < 60 { return "Synchronisé à l'instant" }
-        if elapsed < 3600 { return "Synchronisé il y a \(Int(elapsed / 60)) min" }
+        if elapsed < 60 { return "à l'instant" }
+        if elapsed < 3600 { return "il y a \(Int(elapsed / 60)) min" }
         let time = String(format: "%dh%02d", calendar.component(.hour, from: date),
                           calendar.component(.minute, from: date))
-        if calendar.isDate(date, inSameDayAs: now) { return "Synchronisé aujourd'hui à \(time)" }
+        if calendar.isDate(date, inSameDayAs: now) { return "aujourd'hui à \(time)" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
            calendar.isDate(date, inSameDayAs: yesterday) {
-            return "Synchronisé hier à \(time)"
+            return "hier à \(time)"
         }
-        return "Synchronisé le \(dayText(date, calendar: calendar))"
+        return "le \(dayText(date, calendar: calendar))"
     }
 
-    /// Parent side, linked, nothing received yet (vouvoiement).
-    static func waitingRevisionsText(firstName: String) -> String {
-        "Les révisions de \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+    /// This device's last sync (« Relier le téléphone », the child's Réglages).
+    static func syncedText(_ date: Date?, now: Date, calendar: Calendar) -> String {
+        guard let date else { return "Pas encore synchronisé" }
+        return "Synchronisé " + relativeText(date, now: now, calendar: calendar)
     }
 
-    static func waitingMinutesText(firstName: String) -> String {
-        "Les minutes gagnées par \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+    /// Parent side: how fresh the child's data is, from when the child's
+    /// phone last sent something (`Child.familySyncReceivedAt`), not from
+    /// the parent's own poll.
+    static func receivedText(_ date: Date?, firstName: String, now: Date, calendar: Calendar) -> String {
+        guard let date else { return "Rien reçu du téléphone de \(firstName) pour l'instant" }
+        return "Dernières données du téléphone de \(firstName) : " + relativeText(date, now: now, calendar: calendar)
+    }
+
+    /// Parent side, linked, no quiz in the last 30 days (vouvoiement):
+    /// waiting while the child's phone has sent nothing yet, then a plain
+    /// « no quiz ».
+    static func noRevisionsText(firstName: String, receivedAt: Date?) -> String {
+        receivedAt == nil
+            ? "Les révisions de \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+            : "\(firstName) n'a pas fait de quiz de révision ces 30 derniers jours."
+    }
+
+    static func noMinutesText(firstName: String, receivedAt: Date?) -> String {
+        receivedAt == nil
+            ? "Les minutes gagnées par \(firstName) s'afficheront ici après la prochaine synchronisation de son téléphone."
+            : "\(firstName) n'a pas gagné de minutes avec les quiz ces 30 derniers jours."
     }
 
     /// Today's minutes earned during class, kept until the class block ends

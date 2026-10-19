@@ -34,6 +34,10 @@ struct FamilyLinkView: View {
                         Text(FamilySyncLink.syncedText(child.familySyncLastSyncedAt, now: .now, calendar: .current))
                             .font(NotoTheme.Typography.body)
                             .foregroundStyle(NotoTheme.Colors.textPrimary)
+                        Text(FamilySyncLink.receivedText(child.familySyncReceivedAt, firstName: child.firstName,
+                                                         now: .now, calendar: .current))
+                            .font(NotoTheme.Typography.caption)
+                            .foregroundStyle(NotoTheme.Colors.textSecondary)
                         Button("Synchroniser maintenant") { syncNow() }
                             .disabled(isWorking)
                     } footer: {

@@ -48,25 +48,41 @@ struct FamilySyncStatusTests {
         #expect(FamilySyncLink.reserveText(nil, now: now, calendar: paris) == nil)
     }
 
+    @Test func receivedTextDatesTheChildsData() {
+        let now = date(day: 19, hour: 18)
+        #expect(FamilySyncLink.receivedText(nil, firstName: "Léa", now: now, calendar: paris)
+            == "Rien reçu du téléphone de Léa pour l'instant")
+        #expect(FamilySyncLink.receivedText(now.addingTimeInterval(-3 * 3600), firstName: "Léa", now: now,
+                                            calendar: paris)
+            == "Dernières données du téléphone de Léa : aujourd'hui à 15h00")
+    }
+
     @MainActor
-    @Test func linkedScreensWaitForTheChildsPhone() {
-        for text in [ParentWeekSection.noRevisionText("Gaston", linked: true),
-                     FamilySyncLink.waitingMinutesText(firstName: "Gaston"),
+    @Test func linkedScreensWaitThenSayNoQuiz() {
+        let received = date(day: 19, hour: 9)
+        for text in [FamilySyncLink.noRevisionsText(firstName: "Gaston", receivedAt: nil),
+                     FamilySyncLink.noMinutesText(firstName: "Gaston", receivedAt: nil),
+                     FamilySyncLink.noRevisionsText(firstName: "Gaston", receivedAt: received),
+                     FamilySyncLink.noMinutesText(firstName: "Gaston", receivedAt: received),
                      ChildPreviewBanner.detail("Gaston", linked: true)] {
             #expect(text.contains("Gaston"))
             // No « sur l'appareil où … fait ses quiz » once the phones are linked.
             #expect(!text.contains("fait ses quiz"))
             #expect(!text.contains(" tu ") && !text.contains(" ton ") && !text.contains(" tes "))
         }
-        #expect(ParentWeekSection.noRevisionText("Gaston", linked: true)
+        #expect(FamilySyncLink.noRevisionsText(firstName: "Gaston", receivedAt: nil)
             == "Les révisions de Gaston s'afficheront ici après la prochaine synchronisation de son téléphone.")
+        // Once the child's phone has sent something, an empty history is a real « no quiz ».
+        #expect(FamilySyncLink.noRevisionsText(firstName: "Gaston", receivedAt: received)
+            == "Gaston n'a pas fait de quiz de révision ces 30 derniers jours.")
     }
 
-    @Test func comparisonWaitsForTheSyncWhenLinked() {
+    @Test func comparisonWaitsOnlyUntilTheChildsPhoneSent() {
         let empty = ParentQuizComparison(notionCount: 3, mastered: 0, inProgress: 0, fragile: 0)
-        #expect(empty.sentence(firstName: "Léa", linked: true)
+        #expect(empty.sentence(firstName: "Léa", childData: .awaitingSync)
             == "Les révisions de Léa ne sont pas encore arrivées sur ce téléphone : "
             + "la comparaison s'affichera après la prochaine synchronisation.")
+        #expect(empty.sentence(firstName: "Léa", childData: .synced)?.contains("3 pas encore travaillées") == true)
         #expect(empty.sentence(firstName: "Léa")?.contains("fait ses quiz") == true)
     }
 }

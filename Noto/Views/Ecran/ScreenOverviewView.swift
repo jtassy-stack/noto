@@ -113,7 +113,7 @@ struct ScreenOverviewView: View {
             }
         } else {
             Text(child.receivesFamilySync
-                 ? FamilySyncLink.waitingMinutesText(firstName: child.firstName)
+                 ? FamilySyncLink.noMinutesText(firstName: child.firstName, receivedAt: child.familySyncReceivedAt)
                  : "Les minutes gagnées par \(child.firstName) s'affichent sur l'appareil où \(child.firstName) "
                     + "fait ses quiz.")
                 .font(NotoTheme.Typography.caption)
@@ -136,8 +136,8 @@ struct ScreenOverviewView: View {
             if let line = FamilySyncLink.reserveText(reserve, now: now, calendar: calendar) {
                 Text(line)
             }
-            Label(FamilySyncLink.syncedText(child.familySyncLastSyncedAt, now: now, calendar: calendar)
-                      + " avec le téléphone de \(child.firstName)",
+            Label(FamilySyncLink.receivedText(child.familySyncReceivedAt, firstName: child.firstName,
+                                              now: now, calendar: calendar),
                   systemImage: "arrow.triangle.2.circlepath")
         }
         .font(NotoTheme.Typography.caption)
