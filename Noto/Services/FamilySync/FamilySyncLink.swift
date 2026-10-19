@@ -42,6 +42,28 @@ enum FamilySyncLink {
             && shareRecordName == CKRecordNameZoneWideShare
     }
 
+    // MARK: Pending zone deletions
+
+    /// Zones the parent's device still has to delete: a linked child was
+    /// removed from this device while CloudKit was unreachable. Kept apart
+    /// from SwiftData because the `Child` is gone; the names are opaque.
+    static let pendingDeletionsKey = "familySync.pendingZoneDeletions"
+
+    static func pendingDeletions(_ defaults: UserDefaults = .standard) -> [String] {
+        (defaults.stringArray(forKey: pendingDeletionsKey) ?? []).filter(isFamilyZone)
+    }
+
+    static func addPendingDeletion(_ zoneName: String, _ defaults: UserDefaults = .standard) {
+        guard isFamilyZone(zoneName) else { return }
+        var names = pendingDeletions(defaults)
+        if !names.contains(zoneName) { names.append(zoneName) }
+        defaults.set(names, forKey: pendingDeletionsKey)
+    }
+
+    static func removePendingDeletion(_ zoneName: String, _ defaults: UserDefaults = .standard) {
+        defaults.set(pendingDeletions(defaults).filter { $0 != zoneName }, forKey: pendingDeletionsKey)
+    }
+
     enum State: Equatable, Sendable {
         /// No zone yet.
         case notLinked

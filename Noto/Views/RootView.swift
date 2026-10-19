@@ -156,6 +156,11 @@ struct RootView: View {
             // Pre-warm ENT photo cache with the freshly established session.
             await preloadENTPhotos()
 
+            // Family sync: revoke the zones of children removed while offline.
+            if DeviceMode.current == .parent {
+                await FamilySyncShareService.retryPendingDeletions()
+            }
+
             // Sessions are up: give never-synced children their first sync.
             launchSetupDone = true
             await runInitialSyncIfNeeded()

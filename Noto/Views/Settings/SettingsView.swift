@@ -537,6 +537,7 @@ struct SettingsView: View {
         // falls back to "Tous les enfants" (sync/UI also resolve a dangling
         // id that way; this keeps the Keychain blob truthful).
         let childKey = MailboxRouting.childKey(child)
+        FamilySyncShareService.revokeOnChildRemoval(child)
         modelContext.delete(child)
         try? modelContext.save()
         do {
@@ -571,6 +572,7 @@ struct SettingsView: View {
     private func clearAllData() {
         if let children = family?.children {
             for child in children {
+                FamilySyncShareService.revokeOnChildRemoval(child)
                 try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
                 if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
                     try? KeychainService.delete(key: "ed_credentials_\(accountId)")

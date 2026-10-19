@@ -63,3 +63,23 @@ struct FamilySyncLinkTests {
         #expect(texts[2].hasSuffix("depuis le \(FamilySyncLink.dayText(date, calendar: calendar))."))
     }
 }
+
+@Suite("FamilySyncLink pending deletions")
+struct FamilySyncPendingDeletionTests {
+    @Test func queueKeepsFamilyZonesOnceUntilRemoved() throws {
+        let suite = "FamilySyncPendingDeletionTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let a = FamilySyncLink.makeZoneName()
+        let b = FamilySyncLink.makeZoneName()
+        FamilySyncLink.addPendingDeletion(a, defaults)
+        FamilySyncLink.addPendingDeletion(a, defaults)
+        FamilySyncLink.addPendingDeletion("pas-une-zone", defaults)
+        FamilySyncLink.addPendingDeletion(b, defaults)
+        #expect(FamilySyncLink.pendingDeletions(defaults) == [a, b])
+
+        FamilySyncLink.removePendingDeletion(a, defaults)
+        #expect(FamilySyncLink.pendingDeletions(defaults) == [b])
+    }
+}

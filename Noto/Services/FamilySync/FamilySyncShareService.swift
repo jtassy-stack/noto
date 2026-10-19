@@ -59,6 +59,30 @@ enum FamilySyncShareService {
         }
     }
 
+    /// The child is being removed from the parent's device: revoke the
+    /// child's access now, or at a later launch if CloudKit is unreachable.
+    /// Queued before trying, so the zone name survives the `Child`. Zones the
+    /// parent does not own (child device) are left alone.
+    static func revokeOnChildRemoval(_ child: Child) {
+        guard FamilySyncLink.isEnabled(), child.familySyncZoneOwner == nil,
+              let zoneName = child.familySyncZoneName else { return }
+        FamilySyncLink.addPendingDeletion(zoneName)
+        Task { await retryPendingDeletions() }
+    }
+
+    static func retryPendingDeletions() async {
+        guard FamilySyncLink.isEnabled() else { return }
+        for zoneName in FamilySyncLink.pendingDeletions() {
+            do {
+                try await deleteZone(zoneName: zoneName)
+                FamilySyncLink.removePendingDeletion(zoneName)
+            } catch {
+                NSLog("[noto][warn] family sync: deleting a removed child's zone failed, retrying at next launch: %@",
+                      error.localizedDescription)
+            }
+        }
+    }
+
     private static func existingShare(zoneName: String) async throws -> CKShare? {
         do {
             return try await container.privateCloudDatabase.record(for: shareID(zoneName)) as? CKShare
