@@ -159,7 +159,12 @@ jobs:
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty
+            2>&1 | tee test-output.log | xcpretty
+
+      # xcpretty drops Swift Testing failures: print them from the raw log.
+      - name: Show failing tests
+        if: failure()
+        run: grep -E "✘|recorded an issue|error:|Test Case .* failed|crashed" test-output.log | head -100 || true
 
       - name: Fix build with Claude
         if: failure()
