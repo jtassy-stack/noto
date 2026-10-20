@@ -15,7 +15,7 @@ struct NotoSchemaTests {
     @Test("an in-memory container opens with the full schema and stores a LessonContent")
     func containerOpens() throws {
         let container = try ModelContainer(for: Schema(NotoSchemaV1.models),
-                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         let context = ModelContext(container)
         let child = Child(firstName: "Léa", level: .college, grade: "4e", schoolType: .pronote,
                           establishment: "Collège Test")

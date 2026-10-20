@@ -6,15 +6,8 @@ La synchro famille relie le téléphone de l'enfant (mode enfant) à celui du pa
 
 1. **Container** : dans Certificates, Identifiers & Profiles › Identifiers › iCloud Containers, créer `iCloud.fr.noto.app`.
 2. **App ID** `fr.noto.app` : cocher iCloud › CloudKit, et y associer le container.
-3. **Profils** : régénérer les profils de l'app, y compris « noto appstore » (`PROVISIONING_PROFILE_SPECIFIER` dans `project.yml`).
-4. **Entitlements** : ajouter dans `project.yml`, sous `targets.Noto.entitlements.properties` :
-   ```yaml
-   com.apple.developer.icloud-container-identifiers:
-     - iCloud.fr.noto.app
-   com.apple.developer.icloud-services:
-     - CloudKit
-   ```
-   puis `xcodegen generate`.
+3. **Profil** : `node ci_scripts/asc-profile.mjs fr.noto.app --set-secret jtassy-stack/noto` (clé ASC dans `.claude/asc/.env`). Le script régénère « noto appstore » par l'API App Store Connect avec les mêmes certificats et vérifie qu'il porte `iCloud.fr.noto.app`, puis met à jour le secret `PROVISIONING_PROFILE_NOTO` (seulement si le profil a bien été obtenu). Le profil de l'extension ne change pas.
+4. **Entitlements** : dans `project.yml` (`com.apple.developer.icloud-container-identifiers` + `icloud-services: CloudKit`). À fusionner seulement après l'étape 3, sinon l'archive TestFlight échoue.
 5. **Drapeau** : `FAMILY_SYNC_ENABLED = YES` dans `Config.xcconfig` (ou dans Infisical pour la CI). Tant qu'il vaut `NO`, aucun appel CloudKit ne part et l'écran « Relier le téléphone » n'apparaît pas.
 6. **Schéma** : un premier aller-retour en build Debug crée les types en environnement *Development* : `QuizAttempt`, `NotionMastery`, `StreakJoker`, `DayMinutes`, `RewardRules`. Dans la console CloudKit, vérifier que les champs sont bien chiffrés, puis **Deploy Schema Changes** vers *Production* avant tout build TestFlight (TestFlight utilise la Production).
 

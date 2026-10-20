@@ -14,7 +14,7 @@ enum PreviewData {
                              Homework.self, Message.self, Insight.self, SchoolPhoto.self,
                              CultureReco.self, Curriculum.self,
                              QuizItem.self, QuizAttempt.self, NotionMastery.self])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try! ModelContainer(for: schema, configurations: config)
         populate(container.mainContext)
         return container
@@ -116,7 +116,7 @@ enum PreviewData {
 
     /// A 4e child and no question at all: the « questions arrivent bientôt » state.
     static let emptyBankContainer: ModelContainer = {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try! ModelContainer(for: Schema(NotoSchemaV1.models), configurations: config)
         let family = Family(parentName: "Marie")
         container.mainContext.insert(family)

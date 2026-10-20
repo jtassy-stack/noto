@@ -246,7 +246,7 @@ struct SyncTests {
 
     private func makeContext() throws -> (ModelContext, Child) {
         let schema = Schema([Family.self, Child.self, Message.self])
-        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         let ctx = ModelContext(container)
         let child = Child(firstName: "Gaston", level: .lycee, grade: "2nde", schoolType: .ent, establishment: "Lycée Test")
         ctx.insert(child)

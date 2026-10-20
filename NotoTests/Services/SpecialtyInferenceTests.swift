@@ -114,7 +114,7 @@ struct SpecialtyInferenceTests {
     private func makeChild(grade: String, specialties: [String] = []) throws -> (ModelContext, Child) {
         let container = try ModelContainer(
             for: Schema([Family.self, Child.self]),
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         )
         let context = ModelContext(container)
         let child = Child(firstName: "Test", level: .lycee, grade: grade,
