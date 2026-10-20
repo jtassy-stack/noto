@@ -69,15 +69,20 @@ struct TimelineView: View {
     private var nextLessonAfterWindow: Date? {
         Self.nextLessonStart(
             after: Date.now.addingTimeInterval(48 * 3600),
-            lessons: children.flatMap { $0.schedule }.map { (start: $0.start, cancelled: $0.cancelled) }
+            lessons: children.flatMap { $0.schedule }.map { LessonSlot(start: $0.start, cancelled: $0.cancelled) }
         )
     }
 
-    static func nextLessonStart(after date: Date, lessons: [(start: Date, cancelled: Bool)]) -> Date? {
-        lessons.filter { !$0.cancelled && $0.start > date }.map(\.start).min()
+    struct LessonSlot: Sendable {
+        let start: Date
+        let cancelled: Bool
     }
 
-    static func emptyText(nextLesson: Date?) -> String {
+    nonisolated static func nextLessonStart(after date: Date, lessons: [LessonSlot]) -> Date? {
+        lessons.filter { !$0.cancelled && $0.start > date }.map { $0.start }.min()
+    }
+
+    nonisolated static func emptyText(nextLesson: Date?) -> String {
         guard let nextLesson else { return "Aucun cours ni devoir d'ici 48 h." }
         let day = nextLesson.formatted(
             .dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "fr_FR"))

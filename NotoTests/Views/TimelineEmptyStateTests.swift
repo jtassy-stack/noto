@@ -9,11 +9,11 @@ struct TimelineEmptyStateTests {
     private let windowEnd = Date(timeIntervalSince1970: 1_800_000_000)
 
     @Test func picksFirstNonCancelledLessonAfterTheWindow() {
-        let lessons: [(start: Date, cancelled: Bool)] = [
-            (windowEnd.addingTimeInterval(-3600), false),
-            (windowEnd.addingTimeInterval(7200), true),
-            (windowEnd.addingTimeInterval(86_400), false),
-            (windowEnd.addingTimeInterval(10_800), false),
+        let lessons: [TimelineView.LessonSlot] = [
+            .init(start: windowEnd.addingTimeInterval(-3600), cancelled: false),
+            .init(start: windowEnd.addingTimeInterval(7200), cancelled: true),
+            .init(start: windowEnd.addingTimeInterval(86_400), cancelled: false),
+            .init(start: windowEnd.addingTimeInterval(10_800), cancelled: false),
         ]
         #expect(TimelineView.nextLessonStart(after: windowEnd, lessons: lessons)
                 == windowEnd.addingTimeInterval(10_800))
