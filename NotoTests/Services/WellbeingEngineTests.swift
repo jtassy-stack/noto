@@ -18,7 +18,7 @@ struct WellbeingEngineTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Family.self, Child.self, Grade.self, Homework.self, Message.self, Insight.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: config)
         return ModelContext(container)
     }
@@ -429,7 +429,7 @@ struct BriefingEngineWellbeingTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Family.self, Child.self, Grade.self, Homework.self, Message.self, Insight.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: config)
         return ModelContext(container)
     }

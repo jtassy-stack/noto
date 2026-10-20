@@ -12,7 +12,7 @@ struct QuizModelPersistenceTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema(NotoSchemaV1.models)
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: config)
         return ModelContext(container)
     }

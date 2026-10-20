@@ -145,7 +145,7 @@ struct MonLyceeMailDedupeTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Family.self, Child.self, Message.self])
-        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         return ModelContext(container)
     }
 

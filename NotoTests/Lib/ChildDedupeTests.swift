@@ -14,7 +14,7 @@ struct ChildDedupeTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Family.self, Child.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: config)
         return ModelContext(container)
     }

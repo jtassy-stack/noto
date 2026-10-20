@@ -9,7 +9,12 @@ struct NotoApp: App {
 
     private let modelContainer: ModelContainer = {
         let schema = Schema(versionedSchema: NotoSchemaV1.self)
-        let configuration = ModelConfiguration(schema: schema)
+        // `.none` is load-bearing: with the iCloud entitlement (family sync),
+        // SwiftData's default `.automatic` would mirror the whole store
+        // (grades, messages, homework) into the family's iCloud and trap at
+        // launch on the non-CloudKit-compatible schema. Only FamilySyncEngine
+        // talks to CloudKit, with results only.
+        let configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         do {
             // No migration plan: the models are edited in place (see
             // NotoSchemaV1.swift), so additive changes such as a new optional

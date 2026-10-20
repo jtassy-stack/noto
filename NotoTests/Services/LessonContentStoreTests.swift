@@ -14,7 +14,7 @@ struct LessonContentStoreTests {
 
     init() throws {
         let container = try ModelContainer(for: Schema(NotoSchemaV1.models),
-                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         context = ModelContext(container)
     }
 

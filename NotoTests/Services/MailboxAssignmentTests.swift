@@ -171,7 +171,7 @@ struct MailboxAssignmentTests {
 
     private func makeFixture() throws -> Fixture {
         let schema = Schema([Family.self, Child.self, Message.self])
-        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         let ctx = ModelContext(container)
         let family = Family(parentName: "Parent")
         ctx.insert(family)
