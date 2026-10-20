@@ -234,6 +234,9 @@ struct ChildHomeView: View {
             if phase == .active {
                 refreshDay()
                 refreshRewardStatus()
+                // A resident app must still pick up questions celyn added
+                // since launch (the store throttles itself per level).
+                Task { await syncQuestionBank() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
@@ -301,7 +304,7 @@ struct ChildHomeView: View {
     /// Opportunistic refresh of the celyn programme bank for the child's
     /// level (throttled to once per 12 h per level by `QuizBankStore`). Only
     /// questions come down; nothing about the child goes up. Failures keep
-    /// the local bank and are retried on a later appearance.
+    /// the local bank and are retried on the next return to the foreground.
     ///
     /// The bundled snapshot is seeded first when the level has no celyn item
     /// yet, so « Réviser » works offline on first launch; a seed failure never

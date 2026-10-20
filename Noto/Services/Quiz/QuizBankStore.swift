@@ -109,7 +109,8 @@ enum QuizBankMapper {
 /// - Keyed by celyn `id` (upsert: update in place or insert).
 /// - Per-grade high-water mark (`updatedSince`, raw celyn string) and
 ///   last-success stamp in `UserDefaults`; at most one sync per grade per
-///   `minInterval` (12 h) unless `force`.
+///   `minInterval` (12 h) unless `force`, or while the level holds no row
+///   celyn served (an empty level retries on every call).
 /// - Each page is saved before the mark advances, so a failure on page N
 ///   keeps pages 1…N-1 and resumes there next time. A failure never deletes
 ///   local items and never stamps `lastSync` (the next attempt retries).
@@ -224,7 +225,11 @@ final class QuizBankStore {
     private var inFlight: [String: Task<Outcome, any Error>] = [:]
 
     private func runSync(grade: String, force: Bool) async throws -> Outcome {
-        if !force, let last = lastSync(grade: grade), now().timeIntervalSince(last) < Self.minInterval {
+        // A level with no served row yet is never throttled: an empty feed
+        // (bank not generated yet for that level) must not hide the questions
+        // celyn adds a few hours later for the next 12 h.
+        if !force, let last = lastSync(grade: grade), now().timeIntervalSince(last) < Self.minInterval,
+           try hasBankItems(grade: grade) {
             return .throttled
         }
 
