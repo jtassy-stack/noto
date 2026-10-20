@@ -164,7 +164,12 @@ jobs:
       # xcpretty drops Swift Testing failures: print them from the raw log.
       - name: Show failing tests
         if: failure()
-        run: grep -E "✘|recorded an issue|error:|Test Case .* failed|crashed" test-output.log | head -100 || true
+        run: |
+          grep -v "CoreData" test-output.log \
+            | grep -E "✘|recorded an issue|Test Case .* failed|failed after|crashed|Restarting after|unexpected exit|Fatal error" \
+            | head -100 || true
+          echo "--- end of raw log ---"
+          grep -v "CoreData" test-output.log | tail -60 || true
 
       - name: Fix build with Claude
         if: failure()
