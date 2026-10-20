@@ -2,12 +2,13 @@
 // asc-profile.mjs — regenerates an App Store provisioning profile through the
 // App Store Connect API, so it picks up the App ID's current capabilities
 // (iCloud for the family sync, phase 9), and prints it base64-encoded on
-// stdout, ready for the GitHub secret the TestFlight workflow installs:
+// stdout. With `--set-secret <owner/repo>` it also writes it to the GitHub
+// secret the TestFlight workflow installs, only once the profile is in hand:
 //
-//   node ci_scripts/asc-profile.mjs fr.noto.app \
-//     | gh secret set PROVISIONING_PROFILE_NOTO --repo jtassy-stack/noto
+//   node ci_scripts/asc-profile.mjs fr.noto.app --set-secret jtassy-stack/noto
 //
-// The profile name and secret come from .claude/asc/config.json
+// (No `| gh secret set` pipe: without pipefail, a failure here would store an
+// empty secret.) The profile name and secret come from .claude/asc/config.json
 // (`provisioningProfiles`). The new profile keeps the old one's certificates.
 // Idempotent: a profile that already carries `--require <text>` (default:
 // the iCloud container) is printed as is, not regenerated. Logs go to stderr.
@@ -15,12 +16,18 @@
 // The API cannot create an iCloud container or attach it to the App ID:
 // do that in the developer portal first, or the new profile won't carry it.
 
+import { execFileSync } from "node:child_process";
 import { clientFromEnv, loadAscConfig } from "./asc.mjs";
 
 const args = process.argv.slice(2);
-const bundleId = args.find((a) => !a.startsWith("--")) ?? loadAscConfig()?.bundleId;
-const requireIndex = args.indexOf("--require");
-const required = requireIndex >= 0 ? args[requireIndex + 1] : "iCloud.fr.noto.app";
+const option = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const optionValues = new Set(["--require", "--set-secret"].map(option));
+const bundleId = args.find((a) => !a.startsWith("--") && !optionValues.has(a)) ?? loadAscConfig()?.bundleId;
+const required = option("--require") ?? "iCloud.fr.noto.app";
+const secretRepo = option("--set-secret");
 const log = (...m) => console.error(...m);
 
 const config = loadAscConfig();
@@ -32,6 +39,23 @@ if (!entry) {
 
 const asc = clientFromEnv();
 const decoded = (b64) => Buffer.from(b64, "base64").toString("latin1");
+
+// Only ever called with a profile in hand: an empty or failed run never reaches the secret.
+function publish(content) {
+  if (!content) {
+    log("Empty profile: nothing written.");
+    process.exit(1);
+  }
+  if (secretRepo) {
+    execFileSync("gh", ["secret", "set", entry.secret, "--repo", secretRepo], {
+      input: content,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+    log(`${entry.secret} updated on ${secretRepo}.`);
+  } else {
+    process.stdout.write(content);
+  }
+}
 
 const bundles = await asc.getAll(`/v1/bundleIds?filter[identifier]=${encodeURIComponent(bundleId)}&limit=200`);
 const bundle = bundles.find((b) => b.attributes.identifier === bundleId);
@@ -51,7 +75,7 @@ if (!current) {
 if (current.attributes.profileState === "ACTIVE" && required
     && decoded(current.attributes.profileContent).includes(required)) {
   log(`« ${entry.name} » already carries ${required}: unchanged.`);
-  process.stdout.write(current.attributes.profileContent);
+  publish(current.attributes.profileContent);
   process.exit(0);
 }
 
@@ -92,5 +116,5 @@ if (required && !decoded(content).includes(required)) {
     + `Is the container attached to ${bundleId} in the developer portal?`);
 }
 log(`« ${entry.name} » regenerated (${created.json.data.id}), valid until `
-  + `${created.json.data.attributes.expirationDate}. Update the ${entry.secret} secret with stdout.`);
-process.stdout.write(content);
+  + `${created.json.data.attributes.expirationDate}.`);
+publish(content);
