@@ -168,6 +168,8 @@ jobs:
           grep -v "CoreData" test-output.log \
             | grep -E "✘|recorded an issue|Test Case .* failed|failed after|crashed|Restarting after|unexpected exit|Fatal error" \
             | head -100 || true
+          echo "--- before each crash ---"
+          grep -v "CoreData" test-output.log | grep -B 25 "Restarting after" | grep -vE "passed after|^--$" | head -80 || true
           echo "--- end of raw log ---"
           grep -v "CoreData" test-output.log | tail -60 || true
 
