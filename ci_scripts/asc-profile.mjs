@@ -15,6 +15,9 @@
 //
 // The API cannot create an iCloud container or attach it to the App ID:
 // do that in the developer portal first, or the new profile won't carry it.
+//
+// The profile expires with its distribution certificate: rerun this script
+// after renewing the certificate (and after any App ID capability change).
 
 import { execFileSync } from "node:child_process";
 import { clientFromEnv, loadAscConfig } from "./asc.mjs";
