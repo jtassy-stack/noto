@@ -189,7 +189,10 @@ struct HomeView: View {
                         }
 
                         // MARK: Timeline — Prochaines 48h
-                        if !scopedChildren.isEmpty {
+                        // Hidden until every child has synced once: its empty
+                        // state would otherwise claim « aucun cours » before
+                        // any school data exists.
+                        if !scopedChildren.isEmpty && !hasPendingInitialSync {
                             Text("PROCHAINES 48H")
                                 .sectionLabelStyle()
 
