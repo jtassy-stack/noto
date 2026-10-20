@@ -60,6 +60,13 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.fr.noto.app.shared
+        # Family sync (phase 9): CloudKit shared zone per child. The container
+        # must be attached to the App ID and in the « noto appstore » profile
+        # (ci_scripts/asc-profile.mjs) before this ships.
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.fr.noto.app
+        com.apple.developer.icloud-services:
+          - CloudKit
         com.apple.developer.family-controls: true
     postBuildScripts:
       - name: Embed DeviceActivity extension (device only)
