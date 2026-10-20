@@ -1010,17 +1010,19 @@ private struct ScheduleListView: View {
         return allEntries.filter { $0.entry.start >= dayStart && $0.entry.start < dayEnd }
     }
 
-    private var isMonLyceeOnly: Bool {
-        !children.isEmpty && children.allSatisfy { $0.entProvider == .monlycee }
+    /// ENT children (MonLycée, PCN) have no timetable connector: their
+    /// schedule never fills, so « après synchronisation » would be untrue.
+    private var isENTOnly: Bool {
+        !children.isEmpty && children.allSatisfy { $0.schoolType == .ent }
     }
 
     var body: some View {
         if allEntries.isEmpty {
-            if isMonLyceeOnly {
+            if isENTOnly {
                 ContentUnavailableView(
                     "EDT non disponible",
                     systemImage: "calendar.badge.exclamationmark",
-                    description: Text("L'emploi du temps n'est pas accessible via MonLycée.\nPour l'activer, ajoutez un enfant via QR code Pronote.")
+                    description: Text("L'emploi du temps n'est pas accessible via l'ENT.\nPour l'activer, ajoutez l'enfant via le QR code Pronote.")
                 )
             } else {
                 VStack {

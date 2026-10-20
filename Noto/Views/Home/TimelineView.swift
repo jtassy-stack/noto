@@ -63,8 +63,40 @@ struct TimelineView: View {
         return sortedKeys.map { key in (day: key, items: grouped[key]!) }
     }
 
+    /// First non-cancelled lesson after the 48 h window (e.g. the day classes
+    /// resume after the holidays), so an empty timeline still says when the
+    /// next class is instead of leaving the section blank.
+    private var nextLessonAfterWindow: Date? {
+        Self.nextLessonStart(
+            after: Date.now.addingTimeInterval(48 * 3600),
+            lessons: children.flatMap { $0.schedule }.map { (start: $0.start, cancelled: $0.cancelled) }
+        )
+    }
+
+    static func nextLessonStart(after date: Date, lessons: [(start: Date, cancelled: Bool)]) -> Date? {
+        lessons.filter { !$0.cancelled && $0.start > date }.map(\.start).min()
+    }
+
+    static func emptyText(nextLesson: Date?) -> String {
+        guard let nextLesson else { return "Aucun cours ni devoir d'ici 48 h." }
+        let day = nextLesson.formatted(
+            .dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "fr_FR"))
+        )
+        return "Aucun cours d'ici 48 h. Prochain cours : \(day)."
+    }
+
     var body: some View {
-        if timelineItems.isEmpty { return AnyView(EmptyView()) }
+        if timelineItems.isEmpty {
+            return AnyView(
+                Text(Self.emptyText(nextLesson: nextLessonAfterWindow))
+                    .font(NotoTheme.Typography.metadata)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .notoCard()
+            )
+        }
 
         return AnyView(
             VStack(alignment: .leading, spacing: NotoTheme.Spacing.sm) {
