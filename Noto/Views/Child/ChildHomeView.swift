@@ -66,6 +66,8 @@ struct ChildHomeView: View {
     @State private var gateApproved = false
     @State private var showSettings = false
     @State private var showQuiz = false
+    /// The running question-bank sync, joined by later triggers.
+    @State private var bankSyncTask: Task<Void, Never>?
     /// Subject or theme of the quiz to open; nil = the quiz of the day.
     @State private var quizFocus: QuizFocus?
     @State private var cultureQuestion: DailyCultureQuestion?
@@ -310,6 +312,19 @@ struct ChildHomeView: View {
     /// yet, so « Réviser » works offline on first launch; a seed failure never
     /// skips the network sync.
     private func syncQuestionBank() async {
+        // Launch and foreground can both fire before the first sync returns:
+        // join the running one so two pages for the same level never race.
+        if let running = bankSyncTask {
+            await running.value
+            return
+        }
+        let task = Task { await runQuestionBankSync() }
+        bankSyncTask = task
+        await task.value
+        bankSyncTask = nil
+    }
+
+    private func runQuestionBankSync() async {
         guard let child, !ProcessInfo.processInfo.isRunningForPreviews else { return }
         let store = QuizBankStore(modelContext: modelContext)
         do {
