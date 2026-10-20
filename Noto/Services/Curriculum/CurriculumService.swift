@@ -280,6 +280,16 @@ final class CurriculumService {
         return program.subjects.map(\.name)
     }
 
+    /// Names of the spécialités the child takes at this level, in curriculum
+    /// order. Empty when the child's spécialités are unknown: every spécialité
+    /// is then eligible, so none of them is the child's own.
+    func specialtySubjects(for level: String, specialties: [String]) -> [String] {
+        guard !specialties.isEmpty, let program = program(for: level) else { return [] }
+        return program.subjects
+            .filter { $0.track == .specialite && isEligible($0, specialties: specialties) }
+            .map(\.name)
+    }
+
     /// Returns BO theme names for a given level and subject, suitable as culture-api search topics.
     /// Falls back to all themes for the level if the subject isn't found.
     func cultureTopics(for level: String, subject: String, maxPerSubject: Int = 2, specialties: [String]? = nil) -> [String] {

@@ -196,6 +196,12 @@ protocol CurriculumLookup: Sendable {
     /// 6e « TECHNOLOGIE » resolves to « Sciences et technologie ».
     func subjectThemes(for level: String, subject: String,
                        specialties: [String]?) -> [(name: String, themes: [CurriculumTheme])]
+    /// The spécialités the child takes at this level (`[]` when unknown).
+    func specialtySubjects(for level: String, specialties: [String]) -> [String]
+}
+
+extension CurriculumLookup {
+    func specialtySubjects(for level: String, specialties: [String]) -> [String] { [] }
 }
 
 /// Sendable curriculum view over already-decoded programs (`CurriculumProgram`
@@ -212,6 +218,10 @@ struct CurriculumSnapshot: CurriculumLookup {
 
     func subjects(for level: String) -> [String] {
         CurriculumService(programs: programs).subjects(for: level)
+    }
+
+    func specialtySubjects(for level: String, specialties: [String]) -> [String] {
+        CurriculumService(programs: programs).specialtySubjects(for: level, specialties: specialties)
     }
 
     func subjectThemes(for level: String, subject: String,
