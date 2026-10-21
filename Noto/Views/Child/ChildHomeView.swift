@@ -66,6 +66,8 @@ struct ChildHomeView: View {
     @State private var gateApproved = false
     @State private var showSettings = false
     @State private var showQuiz = false
+    /// The running question-bank sync, joined by later triggers.
+    @State private var bankSyncTask: Task<Void, Never>?
     /// Subject or theme of the quiz to open; nil = the quiz of the day.
     @State private var quizFocus: QuizFocus?
     @State private var cultureQuestion: DailyCultureQuestion?
@@ -234,6 +236,9 @@ struct ChildHomeView: View {
             if phase == .active {
                 refreshDay()
                 refreshRewardStatus()
+                // A resident app must still pick up questions celyn added
+                // since launch (the store throttles itself per level).
+                Task { await syncQuestionBank() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
@@ -301,12 +306,25 @@ struct ChildHomeView: View {
     /// Opportunistic refresh of the celyn programme bank for the child's
     /// level (throttled to once per 12 h per level by `QuizBankStore`). Only
     /// questions come down; nothing about the child goes up. Failures keep
-    /// the local bank and are retried on a later appearance.
+    /// the local bank and are retried on the next return to the foreground.
     ///
     /// The bundled snapshot is seeded first when the level has no celyn item
     /// yet, so « Réviser » works offline on first launch; a seed failure never
     /// skips the network sync.
     private func syncQuestionBank() async {
+        // Launch and foreground can both fire before the first sync returns:
+        // join the running one so two pages for the same level never race.
+        if let running = bankSyncTask {
+            await running.value
+            return
+        }
+        let task = Task { await runQuestionBankSync() }
+        bankSyncTask = task
+        await task.value
+        bankSyncTask = nil
+    }
+
+    private func runQuestionBankSync() async {
         guard let child, !ProcessInfo.processInfo.isRunningForPreviews else { return }
         let store = QuizBankStore(modelContext: modelContext)
         do {

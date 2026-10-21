@@ -396,6 +396,30 @@ struct QuizBankStoreTests {
         #expect(try await store.sync(level: "6e") == .synced(upserted: 0, dropped: 0))
     }
 
+    @Test("an empty level is not throttled: questions added later arrive on the next call")
+    func emptyLevelNotThrottled() async throws {
+        QuizStubProtocol.install { _ in .json(QuizBankFixtures.page(grade: "4e", items: [])) }
+        defer { QuizStubProtocol.reset() }
+        let store = makeStore()
+
+        // celyn has no 4e question yet: the drained empty feed stamps lastSync…
+        #expect(try await store.sync(level: "4e") == .synced(upserted: 0, dropped: 0))
+        #expect(store.lastSync(grade: "4e") == QuizClock.now)
+
+        // …but an hour later, once the bank is generated, the next call fetches it.
+        QuizStubProtocol.install { _ in
+            .json(QuizBankFixtures.page(grade: "4e", items: [QuizBankFixtures.item(grade: "4e")]))
+        }
+        clock.now = QuizClock.now.addingTimeInterval(3600)
+        #expect(try await store.sync(level: "4e") == .synced(upserted: 1, dropped: 0))
+        #expect(QuizStubProtocol.requests.count == 1)  // install() resets the capture
+
+        // The level now holds a served row: the 12 h window applies again.
+        clock.now = QuizClock.now.addingTimeInterval(2 * 3600)
+        #expect(try await store.sync(level: "4e") == .throttled)
+        #expect(QuizStubProtocol.requests.count == 1)
+    }
+
     @Test("primary and unknown levels never hit the server")
     func unsupportedLevel() async throws {
         QuizStubProtocol.install { _ in .json(QuizBankFixtures.contractSample) }
