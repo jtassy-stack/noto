@@ -206,6 +206,8 @@ jobs:
     # multi-merge day from burning Apple's daily upload quota.
     # The [tf] commit must change a file outside paths-ignore: an empty
     # commit (or a docs-only one) never starts this workflow at all.
+    # Direct pushes to master are blocked: open a small PR whose squash
+    # title starts with [tf], its merge commit triggers the upload.
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event_name != 'pull_request' &&
