@@ -19,16 +19,19 @@ struct SubjectProgress: Identifiable, Equatable, Sendable {
 }
 
 extension SubjectProgress {
-    /// The child's level programme, subject by subject, in curriculum order,
-    /// with each theme's box. Pure. Empty outside 6e → Tle. A spécialité the
-    /// child does not take has no theme here and is left out.
+    /// The child's level programme, subject by subject, with each theme's
+    /// box. Pure. Empty outside 6e → Tle. A spécialité the child does not take
+    /// has no theme here and is left out. In 1re / Tle, the child's own
+    /// spécialités come first (when known), then the tronc commun, each in
+    /// curriculum order.
     static func path(level rawLevel: String, specialties: [String], masteries: [MasterySnapshot],
                      curriculum: some CurriculumLookup) -> [SubjectProgress] {
         let level = CurriculumService.canonicalLevel(rawLevel)
         guard CurriculumService.revisionLevels.contains(level) else { return [] }
         let boxes = Dictionary(masteries.map { ($0.notionKey, $0.leitnerBox) }, uniquingKeysWith: { max($0, $1) })
+        let own = curriculum.specialtySubjects(for: level, specialties: specialties)
         var seen = Set<String>()
-        return curriculum.subjects(for: level)
+        return (own + curriculum.subjects(for: level))
             .filter { seen.insert($0).inserted }
             .compactMap { subject in
                 let themes = curriculum.themes(for: level, subject: subject, specialties: specialties)
