@@ -200,5 +200,9 @@ struct GradeInferenceTests {
         #expect(GradeInference.refreshedGrade(current: "2nde", className: "201") == nil)
         #expect(GradeInference.refreshedGrade(current: "2nde", className: "Atelier") == nil)
         #expect(GradeInference.refreshedGrade(current: "2nde", className: "1G3")?.grade == "1re")
+        // MonLycée children are created with no class label (grade "" or
+        // "?"); the Pronote roster then gives "2NDE2" / "6EME2".
+        #expect(GradeInference.refreshedGrade(current: "?", className: "2NDE2")?.grade == "2nde")
+        #expect(GradeInference.refreshedGrade(current: "", className: "6EME2")?.grade == "6e")
     }
 }
