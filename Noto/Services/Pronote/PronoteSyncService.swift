@@ -20,7 +20,7 @@ final class PronoteSyncService {
         failedCategories = []
 
         bridge.setActiveChild(index: childIndex)
-        refreshGrade(of: child, bridge: bridge, childIndex: childIndex)
+        refreshGrade(of: child, bridge: bridge)
 
         let today = Date.now
         let calendar = Calendar.current
@@ -99,10 +99,14 @@ final class PronoteSyncService {
     /// Re-reads the child's class label on every sync, so a grade stored
     /// empty at login (class code the inference did not know yet) or left
     /// from last school year is fixed without a new QR login.
-    private func refreshGrade(of child: Child, bridge: PawnoteBridge, childIndex: Int) {
+    ///
+    /// The roster entry is resolved by identity (`ChildIndexResolver`), not
+    /// by `childIndex`: some callers pass a family-array index, which could
+    /// point at a sibling and copy their grade.
+    private func refreshGrade(of child: Child, bridge: PawnoteBridge) {
         let roster = bridge.getChildren()
-        guard roster.indices.contains(childIndex) else { return }
-        let className = roster[childIndex].className
+        guard let index = ChildIndexResolver.resolve(child: child, pawnoteChildren: roster) else { return }
+        let className = roster[index].className
         guard let refreshed = GradeInference.refreshedGrade(current: child.grade, className: className) else { return }
         NSLog("[noto] Grade for \(child.firstName): \"\(child.grade)\" → \"\(refreshed.grade)\" (class \"\(className)\")")
         child.grade = refreshed.grade
