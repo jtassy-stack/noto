@@ -721,6 +721,7 @@ private struct ChildSettingsRow: View {
     @State private var showDisconnectConfirm = false
     @State private var showSchoolPicker = false
     @State private var showFamilyLink = false
+    @State private var showClassPicker = false
 
     /// Family sync (phase 9.2): parent devices only, behind the build flag.
     private var familyLinkAvailable: Bool {
@@ -741,6 +742,7 @@ private struct ChildSettingsRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             mainRow
+            classCTA
             if !isLinkedToDirectory {
                 linkCTA
             }
@@ -768,6 +770,70 @@ private struct ChildSettingsRow: View {
                     child.rneCode = nil
                 }
             }
+        }
+    }
+
+    /// Grade the quizzes and the parcours use (6e → Tle), or nil when no
+    /// sync could read the class name (MonLycée without a Pronote session).
+    private var revisionLevel: String? {
+        let level = CurriculumService.canonicalLevel(child.grade)
+        return CurriculumService.revisionLevels.contains(level) ? level : nil
+    }
+
+    private static func classLabel(_ grade: String) -> String {
+        switch grade {
+        case "2nde": "Seconde"
+        case "1re": "Première"
+        case "Tle": "Terminale"
+        default: grade
+        }
+    }
+
+    /// Lets the parent set the class when the sync left it empty: without a
+    /// level the child app has no quiz and no parcours. A later sync that
+    /// reads a class name still wins (`GradeInference.refreshedGrade`).
+    private var classCTA: some View {
+        Button {
+            showClassPicker = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: revisionLevel == nil ? "exclamationmark.circle" : "graduationcap")
+                    .font(.system(size: 11))
+                Text(revisionLevel.map { "Classe : \(Self.classLabel($0))" }
+                     ?? "Classe inconnue : choisir la classe de \(child.firstName) pour ses quiz")
+                    .font(NotoTheme.Typography.caption)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(0.5)
+            }
+            .foregroundStyle(revisionLevel == nil ? NotoTheme.Colors.warning : NotoTheme.Colors.textSecondary)
+            .padding(.horizontal, NotoTheme.Spacing.md)
+            .padding(.bottom, 12)
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog("Classe de \(child.firstName)", isPresented: $showClassPicker, titleVisibility: .visible) {
+            ForEach(CurriculumService.revisionLevels, id: \.self) { grade in
+                Button(Self.classLabel(grade)) { setClass(grade) }
+            }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Les quiz et le parcours suivent cette classe. Une synchro qui lit la classe à l'école la remplace.")
+        }
+    }
+
+    private func setClass(_ grade: String) {
+        guard let choice = GradeInference.manualChoice(grade) else { return }
+        let previous = (child.grade, child.level)
+        child.grade = choice.grade
+        child.level = choice.level
+        do {
+            try modelContext.save()
+        } catch {
+            NSLog("[noto][warn] saving class for \(child.firstName) failed: \(error.localizedDescription)")
+            child.grade = previous.0
+            child.level = previous.1
         }
     }
 

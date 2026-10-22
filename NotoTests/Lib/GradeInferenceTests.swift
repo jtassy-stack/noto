@@ -205,4 +205,14 @@ struct GradeInferenceTests {
         #expect(GradeInference.refreshedGrade(current: "?", className: "2NDE2")?.grade == "2nde")
         #expect(GradeInference.refreshedGrade(current: "", className: "6EME2")?.grade == "6e")
     }
+
+    @Test("A class picked by hand maps to its level, only 6e → Tle")
+    func manualChoice() {
+        #expect(GradeInference.manualChoice("2nde")?.level == .lycee)
+        #expect(GradeInference.manualChoice("Tle")?.level == .lycee)
+        #expect(GradeInference.manualChoice("6e")?.level == .college)
+        #expect(GradeInference.manualChoice("6e")?.grade == "6e")
+        #expect(GradeInference.manualChoice("CM2") == nil)
+        #expect(GradeInference.manualChoice("") == nil)
+    }
 }

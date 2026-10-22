@@ -150,7 +150,8 @@ struct ChildPreviewCopyTests {
         #expect(ChildPreviewBanner.title("Joseph") == "Vision enfant : l'appli de Joseph")
         #expect(ChildPreviewBanner.entryTitle("Joseph") == "Voir l'appli de Joseph")
         // Parent tone: no tutoiement in the parent's bar and alert.
-        for text in [ChildPreviewBanner.detail("Joseph"), ChildPreviewBanner.actionMessage("Joseph")] {
+        for text in [ChildPreviewBanner.detail("Joseph"), ChildPreviewBanner.actionMessage("Joseph"),
+                     ChildPreviewBanner.classMissingDetail("Joseph")] {
             #expect(text.contains("Joseph"))
             #expect(!text.contains(" tu ") && !text.contains(" ton ") && !text.contains(" tes "))
         }
