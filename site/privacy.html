@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy · nōto</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<h1>Privacy policy</h1>
+<p class="meta">nōto · Last updated: 22 October 2026</p>
+<p class="lang"><a href="confidentialite.html" hreflang="fr">Version française</a> (the French version prevails)</p>
+
+<p>nōto helps parents follow their children's schooling, from collège to lycée, and offers children revision quizzes. The app is built so that your data stays on your devices: nōto has no user account, stores no school data on a server, and uses no advertising, analytics or trackers.</p>
+
+<h2>1. What stays on your phone</h2>
+<p>The following data is stored only on the device where you use nōto:</p>
+<ul>
+<li>your children's first names and classes, their school and their specialties;</li>
+<li>data fetched from the school: grades, timetable, homework, lesson log, absences, messages, school photos;</li>
+<li>school e-mails read from your mailbox, if you connect it;</li>
+<li>quizzes completed by your child, progress per topic, streak and screen-time minutes earned;</li>
+<li>recordings and transcripts of parent-teacher meetings, if you use that feature.</li>
+</ul>
+<p>Login credentials (Pronote tokens, École Directe or Skolengo credentials, mail app passwords) are kept in the iOS secure keychain. They are never sent to nōto or to any third party.</p>
+<p>Summaries, tips and quizzes are generated on the device, with Apple's built-in iOS models when available, otherwise with fixed rules. Meeting transcription runs on the device: the audio never leaves your phone.</p>
+
+<h2>2. Who the app talks to</h2>
+<h3>Your child's school</h3>
+<p>nōto connects directly, from your phone, to the school services you choose (Pronote, École Directe, Skolengo, ENTs such as Paris Classe Numérique or MonLycée.net), with your own credentials. No intermediary sees these exchanges.</p>
+<h3>Your mailbox</h3>
+<p>If you connect a mailbox, nōto reads it directly from your provider (IMAP) to find the school's messages. Only messages from school senders you allow are shown.</p>
+<h3>celyn, for culture and quizzes</h3>
+<p>For cultural recommendations (Discover tab) and for the quiz question bank, nōto queries the celyn API (celyn.io). Requests only contain:</p>
+<ul>
+<li>curriculum keywords (for example "French Revolution"), the class level and an age range;</li>
+<li>for nearby outings, your approximate location, only if you allowed location access;</li>
+<li>for school search, the name or town you typed.</li>
+</ul>
+<p>They contain no name, grade, or child or device identifier. If you report a wrong quiz question, nōto sends a random per-install identifier, which celyn only stores hashed, to count reports.</p>
+<h3>The public service geo.api.gouv.fr</h3>
+<p>To find the town of your child's school, nōto may send your location to the French government's public API (geo.api.gouv.fr), which returns the town name.</p>
+<h3>Apple</h3>
+<p>Notifications are created by the app on your phone: no server sends them. Screen Time is handled by iOS on the child's device; nōto does not read app usage. Family sync, described below, goes through iCloud.</p>
+
+<h2 id="family-sync">3. Sync between the parent's phone and the child's phone</h2>
+<p>nōto can link a parent's phone to their child's phone, so the parent sees the child's revision and sets rewards from their own phone. This sync is off by default. Only the parent can turn it on, from Settings › "Relier le téléphone de [name]" (Link [name]'s phone), and the child must accept the invitation on their phone.</p>
+<h3>Data shared between the two phones</h3>
+<p>From the child's phone to the parent's phone:</p>
+<ul>
+<li>completed quizzes: date, number of correct answers, duration, minutes earned, subject of each question;</li>
+<li>progress per topic: curriculum topic, review level, dates of the last and next review;</li>
+<li>streak jokers (days covered);</li>
+<li>screen-time minutes earned today (credited, in reserve, unlocked).</li>
+</ul>
+<p>From the parent's phone to the child's phone:</p>
+<ul>
+<li>reward rules: point scale, daily cap, pass threshold, minimum duration, test-eve bonus, whether the general-knowledge quiz and the family challenge are on.</li>
+</ul>
+<p><strong>Data that never goes through this channel</strong>: school logins and passwords, grades, timetable, homework, lesson log, messages, photos, and the text of questions and answers. The parent's phone gets its own grades and timetable directly from the school, with its own account.</p>
+<h3>How the data travels</h3>
+<p>Sync uses iCloud (CloudKit), Apple's service, with no nōto server involved. The data is stored in a zone of the parent's private iCloud, created for that child and shared only with the child's iCloud account that the parent invited. All content is end-to-end encrypted before it leaves the phone (CloudKit encrypted fields): neither nōto nor Apple can read it. Apple only sees the technical information the service needs, such as which iCloud accounts take part in the share, random record identifiers and modification dates. The publisher of nōto receives none of this data and has no access to it. Use of iCloud is subject to <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>.</p>
+<p>Sync runs when the app opens, when it comes back to the foreground, and in the background when iOS allows it.</p>
+<h3>Legal basis and retention</h3>
+<p>Sync relies on the consent of the parent, who holds parental authority and turns it on themselves. The data is kept in the parent's iCloud for as long as the two phones stay linked.</p>
+<h3>Turning sync off and deleting the data</h3>
+<ul>
+<li>On the parent's phone, Settings › "Délier le téléphone de [name]" (Unlink [name]'s phone) deletes the iCloud zone and everything in it. The child's phone loses access, and the data received from the child is erased from the parent's phone. The child's phone keeps its own data, as before linking.</li>
+<li>Removing the child from nōto, or using "Effacer toutes les données" (Erase all data), on the parent's phone has the same effect. If iCloud is unreachable at that moment, the deletion is retried at the next launch.</li>
+<li>The data can also be deleted from the device's iCloud settings (Settings › [your name] › iCloud › Manage Storage).</li>
+</ul>
+
+<h2>4. Permissions requested</h2>
+<table>
+<tr><th>Permission</th><th>Why</th></tr>
+<tr><td>Camera</td><td>Scan the Pronote QR code to connect your child's account.</td></tr>
+<tr><td>Photos</td><td>Save school photos to the "nōto" album in your library.</td></tr>
+<tr><td>Calendar</td><td>Add a cultural event or the timetable to your calendar, when you ask.</td></tr>
+<tr><td>Location</td><td>Find your child's school and suggest nearby cultural outings.</td></tr>
+<tr><td>Microphone and speech recognition</td><td>Record and transcribe a parent-teacher meeting, on the device.</td></tr>
+<tr><td>Face ID</td><td>Protect access to school data.</td></tr>
+<tr><td>Screen Time</td><td>Block the child's apps during class and unlock minutes earned by revising.</td></tr>
+<tr><td>Notifications</td><td>Tell you about homework due, a difficulty or a school message. Notifications are created on the device.</td></tr>
+</table>
+<p>Each permission can be withdrawn at any time in iOS Settings.</p>
+
+<h2>5. Children</h2>
+<p>nōto is meant for families of pupils from 6e to Terminale (ages 11 to 18). The child's data is entered and controlled by the parent, who installs the app, chooses what is connected and can erase everything. On the child's phone, reward settings are protected by a parent code.</p>
+
+<h2>6. Retention and deletion</h2>
+<p>Data stays on your device for as long as you keep the app. Settings › "Effacer toutes les données" (Erase all data) deletes nōto's data and the credentials stored in the keychain; deleting the app also erases its local data. Data is encrypted by iOS while the device is locked, and follows your device's iCloud backup settings.</p>
+
+<h2>7. Your rights</h2>
+<p>Under the GDPR, you have the right to access, correct, erase, object and restrict. Since nōto holds no personal data on a server, most of these rights are exercised directly in the app. For any question, write to <span class="todo">[contact address]</span>. You can also lodge a complaint with the CNIL (<a href="https://www.cnil.fr">cnil.fr</a>).</p>
+
+<h2>8. Publisher</h2>
+<p>nōto is published by <span class="todo">[publisher name and address]</span>.</p>
+<p>This policy may change with the app. The last update date is shown at the top of the page.</p>
+</main>
+</body>
+</html>

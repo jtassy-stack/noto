@@ -21,6 +21,10 @@ import FamilyControls
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
+
+    /// Hosted by GitHub Pages from `site/` (`.github/workflows/pages.yml`).
+    static let privacyPolicyURL = URL(string: "https://jtassy-stack.github.io/noto/confidentialite.html")!
+
     @Environment(AppearanceManager.self) private var appearance
     @Environment(\.dismiss) private var dismiss
     @Query private var families: [Family]
@@ -462,7 +466,7 @@ struct SettingsView: View {
                 SettingsDivider()
                 InfoRow(label: "Diagnostic de connexion", value: "", chevron: true, action: { showConnectionHealthcheck = true })
                 SettingsDivider()
-                InfoRow(label: "Politique de confidentialité", value: "", chevron: true, action: nil)
+                InfoRow(label: "Politique de confidentialité", value: "", chevron: true, action: { openURL(Self.privacyPolicyURL) })
                 SettingsDivider()
                 InfoRow(label: "Conditions d'utilisation", value: "", chevron: true, action: nil)
                 SettingsDivider()
