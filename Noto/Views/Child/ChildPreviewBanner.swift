@@ -8,6 +8,8 @@ struct ChildPreviewBanner: View {
     let firstName: String
     /// The child's phone is linked to this one (family sync, phase 9.3).
     var linked = false
+    /// No 6e → Tle level stored: the tabs below have no quiz nor parcours.
+    var classMissing = false
     let onClose: () -> Void
 
     var body: some View {
@@ -19,7 +21,7 @@ struct ChildPreviewBanner: View {
                 Text(Self.title(firstName))
                     .font(NotoTheme.Typography.headline)
                     .foregroundStyle(NotoTheme.Colors.textPrimary)
-                Text(Self.detail(firstName, linked: linked))
+                Text(classMissing ? Self.classMissingDetail(firstName) : Self.detail(firstName, linked: linked))
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -49,6 +51,12 @@ struct ChildPreviewBanner: View {
         linked
             ? "Lecture seule. Les quiz, la série et les minutes de \(firstName) viennent de son téléphone relié."
             : "Lecture seule. Les quiz, la série et les minutes de \(firstName) restent sur son appareil tant que la synchro famille n'est pas activée."
+    }
+
+    /// The sync could not read the class (MonLycée without a Pronote
+    /// session): point the parent at the class picker in Réglages.
+    static func classMissingDetail(_ firstName: String) -> String {
+        "Classe de \(firstName) inconnue : choisissez-la dans Réglages, sous son nom, pour afficher ses quiz et son parcours."
     }
 
     static let actionTitle = "Aperçu seulement"

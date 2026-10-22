@@ -184,6 +184,8 @@ struct ChildHomeView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             if let previewChild {
                 ChildPreviewBanner(firstName: previewChild.firstName, linked: previewChild.receivesFamilySync,
+                                   classMissing: !CurriculumService.revisionLevels.contains(
+                                       CurriculumService.canonicalLevel(previewChild.grade)),
                                    onClose: { dismiss() })
             }
         }
@@ -333,7 +335,9 @@ struct ChildHomeView: View {
             logger.info("Bundled bank seed skipped: \(error.localizedDescription, privacy: .public)")
         }
         do {
-            try await store.sync(child: child)
+            if case .unsupportedLevel(let level) = try await store.sync(child: child) {
+                logger.info("Bank sync skipped: no revision level for \(child.firstName, privacy: .private) (\"\(level, privacy: .public)\")")
+            }
         } catch {
             logger.info("Bank sync skipped: \(error.localizedDescription, privacy: .public)")
         }

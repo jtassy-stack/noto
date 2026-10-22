@@ -52,6 +52,13 @@ enum GradeInference {
         }
     }
 
+    /// `(grade, level)` for a class the parent picks by hand (Réglages, when
+    /// no sync could read the class name). Nil outside 6e → Tle.
+    static func manualChoice(_ grade: String) -> (grade: String, level: SchoolLevel)? {
+        guard CurriculumService.revisionLevels.contains(grade) else { return nil }
+        return (grade, level(from: grade))
+    }
+
     /// New `(grade, level)` to store when a sync reads `className` for a child
     /// whose stored grade is `current`; nil when nothing should change. A
     /// label that is not recognised never erases a stored grade, and a
