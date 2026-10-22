@@ -29,6 +29,12 @@ enum GradeInference {
             let weakMerge = runs[i].merged && token.count == 2 && token.last == "g"
             if !weakMerge, let lycee = lyceeGrade(token) { return lycee }
             if let college = collegeGrade(token) { return college }
+            if let coded = numericClassCode(token) { return coded }
+            // "2A", "2B": seconde + class letter, only as a token written
+            // that way (a glued "Groupe 2 A" stays unrecognised).
+            if !runs[i].merged, token.count == 2, token.first == "2", token.last?.isLetter == true {
+                return "2nde"
+            }
             if i + 1 < tokens.count, let split = splitLyceeGrade(token, next: tokens[i + 1]) {
                 return split
             }
@@ -44,6 +50,17 @@ enum GradeInference {
         case "2nde", "1re", "Tle": return .lycee
         default: return .college
         }
+    }
+
+    /// New `(grade, level)` to store when a sync reads `className` for a child
+    /// whose stored grade is `current`; nil when nothing should change. A
+    /// label that is not recognised never erases a stored grade, and a
+    /// recognised one replaces an empty or outdated grade (a child added
+    /// before a class-code rule existed, or a new school year).
+    static func refreshedGrade(current: String, className: String) -> (grade: String, level: SchoolLevel)? {
+        let grade = grade(from: className)
+        guard !grade.isEmpty, grade != current else { return nil }
+        return (grade, level(from: className))
     }
 
     /// Primary-school codes, in the priority order of the legacy ENT /
@@ -97,6 +114,15 @@ enum GradeInference {
         // Seconde: "2nde", "2de", "2gt", "seconde" (+ optional class suffix: "2nde4", "2de3").
         if t == "seconde" || t.hasPrefix("2nde") || t.hasPrefix("2de") || t.hasPrefix("2gt") {
             return "2nde"
+        }
+        // "2e", "2eme", "2e3", "2eB": in a secondary school, a level written
+        // "2e" can only be seconde (collège stops at 3e).
+        if t.hasPrefix("2e") {
+            let rest = t.dropFirst(2)
+            let suffix = rest.hasPrefix("me") ? rest.dropFirst(2) : rest
+            if suffix.allSatisfy(\.isNumber) || (suffix.count == 1 && suffix.first?.isLetter == true) {
+                return "2nde"
+            }
         }
         // Première: "1ere", "1re", "premiere", "1g", "1g3", "1stmg"…
         if t == "premiere" || t.hasPrefix("1ere") || t.hasPrefix("1re") {
@@ -167,6 +193,22 @@ enum GradeInference {
             return digit + "e"
         }
         return nil
+    }
+
+    /// Numeric Pronote class codes: level digit + two-digit class number
+    /// ("201" = seconde 1, "604" = sixième 4, "103" = première 3). Exactly
+    /// three digits, so a year ("2026") or a bare group number never matches.
+    private static func numericClassCode(_ t: String) -> String? {
+        guard t.count == 3, t.allSatisfy(\.isNumber), let first = t.first else { return nil }
+        switch first {
+        case "6": return "6e"
+        case "5": return "5e"
+        case "4": return "4e"
+        case "3": return "3e"
+        case "2": return "2nde"
+        case "1": return "1re"
+        default: return nil
+        }
     }
 
     // MARK: - Tokenisation
