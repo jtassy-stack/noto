@@ -169,4 +169,36 @@ struct GradeInferenceTests {
         #expect(GradeInference.grade(from: "16e") == "")
         #expect(GradeInference.grade(from: "13e") == "")
     }
+
+    // MARK: - Numeric and "2e" class codes
+
+    @Test("Seconde class codes → 2nde / lycee", arguments: ["201", "212", "2E3", "2E", "2ème 4", "2EME", "2A", "Classe 204"])
+    func secondeCodes(label: String) {
+        #expect(GradeInference.grade(from: label) == "2nde")
+        #expect(GradeInference.level(from: label) == .lycee)
+    }
+
+    @Test("Three-digit codes read the level digit", arguments: [
+        ("604", "6e"), ("502", "5e"), ("401", "4e"), ("301", "3e"), ("103", "1re"),
+    ])
+    func numericCodes(label: String, expected: String) {
+        #expect(GradeInference.grade(from: label) == expected)
+    }
+
+    @Test("Numbers that are not class codes stay unrecognised", arguments: [
+        "2026", "20", "Groupe 2 A", "Salle 2", "701", "2eleves",
+    ])
+    func numericNegatives(label: String) {
+        #expect(GradeInference.grade(from: label) == "")
+    }
+
+    @Test("Sync refresh fills an empty grade, never erases one")
+    func refreshedGrade() {
+        let filled = GradeInference.refreshedGrade(current: "", className: "201")
+        #expect(filled?.grade == "2nde")
+        #expect(filled?.level == .lycee)
+        #expect(GradeInference.refreshedGrade(current: "2nde", className: "201") == nil)
+        #expect(GradeInference.refreshedGrade(current: "2nde", className: "Atelier") == nil)
+        #expect(GradeInference.refreshedGrade(current: "2nde", className: "1G3")?.grade == "1re")
+    }
 }
