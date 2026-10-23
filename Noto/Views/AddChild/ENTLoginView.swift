@@ -130,7 +130,8 @@ struct ENTLoginView: View {
                         // Skip the parent entry (first one with no work data)
                         let hasWork = individual["work"] != nil && !(individual["work"] is NSNull)
                         if hasWork {
-                            entChildren.append(ENTChildInfo(id: id, displayName: displayName, className: ""))
+                            let className = MonLyceeClassReader.className(in: individual) ?? ""
+                            entChildren.append(ENTChildInfo(id: id, displayName: displayName, className: className))
                         }
                     }
                 }
@@ -191,13 +192,15 @@ struct ENTLoginView: View {
                 ? nameParts.drop(while: { $0 == $0.uppercased() }).first ?? nameParts.last ?? ec.displayName
                 : ec.displayName
 
+            let resolved = GradeInference.resolve(ec.className)
             let child = Child(
                 firstName: firstName,
-                level: .lycee,
-                grade: inferGrade(from: ""),
+                level: resolved?.level ?? .lycee,
+                grade: resolved?.grade ?? inferGrade(from: ""),
                 schoolType: hasPronote ? .pronote : .ent,
                 establishment: pronoteURL ?? provider.name
             )
+            child.entClassName = ec.className.isEmpty ? nil : ec.className
             child.entChildId = ec.id
             child.entProvider = provider
             child.family = family

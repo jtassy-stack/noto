@@ -54,6 +54,15 @@ final class MonLyceeSyncService {
                 // Match by entChildId or firstName
                 guard id == child.entChildId || firstName == child.firstName else { continue }
 
+                // Class read from the logbook: fills an empty grade or a new
+                // school year's, never erases one (manual pick included).
+                if let className = MonLyceeClassReader.className(in: individual),
+                   let refreshed = GradeInference.refreshedGrade(current: child.grade, className: className) {
+                    child.grade = refreshed.grade
+                    child.level = refreshed.level
+                    child.entClassName = className
+                }
+
                 // Clear existing data (homework kept in LessonContent first, 3.8)
                 LessonContentStore.captureHomework(of: child, in: modelContext)
                 for hw in child.homework { modelContext.delete(hw) }
