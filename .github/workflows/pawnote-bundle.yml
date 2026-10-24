@@ -1,0 +1,31 @@
+name: pawnote bundle
+
+# The committed Noto/Resources/pawnote-bundle.js must be exactly what
+# tools/pawnote-bundle/build.sh produces from pawnote-bridge.js and the pinned
+# dependencies. A hand edit of the bundle fails this check.
+on:
+  pull_request:
+    paths:
+      - "Noto/Resources/pawnote-bridge.js"
+      - "Noto/Resources/pawnote-bundle.js"
+      - "tools/pawnote-bundle/**"
+      - ".github/workflows/pawnote-bundle.yml"
+  push:
+    branches: [master]
+    paths:
+      - "Noto/Resources/pawnote-bridge.js"
+      - "Noto/Resources/pawnote-bundle.js"
+      - "tools/pawnote-bundle/**"
+
+jobs:
+  reproducible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Rebuild the bundle
+        run: tools/pawnote-bundle/build.sh
+      - name: Committed bundle matches the build
+        run: git diff --exit-code -- Noto/Resources/pawnote-bundle.js

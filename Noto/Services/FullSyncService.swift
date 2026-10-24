@@ -44,7 +44,8 @@ final class FullSyncService {
         let startedAt = Date.now
         // Children with a direct Pronote bridge connection (QR code login)
         let directPronoteChildren = targetChildren.filter(\.isDirectPronote)
-        // Children from MonLycée (have entProvider) — sync via logbook
+        // Children from MonLycée: school data through the Pronote session the
+        // ENT login opened, news from the login capture
         let monlyceeChildren = targetChildren.filter { $0.entProvider == .monlycee }
         // Pure ENT children (PCN etc)
         let entChildren = targetChildren.filter { $0.schoolType == .ent && $0.entProvider != .monlycee }
@@ -90,8 +91,10 @@ final class FullSyncService {
             }
         }
 
-        // MonLycée children: try Pronote bridge first, fallback to logbook
+        // MonLycée children: school data through Pronote, news best-effort
         if !monlyceeChildren.isEmpty {
+            let newsService = MonLyceeSyncService(modelContext: modelContext)
+            for child in monlyceeChildren { newsService.syncStoredNews(for: child) }
             if pronoteService.bridge == nil {
                 await PronoteAutoConnect.autoConnect(modelContext: modelContext)
             }
@@ -109,13 +112,11 @@ final class FullSyncService {
                     }
                 }
             } else {
-                // Fallback: sync from the logbook captured at ENT login. An
-                // absent or non-matching logbook is a failure, not an empty
-                // sync — otherwise the child would be stamped as synced with
-                // no data and no way for the parent to know.
-                let syncService = MonLyceeSyncService(modelContext: modelContext)
-                for child in monlyceeChildren where !syncService.syncFromStoredLogbook(for: child) {
-                    result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via MonLycée.")
+                // No Pronote session and no logbook snapshot any more (it
+                // froze homework and grades at login time): the data cannot
+                // be refreshed, and the parent is told why.
+                for child in monlyceeChildren {
+                    result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via MonLycée pour rouvrir Pronote.")
                 }
             }
 

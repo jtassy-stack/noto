@@ -35,3 +35,4 @@ package-lock.json
 
 # Local xcodebuild output (not DerivedData — direct -target builds write here)
 /build/
+!tools/pawnote-bundle/package-lock.json

@@ -1,4 +1,3 @@
-"use strict";
 (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
@@ -232,12 +231,12 @@
         util.nextTick = util.setImmediate;
       })();
       util.isNodejs = typeof process !== "undefined" && process.versions && process.versions.node;
-      util.globalScope = (function() {
+      util.globalScope = function() {
         if (util.isNodejs) {
           return global;
         }
         return typeof self === "undefined" ? window : self;
-      })();
+      }();
       util.isArray = Array.isArray || function(x2) {
         return Object.prototype.toString.call(x2) === "[object Array]";
       };
@@ -18622,7 +18621,7 @@
     Z_STREAM_END: Z_STREAM_END$3,
     Z_STREAM_ERROR: Z_STREAM_ERROR$2,
     Z_DATA_ERROR: Z_DATA_ERROR$2,
-    Z_BUF_ERROR: Z_BUF_ERROR$1,
+    Z_BUF_ERROR: Z_BUF_ERROR$2,
     Z_DEFAULT_COMPRESSION: Z_DEFAULT_COMPRESSION$1,
     Z_FILTERED,
     Z_HUFFMAN_ONLY,
@@ -18689,8 +18688,20 @@
       s.prev[p] = m >= wsize ? m - wsize : 0;
     } while (--n3);
   };
-  var HASH_ZLIB = (s, prev, data) => (prev << s.hash_shift ^ data) & s.hash_mask;
-  var HASH = HASH_ZLIB;
+  var HASH = (s, prev, data) => (prev << s.hash_shift ^ data) & s.hash_mask;
+  var INSERT_STRING = (s, str) => {
+    let h2;
+    if (s.legacy_hash) {
+      h2 = s.ins_h = HASH(s, s.ins_h, s.window[str + MIN_MATCH - 1]);
+    } else {
+      const w2 = s.window;
+      const value = w2[str] | w2[str + 1] << 8 | w2[str + 2] << 16 | w2[str + 3] << 24;
+      h2 = s.ins_h = Math.imul(value, 66521) + 66521 >>> 16 & s.hash_mask;
+    }
+    const hash_head = s.prev[str & s.w_mask] = s.head[h2];
+    s.head[h2] = str;
+    return hash_head;
+  };
   var flush_pending = (strm) => {
     const s = strm.state;
     let len = s.pending;
@@ -18808,14 +18819,24 @@
       }
       n3 = read_buf(s.strm, s.window, s.strstart + s.lookahead, more);
       s.lookahead += n3;
-      if (s.lookahead + s.insert >= MIN_MATCH) {
+      if (!s.legacy_hash) {
+        if (s.lookahead + s.insert > MIN_MATCH) {
+          str = s.strstart - s.insert;
+          while (s.insert) {
+            INSERT_STRING(s, str);
+            str++;
+            s.insert--;
+            if (s.lookahead + s.insert <= MIN_MATCH) {
+              break;
+            }
+          }
+        }
+      } else if (s.lookahead + s.insert >= MIN_MATCH) {
         str = s.strstart - s.insert;
         s.ins_h = s.window[str];
         s.ins_h = HASH(s, s.ins_h, s.window[str + 1]);
         while (s.insert) {
-          s.ins_h = HASH(s, s.ins_h, s.window[str + MIN_MATCH - 1]);
-          s.prev[str & s.w_mask] = s.head[s.ins_h];
-          s.head[s.ins_h] = str;
+          INSERT_STRING(s, str);
           str++;
           s.insert--;
           if (s.lookahead + s.insert < MIN_MATCH) {
@@ -18956,9 +18977,7 @@
       }
       hash_head = 0;
       if (s.lookahead >= MIN_MATCH) {
-        s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + MIN_MATCH - 1]);
-        hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-        s.head[s.ins_h] = s.strstart;
+        hash_head = INSERT_STRING(s, s.strstart);
       }
       if (hash_head !== 0 && s.strstart - hash_head <= s.w_size - MIN_LOOKAHEAD) {
         s.match_length = longest_match(s, hash_head);
@@ -18970,16 +18989,16 @@
           s.match_length--;
           do {
             s.strstart++;
-            s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + MIN_MATCH - 1]);
-            hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-            s.head[s.ins_h] = s.strstart;
+            hash_head = INSERT_STRING(s, s.strstart);
           } while (--s.match_length !== 0);
           s.strstart++;
         } else {
           s.strstart += s.match_length;
           s.match_length = 0;
-          s.ins_h = s.window[s.strstart];
-          s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + 1]);
+          if (s.legacy_hash) {
+            s.ins_h = s.window[s.strstart];
+            s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + 1]);
+          }
         }
       } else {
         bflush = _tr_tally(s, 0, s.window[s.strstart]);
@@ -19025,9 +19044,7 @@
       }
       hash_head = 0;
       if (s.lookahead >= MIN_MATCH) {
-        s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + MIN_MATCH - 1]);
-        hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-        s.head[s.ins_h] = s.strstart;
+        hash_head = INSERT_STRING(s, s.strstart);
       }
       s.prev_length = s.match_length;
       s.prev_match = s.match_start;
@@ -19045,9 +19062,7 @@
         s.prev_length -= 2;
         do {
           if (++s.strstart <= max_insert) {
-            s.ins_h = HASH(s, s.ins_h, s.window[s.strstart + MIN_MATCH - 1]);
-            hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-            s.head[s.ins_h] = s.strstart;
+            hash_head = INSERT_STRING(s, s.strstart);
           }
         } while (--s.prev_length !== 0);
         s.match_available = 0;
@@ -19261,6 +19276,7 @@
     this.prev = null;
     this.head = null;
     this.ins_h = 0;
+    this.legacy_hash = 0;
     this.hash_size = 0;
     this.hash_bits = 0;
     this.hash_mask = 0;
@@ -19354,7 +19370,7 @@
     strm.state.gzhead = head;
     return Z_OK$3;
   };
-  var deflateInit2 = (strm, level, method, windowBits, memLevel, strategy) => {
+  var deflateInit2 = (strm, level, method, windowBits, memLevel, strategy, legacyHash) => {
     if (!strm) {
       return Z_STREAM_ERROR$2;
     }
@@ -19384,7 +19400,11 @@
     s.w_bits = windowBits;
     s.w_size = 1 << s.w_bits;
     s.w_mask = s.w_size - 1;
+    s.legacy_hash = legacyHash ? 1 : 0;
     s.hash_bits = memLevel + 7;
+    if (!s.legacy_hash && s.hash_bits < 15) {
+      s.hash_bits = 15;
+    }
     s.hash_size = 1 << s.hash_bits;
     s.hash_mask = s.hash_size - 1;
     s.hash_shift = ~~((s.hash_bits + MIN_MATCH - 1) / MIN_MATCH);
@@ -19410,7 +19430,7 @@
     }
     const s = strm.state;
     if (!strm.output || strm.avail_in !== 0 && !strm.input || s.status === FINISH_STATE && flush !== Z_FINISH$3) {
-      return err(strm, strm.avail_out === 0 ? Z_BUF_ERROR$1 : Z_STREAM_ERROR$2);
+      return err(strm, strm.avail_out === 0 ? Z_BUF_ERROR$2 : Z_STREAM_ERROR$2);
     }
     const old_flush = s.last_flush;
     s.last_flush = flush;
@@ -19421,10 +19441,10 @@
         return Z_OK$3;
       }
     } else if (strm.avail_in === 0 && rank(flush) <= rank(old_flush) && flush !== Z_FINISH$3) {
-      return err(strm, Z_BUF_ERROR$1);
+      return err(strm, Z_BUF_ERROR$2);
     }
     if (s.status === FINISH_STATE && strm.avail_in !== 0) {
-      return err(strm, Z_BUF_ERROR$1);
+      return err(strm, Z_BUF_ERROR$2);
     }
     if (s.status === INIT_STATE && s.wrap === 0) {
       s.status = BUSY_STATE;
@@ -19711,9 +19731,7 @@
       let str = s.strstart;
       let n3 = s.lookahead - (MIN_MATCH - 1);
       do {
-        s.ins_h = HASH(s, s.ins_h, s.window[str + MIN_MATCH - 1]);
-        s.prev[str & s.w_mask] = s.head[s.ins_h];
-        s.head[s.ins_h] = str;
+        INSERT_STRING(s, str);
         str++;
       } while (--n3);
       s.strstart = str;
@@ -19800,7 +19818,7 @@
   for (let q = 0; q < 256; q++) {
     _utf8len[q] = q >= 252 ? 6 : q >= 248 ? 5 : q >= 240 ? 4 : q >= 224 ? 3 : q >= 192 ? 2 : 1;
   }
-  _utf8len[254] = _utf8len[254] = 1;
+  _utf8len[254] = _utf8len[255] = 1;
   var string2buf = (str) => {
     if (typeof TextEncoder === "function" && TextEncoder.prototype.encode) {
       return new TextEncoder().encode(str);
@@ -19944,15 +19962,17 @@
     Z_DEFAULT_STRATEGY,
     Z_DEFLATED: Z_DEFLATED$1
   } = constants$2;
+  var defaultOptions$1 = {
+    level: Z_DEFAULT_COMPRESSION,
+    method: Z_DEFLATED$1,
+    chunkSize: 16384,
+    windowBits: 15,
+    memLevel: 8,
+    strategy: Z_DEFAULT_STRATEGY,
+    legacyHash: true
+  };
   function Deflate$1(options) {
-    this.options = common.assign({
-      level: Z_DEFAULT_COMPRESSION,
-      method: Z_DEFLATED$1,
-      chunkSize: 16384,
-      windowBits: 15,
-      memLevel: 8,
-      strategy: Z_DEFAULT_STRATEGY
-    }, options || {});
+    this.options = common.assign({}, defaultOptions$1, options || {});
     let opt = this.options;
     if (opt.raw && opt.windowBits > 0) {
       opt.windowBits = -opt.windowBits;
@@ -19971,7 +19991,8 @@
       opt.method,
       opt.windowBits,
       opt.memLevel,
-      opt.strategy
+      opt.strategy,
+      opt.legacyHash
     );
     if (status !== Z_OK$2) {
       throw new Error(messages[status]);
@@ -20380,8 +20401,8 @@
     21,
     21,
     16,
-    72,
-    78
+    199,
+    75
   ]);
   var dbase = new Uint16Array([
     /* Distance codes 0..29 base */
@@ -20627,7 +20648,7 @@
     Z_STREAM_ERROR: Z_STREAM_ERROR$1,
     Z_DATA_ERROR: Z_DATA_ERROR$1,
     Z_MEM_ERROR: Z_MEM_ERROR$1,
-    Z_BUF_ERROR,
+    Z_BUF_ERROR: Z_BUF_ERROR$1,
     Z_DEFLATED
   } = constants$2;
   var HEAD = 16180;
@@ -20831,10 +20852,12 @@
     let dist;
     const state = strm.state;
     if (state.window === null) {
+      state.window = new Uint8Array(1 << state.wbits);
+    }
+    if (state.wsize === 0) {
       state.wsize = 1 << state.wbits;
       state.wnext = 0;
       state.whave = 0;
-      state.window = new Uint8Array(state.wsize);
     }
     if (copy >= state.wsize) {
       state.window.set(src.subarray(end - state.wsize, end), 0);
@@ -21787,7 +21810,7 @@
     }
     strm.data_type = state.bits + (state.last ? 64 : 0) + (state.mode === TYPE ? 128 : 0) + (state.mode === LEN_ || state.mode === COPY_ ? 256 : 0);
     if ((_in === 0 && _out === 0 || flush === Z_FINISH$1) && ret === Z_OK$1) {
-      ret = Z_BUF_ERROR;
+      ret = Z_BUF_ERROR$1;
     }
     return ret;
   };
@@ -21885,14 +21908,16 @@
     Z_NEED_DICT,
     Z_STREAM_ERROR,
     Z_DATA_ERROR,
-    Z_MEM_ERROR
+    Z_MEM_ERROR,
+    Z_BUF_ERROR
   } = constants$2;
+  var defaultOptions = {
+    chunkSize: 1024 * 64,
+    windowBits: 15,
+    to: ""
+  };
   function Inflate$1(options) {
-    this.options = common.assign({
-      chunkSize: 1024 * 64,
-      windowBits: 15,
-      to: ""
-    }, options || {});
+    this.options = common.assign({}, defaultOptions, options || {});
     const opt = this.options;
     if (opt.raw && opt.windowBits >= 0 && opt.windowBits < 16) {
       opt.windowBits = -opt.windowBits;
@@ -21967,7 +21992,7 @@
           status = Z_NEED_DICT;
         }
       }
-      while (strm.avail_in > 0 && status === Z_STREAM_END && strm.state.wrap > 0 && data[strm.next_in] !== 0) {
+      while (strm.avail_in > 0 && status === Z_STREAM_END && strm.state.wrap & 2 && strm.state.flags !== 0 && strm.input[strm.next_in] !== 0) {
         inflate_1$2.inflateReset(strm);
         status = inflate_1$2.inflate(strm, _flush_mode);
       }
@@ -21982,7 +22007,7 @@
       }
       last_avail_out = strm.avail_out;
       if (strm.next_out) {
-        if (strm.avail_out === 0 || status === Z_STREAM_END) {
+        if (strm.avail_out === 0 || status === Z_STREAM_END || _flush_mode > 0) {
           if (this.options.to === "string") {
             let next_out_utf8 = strings.utf8border(strm.output, strm.next_out);
             let tail = strm.next_out - next_out_utf8;
@@ -21993,17 +22018,27 @@
             this.onData(utf8str);
           } else {
             this.onData(strm.output.length === strm.next_out ? strm.output : strm.output.subarray(0, strm.next_out));
+            strm.avail_out = 0;
+            strm.next_out = 0;
           }
         }
       }
-      if (status === Z_OK && last_avail_out === 0) continue;
+      if ((status === Z_OK || status === Z_BUF_ERROR) && last_avail_out === 0) continue;
       if (status === Z_STREAM_END) {
         status = inflate_1$2.inflateEnd(this.strm);
         this.onEnd(status);
         this.ended = true;
         return true;
       }
-      if (strm.avail_in === 0) break;
+      if (strm.avail_in === 0) {
+        if (_flush_mode === Z_FINISH) {
+          status = inflate_1$2.inflateEnd(this.strm);
+          this.onEnd(status === Z_OK ? Z_BUF_ERROR : status);
+          this.ended = true;
+          return false;
+        }
+        break;
+      }
     }
     return true;
   };
@@ -22024,7 +22059,7 @@
   };
   function inflate$1(input, options) {
     const inflator = new Inflate$1(options);
-    inflator.push(input);
+    inflator.push(input, true);
     if (inflator.err) throw inflator.msg || messages[inflator.err];
     return inflator.result;
   }
@@ -22608,6 +22643,12 @@
     return Gs(i.data[t.data], e);
   };
   var js = (e) => `${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()} ${e.getHours()}:${e.getMinutes()}:${e.getSeconds()}`;
+  var Vt = (e, s) => ({ id: e.N, startDate: le(e.Date.V), endDate: le(e.DateFin.V), subject: Xe(e.Matiere.V), haveAssignment: void 0 !== e.dateTAF, assignmentDeadline: e.dateTAF?.V && le(e.dateTAF.V), teachers: e.listeProfesseurs.V.map((e2) => e2.L), groups: e.listeGroupes.V.map((e2) => e2.L), backgroundColor: e.CouleurFond, contents: e.listeContenus.V.map((e2) => ((e3, s2) => ({ id: e3.N, title: e3.L, description: e3.descriptif.V, category: e3.categorie.V.G, categoryText: e3.categorie.V.L, files: e3.ListePieceJointe.V.map((e4) => De(e4, s2)), themes: e3.ListeThemes.V.map((e4) => es(e4)), educativeValue: e3.parcoursEducatif }))(e2, s)) });
+  var Nt = (e, s) => s.ListeCahierDeTextes.V.map((s2) => Vt(s2, e));
+  var It = async (e, s, t) => {
+    const n3 = await ns(e, Q.Resources, s, t);
+    return Nt(e, n3).filter((e2) => s <= e2.endDate && e2.endDate <= t);
+  };
   var Ot = (e, s) => ({ [e]: s, [e[0].toUpperCase() + e.substring(1)]: s });
   var xt = (e, s) => {
     const t = le(e.DateDuCours.V), n3 = e.place, i = e.duree;
@@ -22671,7 +22712,7 @@
   };
   var Gt = async (e, s, t) => Ft(e, { ...Ot("dateDebut", { _T: 7, V: js(s) }), ...t && Ot("dateFin", { _T: 7, V: js(t) }) });
 
-  // Noto/Resources/pawnote-bridge.js
+  // ../../Noto/Resources/pawnote-bridge.js
   globalThis.PawnoteBridge = {
     // Create a new session handle
     createSession: () => {
@@ -22685,18 +22726,18 @@
     // alive (PronoteError.doubleAuthRequired). Any other error passes through.
     _doubleAuthError: (session, e) => {
       if (!e || e.name !== "SecurityError") return e;
-      const h = e.handle || {};
-      const ctx = h.context || {};
+      const h2 = e.handle || {};
+      const ctx = h2.context || {};
       const auth = ctx.authentication || {};
       const payload = {
         token: auth.jetonConnexionAppliMobile || null,
-        username: ctx.initialUsername || (ctx.identity && ctx.identity.login) || null,
-        url: (session.information && session.information.url) || null,
-        kind: (session.information && session.information.accountKind) || null,
-        navigatorIdentifier: (session.instance && session.instance.navigatorIdentifier) || null,
-        needsPIN: Boolean(h.shouldEnterPIN),
-        needsChoice: Boolean(h.shouldCustomDoubleAuth),
-        needsPassword: Boolean(h.shouldCustomPassword),
+        username: ctx.initialUsername || ctx.identity && ctx.identity.login || null,
+        url: session.information && session.information.url || null,
+        kind: session.information && session.information.accountKind || null,
+        navigatorIdentifier: session.instance && session.instance.navigatorIdentifier || null,
+        needsPIN: Boolean(h2.shouldEnterPIN),
+        needsChoice: Boolean(h2.shouldCustomDoubleAuth),
+        needsPassword: Boolean(h2.shouldCustomPassword)
       };
       return new Error("DOUBLE_AUTH_REQUIRED:" + JSON.stringify(payload));
     },
@@ -22727,8 +22768,7 @@
     // another space or from an unknown navigator. Missing values fall back
     // to the pre-fix behaviour (parent, fresh navigator).
     // A SecurityError (Pronote asks to set up double authentication) is
-    // rethrown via _doubleAuthError (see above). (NOTO HAND PATCH: mirrors
-    // pawnote-bridge.js; re-apply on a rebuild.)
+    // rethrown via _doubleAuthError (see above).
     loginToken: async (session, url, username, token, deviceUUID, kind, navigatorIdentifier) => {
       let refresh;
       try {
@@ -22738,7 +22778,7 @@
           username,
           token,
           deviceUUID,
-          navigatorIdentifier: navigatorIdentifier || undefined
+          navigatorIdentifier: navigatorIdentifier || void 0
         });
       } catch (e) {
         throw globalThis.PawnoteBridge._doubleAuthError(session, e);
@@ -22845,57 +22885,45 @@
         resourceID: a2.resourceID ?? null
       }));
     },
-    // NOTO HAND PATCH (3.8) — cahier de textes lesson contents (onglet 89,
-    // PageCahierDeTexte). Read-only. Re-apply after any bundle rebuild (see
-    // pawnote-bridge.js). Raw shape (ListeCahierDeTextes / listeContenus /
-    // descriptif / ListeThemes) unverified on a live parent account: every
-    // field is optional, and only key NAMES are returned for the shape check.
+    // Cahier de textes lesson contents (Pronote onglet 89, PageCahierDeTexte),
+    // read-only, through pawnote's public `resourcesFromIntervals`. Returns
+    // { entries, rawKeys, rawEntryKeys, rawContentKeys } — key NAMES only for
+    // the DEBUG shape check, never values. Lesson text stays on the device.
     fetchLessonContents: async (session, startDateISO, endDateISO) => {
       const empty = { entries: [], rawKeys: [], rawEntryKeys: [], rawContentKeys: [] };
       const resourceTabs = session.userResource?.tabs;
       const userTabs = session.user?.authorizations?.tabs;
-      const hasTab = (resourceTabs?.has?.(Q.Resources) ?? false) || (Array.isArray(userTabs) && userTabs.includes(Q.Resources));
+      const tab = Q.Resources;
+      const hasTab = (resourceTabs?.has?.(tab) ?? false) || Array.isArray(userTabs) && userTabs.includes(tab);
       if (!hasTab) return empty;
       let start = new Date(startDateISO);
       const end = new Date(endDateISO);
       const firstMonday = session.instance?.firstMonday;
       if (firstMonday instanceof Date && start < firstMonday) start = firstMonday;
       if (!(start <= end)) return empty;
-      const raw = await ns(session, Q.Resources, start, end);
-      const list = raw?.ListeCahierDeTextes?.V ?? [];
-      const strip = (h) => String(h ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
-      const parseDate = (v) => {
-        try {
-          const d = typeof v === "string" ? le(v) : null;
-          return d instanceof Date && !isNaN(d.getTime()) ? d : null;
-        } catch (e) {
-          return null;
-        }
-      };
-      const entries = list.map((r) => {
-        const startDate = parseDate(r?.Date?.V);
-        const endDate = parseDate(r?.DateFin?.V);
-        return {
-          id: r?.N ?? null,
-          subject: r?.Matiere?.V?.L ?? null,
-          startDate: startDate ? startDate.toISOString() : null,
-          endDate: endDate ? endDate.toISOString() : null,
-          contents: (r?.listeContenus?.V ?? []).map((c3) => ({
-            id: c3?.N ?? null,
-            title: strip(c3?.L),
-            description: strip(c3?.descriptif?.V),
-            categoryLabel: c3?.categorie?.V?.L ?? null,
-            themes: (c3?.ListeThemes?.V ?? []).map((t) => t?.L).filter(Boolean)
-          }))
-        };
-      }).filter((r) => r.startDate && start <= new Date(r.startDate) && new Date(r.startDate) <= end);
-      const first = list[0];
-      const firstContent = first?.listeContenus?.V?.[0];
+      const resources = await It(session, start, end);
+      const strip = (h2) => String(h2 ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+      const iso = (d3) => d3 instanceof Date && !isNaN(d3.getTime()) ? d3.toISOString() : null;
+      const entries = resources.map((r) => ({
+        id: r.id ?? null,
+        subject: r.subject?.name ?? null,
+        startDate: iso(r.startDate),
+        endDate: iso(r.endDate),
+        contents: (r.contents ?? []).map((c3) => ({
+          id: c3.id ?? null,
+          title: strip(c3.title),
+          description: strip(c3.description),
+          categoryLabel: c3.categoryText ?? null,
+          themes: (c3.themes ?? []).map((t) => t?.name ?? t).filter(Boolean)
+        }))
+      })).filter((r) => r.startDate && start <= new Date(r.startDate) && new Date(r.startDate) <= end);
+      const first = resources[0];
+      const firstContent = first?.contents?.[0];
       return {
         entries,
-        rawKeys: raw && typeof raw === "object" ? Object.keys(raw) : [],
-        rawEntryKeys: first && typeof first === "object" ? Object.keys(first) : [],
-        rawContentKeys: firstContent && typeof firstContent === "object" ? Object.keys(firstContent) : []
+        rawKeys: ["resources"],
+        rawEntryKeys: first ? Object.keys(first) : [],
+        rawContentKeys: firstContent ? Object.keys(firstContent) : []
       };
     },
     // Fetch discussions
@@ -22915,5 +22943,5 @@
 /*! Bundled license information:
 
 pako/dist/pako.esm.mjs:
-  (*! pako 2.1.0 https://github.com/nodeca/pako @license (MIT AND Zlib) *)
+  (*! pako 2.2.0 https://github.com/nodeca/pako @license (MIT AND Zlib) *)
 */

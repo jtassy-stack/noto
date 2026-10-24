@@ -97,10 +97,9 @@ struct PronoteAssignment: Sendable {
 // MARK: - Lesson contents (cahier de textes, onglet 89)
 
 /// One cahier de textes entry as returned by `PawnoteBridge.fetchLessonContents`
-/// (hand-patched in `pawnote-bundle.js`). Every field is optional: the raw
-/// Pronote shape (`ListeCahierDeTextes` / `listeContenus` / `descriptif` /
-/// `ListeThemes`) has not been checked on a live parent account yet.
-/// The text stays on the device (`LessonContent`).
+/// (pawnote's public `resourcesFromIntervals`, mapped in `pawnote-bridge.js`).
+/// Every field is optional: the mapping has not been checked on a live
+/// parent account yet. The text stays on the device (`LessonContent`).
 struct PronoteLessonContentEntry: Decodable, Sendable, Equatable {
     let id: String?
     let subject: String?
@@ -279,4 +278,15 @@ enum PronoteError: Error, LocalizedError {
         case .tabNotAuthorized(let tab): return "Accès non autorisé à l'onglet \(tab)"
         }
     }
+}
+
+// MARK: - Child Resource
+
+/// One child listed by a Pronote parent (or student) session, as pawnote
+/// returns it (`PawnoteBridge.getChildren`).
+struct PronoteChildResource: Sendable {
+    let id: String
+    let name: String
+    let className: String
+    let establishment: String
 }

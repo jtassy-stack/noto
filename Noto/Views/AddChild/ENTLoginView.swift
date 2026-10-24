@@ -14,7 +14,6 @@ struct ENTLoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showWebLogin = false
 
     private var family: Family? { families.first }
     private var needsWebAuth: Bool { provider == .monlycee }
@@ -36,7 +35,7 @@ struct ENTLoginView: View {
                         VStack(spacing: NotoTheme.Spacing.md) {
                             Label(error, systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(NotoTheme.Colors.danger)
-                            Button("Réessayer") { showWebLogin = true }
+                            Button("Réessayer") { errorMessage = nil }
                                 .buttonStyle(.borderedProminent)
                                 .tint(NotoTheme.Colors.brand)
                         }
@@ -164,20 +163,14 @@ struct ENTLoginView: View {
         NSLog("[noto] MonLycée: \(entChildren.count) children, pronote=\(json["_pronoteSSO"] as? String ?? "nil")")
         #endif
 
-        // Store logbook + news for ENT data sync. Mail is no longer captured
-        // here (the login JS always returned `zimbraMail: null`); it goes
-        // through `MonLyceeMailService` instead. Purge the legacy keys so no
-        // stale payload lingers in UserDefaults (the Pronote HTML/URL pair
-        // belonged to the removed cookie-based login).
-        for legacy in ["monlycee_zimbra_mail", "monlycee_pronote_html", "monlycee_pronote_url"] {
-            UserDefaults.standard.removeObject(forKey: legacy)
-        }
-        for (key, udKey) in [("logbook", "monlycee_logbook"), ("news", "monlycee_news")] {
-            if let obj = json[key], !(obj is NSNull),
-               let data = try? JSONSerialization.data(withJSONObject: obj),
-               let str = String(data: data, encoding: .utf8) {
-                UserDefaults.standard.set(str, forKey: udKey)
-            }
+        // The logbook (homework and grades of every child) is read above
+        // for the roster only and never stored: school data comes from the
+        // Pronote session below. Only the news survive the login, in a
+        // protected file. Earlier builds kept both in UserDefaults.
+        MonLyceeNewsStore.purgeLegacyDefaults()
+        if let news = json["news"] as? [[String: Any]] {
+            do { try MonLyceeNewsStore.save(news) }
+            catch { NSLog("[noto] MonLycée news not stored: %@", error.localizedDescription) }
         }
 
         NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(pronoteToken != nil)")
@@ -244,10 +237,10 @@ struct ENTLoginView: View {
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
 
-        // Immediately sync data from the logbook we captured
-        let syncService = MonLyceeSyncService(modelContext: modelContext)
+        // The school's news captured above, as messages of each ENT child.
+        let newsService = MonLyceeSyncService(modelContext: modelContext)
         for child in family.children where child.entProvider == provider {
-            syncService.syncFromStoredLogbook(for: child)
+            newsService.syncStoredNews(for: child)
         }
 
         // Mail via the SSO session cookies — skipped when the parent
@@ -260,9 +253,6 @@ struct ENTLoginView: View {
         let mailChildren = family.children.filter { $0.entProvider == provider }
         let mailContext = modelContext
 
-        isLoading = false
-        onDismissAll?() ?? dismiss()
-
         if provider == .monlycee {
             let imapConfigs = IMAPService.loadConfigs()
             Task {
@@ -272,6 +262,16 @@ struct ENTLoginView: View {
                 }
             }
         }
+
+        isLoading = false
+        if pronoteToken != nil && !pronoteOpened {
+            // The ENT children exist (news + mail work), but without the
+            // Pronote session their homework and grades stay empty: say so
+            // instead of closing the sheet as if everything had worked.
+            errorMessage = "MonLycée est connecté, mais Pronote a refusé d'ouvrir la session. Réessayez, ou scannez le QR code Pronote."
+            return
+        }
+        onDismissAll?() ?? dismiss()
     }
 
     /// Transfers monlycee.net cookies (session + CSRF) from the SSO

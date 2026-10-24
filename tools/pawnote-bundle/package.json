@@ -1,0 +1,14 @@
+{
+  "name": "noto-pawnote-bundle",
+  "private": true,
+  "description": "Reproducible build of Noto/Resources/pawnote-bundle.js (pawnote + bridge, esbuild). No hand patch.",
+  "scripts": {
+    "build": "NODE_PATH=./node_modules esbuild ../../Noto/Resources/pawnote-bridge.js --bundle --format=iife --platform=browser --target=es2020 --outfile=../../Noto/Resources/pawnote-bundle.js"
+  },
+  "dependencies": {
+    "@niicojs/pawnote": "1.6.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}

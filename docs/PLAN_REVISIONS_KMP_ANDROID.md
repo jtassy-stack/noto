@@ -176,7 +176,7 @@ noto-school-kit/
   core/            // modèles communs : Child, Homework, Grade, ScheduleEntry, Message, Absence, School ; interfaces CredentialStore, HttpEngine
   directory/       // portage de Noto/Services/Directory (ENTRegistry, GeoCommuneResolver, DirectoryAPIClient) — clé injectée, jamais en dur
   skolengo/        // portage de SkolengoClient + SkolengoTypes
-  pronote/         // portage de l'implémentation NATIVE (PronoteClient, PronoteCrypto, PronoteAuth, PronoteTypes) — pas de Pawnote
+  pronote/         // portage de l'ancienne implémentation NATIVE (PronoteClient, PronoteCrypto, PronoteAuth — supprimés de l'app iOS en 2026-10, à reprendre dans l'historique git avant la PR « étape 4 » de la connexion ENT/Pronote) — pas de Pawnote
   ent/             // ENTClient, ENTTypes, AbsenceService, MonLycée ; auth web en module plateforme
   ecoledirecte/    // EcoleDirecteClient (séparé de la sync SwiftData), types
   revisions/       // logique pure partagée : RewardPolicy, SpacedRepetition, QuizSourceSelector, formats banque/curriculum

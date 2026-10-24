@@ -1,14 +1,11 @@
 // Bridge between Swift (JavaScriptCore) and pawnote
 // This file is bundled with all dependencies into pawnote-bundle.js
 //
-// WARNING: bundle hand-patched (fetchLessonContents); do not rebuild
-// without re-applying it. pawnote-bundle.js carries the real version of
-// that function (it calls bundle-internal helpers: `ns` / `Q.Resources` /
-// `le`). The version below documents the intent only.
-//
-// ENT logins no longer go through the bundle: the web view captures the
-// mobile token on Pronote's own page (PronoteMobileLogin.swift) and the
-// session opens with loginToken, like after a QR scan.
+// Rebuild with `tools/pawnote-bundle/build.sh` (pinned pawnote + esbuild,
+// no hand patch: CI checks that the committed bundle matches). ENT logins
+// do not go through the bundle: the web view captures the mobile token on
+// Pronote's own page (PronoteMobileLogin.swift) and the session opens with
+// loginToken, like after a QR scan.
 
 import * as pronote from "@niicojs/pawnote";
 
@@ -202,21 +199,61 @@ globalThis.PawnoteBridge = {
   },
 
   // Cahier de textes lesson contents (Pronote onglet 89, PageCahierDeTexte),
-  // read-only. HAND-PATCHED in pawnote-bundle.js (search "NOTO HAND PATCH
-  // (3.8)"): the bundle calls the internal request helper directly, i.e. the
-  // equivalent of `pronote.resourcesFromIntervals(session, start, end)`, and
-  // maps the raw `ListeCahierDeTextes.V[]` entries (N, Matiere, Date, DateFin,
-  // listeContenus[] { N, L, descriptif, categorie, ListeThemes }) itself.
-  // Returns { entries, rawKeys, rawEntryKeys, rawContentKeys } — key NAMES
-  // only for the DEBUG shape check, never values. The raw shape is unverified
-  // on a live parent account. Lesson text stays on the device.
+  // read-only, through pawnote's public `resourcesFromIntervals`. Returns
+  // { entries, rawKeys, rawEntryKeys, rawContentKeys } — key NAMES only for
+  // the DEBUG shape check, never values. Lesson text stays on the device.
   fetchLessonContents: async (session, startDateISO, endDateISO) => {
     const empty = { entries: [], rawKeys: [], rawEntryKeys: [], rawContentKeys: [] };
-    const start = new Date(startDateISO);
+    const resourceTabs = session.userResource?.tabs;
+    const userTabs = session.user?.authorizations?.tabs;
+    const tab = pronote.TabLocation.Resources;
+    const hasTab = (resourceTabs?.has?.(tab) ?? false) || (Array.isArray(userTabs) && userTabs.includes(tab));
+    if (!hasTab) return empty;
+
+    let start = new Date(startDateISO);
     const end = new Date(endDateISO);
-    // Placeholder: the real fetch + mapping live in the bundle patch. A rebuild must copy that block back here.
-    await pronote.resourcesFromIntervals(session, start, end);
-    return empty;
+    // Pronote refuses intervals before the school year's first Monday.
+    const firstMonday = session.instance?.firstMonday;
+    if (firstMonday instanceof Date && start < firstMonday) start = firstMonday;
+    if (!(start <= end)) return empty;
+
+    const resources = await pronote.resourcesFromIntervals(session, start, end);
+    const strip = (h) => String(h ?? "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    const iso = (d) => (d instanceof Date && !isNaN(d.getTime()) ? d.toISOString() : null);
+
+    const entries = resources
+      .map((r) => ({
+        id: r.id ?? null,
+        subject: r.subject?.name ?? null,
+        startDate: iso(r.startDate),
+        endDate: iso(r.endDate),
+        contents: (r.contents ?? []).map((c) => ({
+          id: c.id ?? null,
+          title: strip(c.title),
+          description: strip(c.description),
+          categoryLabel: c.categoryText ?? null,
+          themes: (c.themes ?? []).map((t) => t?.name ?? t).filter(Boolean),
+        })),
+      }))
+      .filter((r) => r.startDate && start <= new Date(r.startDate) && new Date(r.startDate) <= end);
+
+    const first = resources[0];
+    const firstContent = first?.contents?.[0];
+    return {
+      entries,
+      rawKeys: ["resources"],
+      rawEntryKeys: first ? Object.keys(first) : [],
+      rawContentKeys: firstContent ? Object.keys(firstContent) : [],
+    };
   },
 
   // Fetch discussions

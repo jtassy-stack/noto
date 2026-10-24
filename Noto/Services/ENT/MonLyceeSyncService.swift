@@ -1,8 +1,10 @@
 import Foundation
 import SwiftData
 
-/// Syncs data from MonLycée's /logbook endpoint into SwiftData.
-/// The logbook aggregates Pronote data (homework, grades, absences) per child.
+/// Writes the MonLycée news captured at login (`MonLyceeNewsStore`) into a
+/// child's messages. School data (homework, grades, timetable) of a MonLycée
+/// child comes from the Pronote session the ENT login opens — the logbook
+/// snapshot that used to feed it is no longer stored.
 @MainActor
 final class MonLyceeSyncService {
     private let modelContext: ModelContext
@@ -11,146 +13,40 @@ final class MonLyceeSyncService {
         self.modelContext = modelContext
     }
 
-    /// Sync from stored logbook JSON (captured during web login).
-    /// Returns `false` when no logbook is stored or it does not contain this
-    /// child — callers must not treat that as a completed sync.
+    /// One announcement of the school, as the MonLycée home page lists it.
+    struct NewsItem: Equatable, Sendable {
+        let title: String
+        let author: String
+        let date: Date?
+        let link: String?
+    }
+
+    /// Adds the stored news as read `.ent` messages of `child`. Returns
+    /// `false` when no news is stored (nothing was captured at login).
     @discardableResult
-    func syncFromStoredLogbook(for child: Child) -> Bool {
-        guard let jsonStr = UserDefaults.standard.string(forKey: "monlycee_logbook"),
-              let data = jsonStr.data(using: .utf8),
-              let logbook = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return false
-        }
-        guard syncLogbook(logbook, for: child) else { return false }
-
-        // Sync news
-        if let newsStr = UserDefaults.standard.string(forKey: "monlycee_news"),
-           let newsData = newsStr.data(using: .utf8),
-           let news = try? JSONSerialization.jsonObject(with: newsData) as? [[String: Any]] {
-            syncNews(news, for: child)
-        }
-
-        // 3.8: no lesson contents here (the logbook is a login-time snapshot);
-        // it only feeds the homework capture.
-        LessonContentStore.recordSync(of: child, in: modelContext)
-        child.markSynced()
+    func syncStoredNews(for child: Child) -> Bool {
+        let news = MonLyceeNewsStore.load()
+        guard !news.isEmpty else { return false }
+        syncNews(news, for: child)
         try? modelContext.save()
         return true
     }
 
-    /// Sync logbook data for a specific child.
-    /// Returns `true` when the child was found in the logbook and its data applied.
-    @discardableResult
-    func syncLogbook(_ logbook: [String: Any], for child: Child) -> Bool {
-        guard let structures = logbook["structures"] as? [[String: Any]] else { return false }
-
-        // Find this child's data in the logbook
-        for structure in structures {
-            guard let individuals = structure["individuals"] as? [[String: Any]] else { continue }
-            for individual in individuals {
-                let firstName = individual["firstName"] as? String ?? ""
-                let id = individual["id"] as? String ?? ""
-
-                // Match by entChildId or firstName
-                guard id == child.entChildId || firstName == child.firstName else { continue }
-
-                // Class read from the logbook: fills an empty grade or a new
-                // school year's, never erases one (manual pick included).
-                if let className = MonLyceeClassReader.className(in: individual),
-                   let refreshed = GradeInference.refreshedGrade(current: child.grade, className: className) {
-                    child.grade = refreshed.grade
-                    child.level = refreshed.level
-                    child.entClassName = className
-                }
-
-                // Clear existing data (homework kept in LessonContent first, 3.8)
-                LessonContentStore.captureHomework(of: child, in: modelContext)
-                for hw in child.homework { modelContext.delete(hw) }
-                for grade in child.grades { modelContext.delete(grade) }
-
-                // Sync homework from work.notebook
-                if let work = individual["work"] as? [String: Any],
-                   let notebook = work["notebook"] as? [[String: Any]] {
-                    syncHomework(notebook, for: child)
-                }
-
-                // Sync grades from notation.grades
-                if let notation = individual["notation"] as? [String: Any],
-                   let grades = notation["grades"] as? [[String: Any]] {
-                    syncGrades(grades, for: child)
-                }
-
-                return true
-            }
-        }
-        return false
-    }
-
-    // MARK: - Homework
-
-    private func syncHomework(_ notebook: [[String: Any]], for child: Child) {
-        for entry in notebook {
-            let subject = entry["subject"] as? String ?? "?"
-            guard let workToDo = entry["workToDo"] as? [[String: Any]] else { continue }
-
-            for work in workToDo {
-                let description = stripHTML(work["description"] as? String ?? "")
-                let dateStr = work["dateForThe"] as? String ?? ""
-                let dueDate = parseDate(dateStr) ?? .now
-
-                let hw = Homework(subject: subject, description: description, dueDate: dueDate)
-                hw.child = child
-                modelContext.insert(hw)
-            }
-        }
-    }
-
-    // MARK: - Grades
-
-    private func syncGrades(_ grades: [[String: Any]], for child: Child) {
-        for entry in grades {
-            let subject = entry["subject"] as? String ?? "?"
-            let gradeStr = (entry["grade"] as? String ?? "0").replacingOccurrences(of: ",", with: ".")
-            let scaleStr = (entry["scale"] as? String ?? "20").replacingOccurrences(of: ",", with: ".")
-            let dateStr = entry["date"] as? String ?? ""
-
-            guard let value = Double(gradeStr),
-                  let outOf = Double(scaleStr) else { continue }
-
-            let grade = Grade(
-                subject: subject,
-                value: value,
-                outOf: outOf,
-                coefficient: 1,
-                date: parseDate(dateStr) ?? .now
-            )
-            grade.child = child
-            modelContext.insert(grade)
-        }
-    }
-
-    // MARK: - News → Messages
-
-    private func syncNews(_ news: [[String: Any]], for child: Child) {
-        for entry in news {
-            let title = entry["title"] as? String ?? ""
-            let author = entry["author"] as? String ?? ""
-            let dateStr = entry["date"] as? String ?? ""
-            let link = entry["link"] as? String
-            let date = parseISO(dateStr) ?? .now
-
-            // Check if already exists (avoid duplicates)
-            let exists = child.messages.contains { $0.subject == title && $0.source == .ent }
+    /// News → Messages. Idempotent: an announcement already present (same
+    /// title, ENT source) is not inserted twice.
+    func syncNews(_ news: [[String: Any]], for child: Child) {
+        for item in Self.newsItems(from: news) {
+            let exists = child.messages.contains { $0.subject == item.title && $0.source == .ent }
             guard !exists else { continue }
 
             let msg = Message(
-                sender: author,
-                subject: title,
+                sender: item.author,
+                subject: item.title,
                 body: "",
-                date: date,
+                date: item.date ?? .now,
                 source: .ent,
                 kind: .conversation,
-                link: link
+                link: item.link
             )
             msg.read = true  // News are read-only announcements
             msg.child = child
@@ -158,22 +54,24 @@ final class MonLyceeSyncService {
         }
     }
 
-    // MARK: - Helpers
-
-    private func stripHTML(_ html: String) -> String {
-        html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&#039;", with: "'")
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Pure parsing of the news payload the login web view returns; entries
+    /// without a title are dropped.
+    nonisolated static func newsItems(from news: [[String: Any]]) -> [NewsItem] {
+        news.compactMap { entry in
+            let title = (entry["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let link = entry["link"] as? String
+            return NewsItem(
+                title: title,
+                author: entry["author"] as? String ?? "",
+                date: parseISO(entry["date"] as? String ?? ""),
+                link: (link?.isEmpty ?? true) ? nil : link
+            )
+        }
     }
 
-    private func parseDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: string)
-    }
-
-    private func parseISO(_ string: String) -> Date? {
+    nonisolated static func parseISO(_ string: String) -> Date? {
+        guard !string.isEmpty else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: string) ?? ISO8601DateFormatter().date(from: string)

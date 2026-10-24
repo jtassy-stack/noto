@@ -355,7 +355,7 @@ struct PronoteQRLoginView: View {
             do {
                 try PronoteAccountStore.save(refreshToken)
             } catch {
-                logger.error("Keychain save failed for \(refreshToken.username): \(error)")
+                logger.error("Keychain save failed for the Pronote token: \(error.localizedDescription)")
                 errorMessage = "Connexion réussie mais impossible de sauvegarder vos identifiants. Réessayez."
                 step = .scan
                 return
