@@ -151,24 +151,27 @@ struct ENTLoginView: View {
             }
         }
 
-        // Check if Pronote SSO succeeded
-        let pronoteSSO = json["_pronoteSSO"] as? String
-        let pronoteURL = json["_pronoteURL"] as? String
-        let pronoteHTML = json["_pronoteHTML"] as? String
-        let hasPronote = pronoteSSO == "success" && pronoteHTML != nil
+        // Pronote token captured on Pronote's own mobile page (ENTWebLoginView)
+        var pronoteToken: PronoteRefreshToken?
+        if let raw = json["_pronoteToken"] as? [String: Any],
+           let login = raw["login"] as? String, !login.isEmpty,
+           let mdp = raw["mdp"] as? String, !mdp.isEmpty,
+           let url = raw["url"] as? String, !url.isEmpty {
+            pronoteToken = PronoteRefreshToken(url: url, token: mdp, username: login, kind: .parent)
+        }
 
         #if DEBUG
-        NSLog("[noto] MonLycée: \(entChildren.count) children, pronoteSSO=\(pronoteSSO ?? "nil"), pronoteURL=\(pronoteURL ?? "nil")")
-        if let html = pronoteHTML {
-            NSLog("[noto] Pronote HTML prefix: \(String(html.prefix(300)))")
-        }
+        NSLog("[noto] MonLycée: \(entChildren.count) children, pronote=\(json["_pronoteSSO"] as? String ?? "nil")")
         #endif
 
         // Store logbook + news for ENT data sync. Mail is no longer captured
         // here (the login JS always returned `zimbraMail: null`); it goes
-        // through `MonLyceeMailService` instead. Purge the legacy key so no
-        // stale mail payload lingers in UserDefaults.
-        UserDefaults.standard.removeObject(forKey: "monlycee_zimbra_mail")
+        // through `MonLyceeMailService` instead. Purge the legacy keys so no
+        // stale payload lingers in UserDefaults (the Pronote HTML/URL pair
+        // belonged to the removed cookie-based login).
+        for legacy in ["monlycee_zimbra_mail", "monlycee_pronote_html", "monlycee_pronote_url"] {
+            UserDefaults.standard.removeObject(forKey: legacy)
+        }
         for (key, udKey) in [("logbook", "monlycee_logbook"), ("news", "monlycee_news")] {
             if let obj = json[key], !(obj is NSNull),
                let data = try? JSONSerialization.data(withJSONObject: obj),
@@ -177,28 +180,59 @@ struct ENTLoginView: View {
             }
         }
 
-        NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(hasPronote)")
+        NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(pronoteToken != nil)")
 
-        guard let family, !entChildren.isEmpty else {
+        guard let family else {
+            errorMessage = "Aucune famille configurée."
+            isLoading = false
+            return
+        }
+
+        // Cookies to HTTPCookieStorage: the monlycee.net mail client needs them.
+        await transferMonlyceeCookies()
+
+        // Pronote first: the session's own roster creates (or refreshes) the
+        // Pronote children, deduped exactly like after a QR scan.
+        var pronoteOpened = false
+        if let pronoteToken {
+            pronoteOpened = await establishPronoteSession(token: pronoteToken, family: family)
+        }
+
+        guard !entChildren.isEmpty || pronoteOpened else {
             errorMessage = "Connexion réussie mais aucun enfant trouvé."
             isLoading = false
             return
         }
 
-        // Create children — as Pronote type if SSO succeeded, ENT type otherwise
+        // ENT children: attach the logbook identity to the matching child
+        // (the Pronote row when the token login listed the same first name,
+        // or an existing ENT row), create an ENT child otherwise. Never a
+        // second row for the same child.
         for ec in entChildren {
             let nameParts = ec.displayName.components(separatedBy: " ")
             let firstName = nameParts.count > 1
                 ? nameParts.drop(while: { $0 == $0.uppercased() }).first ?? nameParts.last ?? ec.displayName
                 : ec.displayName
 
+            if let existing = ChildDedupe.matchENT(
+                in: family.children,
+                entChildId: ec.id,
+                firstName: firstName,
+                provider: provider
+            ) {
+                existing.entChildId = ec.id
+                existing.entProvider = provider
+                if !ec.className.isEmpty { existing.entClassName = ec.className }
+                continue
+            }
+
             let resolved = GradeInference.resolve(ec.className)
             let child = Child(
                 firstName: firstName,
                 level: resolved?.level ?? .lycee,
                 grade: resolved?.grade ?? inferGrade(from: ""),
-                schoolType: hasPronote ? .pronote : .ent,
-                establishment: pronoteURL ?? provider.name
+                schoolType: .ent,
+                establishment: provider.name
             )
             child.entClassName = ec.className.isEmpty ? nil : ec.className
             child.entChildId = ec.id
@@ -209,18 +243,6 @@ struct ENTLoginView: View {
 
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
-
-        // Transfer session cookies to HTTPCookieStorage regardless of whether
-        // Pronote SSO succeeded — the monlycee.net mail API call below (and
-        // establishPronoteSession's own pawnote fetch) both need them there.
-        await transferMonlyceeCookies()
-
-        // If Pronote SSO succeeded, store the HTML and attempt to get a refresh token
-        if hasPronote, let html = pronoteHTML, let url = pronoteURL {
-            UserDefaults.standard.set(html, forKey: "monlycee_pronote_html")
-            UserDefaults.standard.set(url, forKey: "monlycee_pronote_url")
-            await establishPronoteSession(pronoteURL: url)
-        }
 
         // Immediately sync data from the logbook we captured
         let syncService = MonLyceeSyncService(modelContext: modelContext)
@@ -318,56 +340,39 @@ struct ENTLoginView: View {
         isLoading = false
     }
 
-    // MARK: - Pronote Session from ENT SSO
+    // MARK: - Pronote Session from the ENT token
 
-    /// After ENT SSO succeeds and we have Pronote HTML, try to get a pawnote refresh token.
-    /// This enables PronoteAutoConnect for future app launches.
+    /// Opens the Pronote session with the single-use token the web view
+    /// captured, stores the renewed token (PronoteAutoConnect replays it on
+    /// the next launches) and imports the roster through the shared
+    /// importer. A failure is not fatal: the ENT data still works and the
+    /// parent can retry or scan a QR code.
     @MainActor
-    private func establishPronoteSession(pronoteURL: String) async {
-        guard let url = URL(string: pronoteURL) else { return }
-
-        // Transfer WKWebView cookies to HTTPCookieStorage so pawnote's fetch can use them
-        let cookies = await withCheckedContinuation { continuation in
-            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
-                continuation.resume(returning: cookies)
-            }
-        }
-        PawnoteBridge.transferCookies(cookies, for: url)
-
+    @discardableResult
+    private func establishPronoteSession(token: PronoteRefreshToken, family: Family) async -> Bool {
         let deviceUUID = PronoteAccountStore.deviceUUID()
-
         do {
             let bridge = try PawnoteBridge()
-            let refreshToken = try await bridge.loginENT(url: pronoteURL, deviceUUID: deviceUUID)
-
-            // Store the refresh token; the session is usable either way, but
-            // a failed save means the next launch needs a new ENT login.
+            let renewed = try await bridge.loginWithToken(token, deviceUUID: deviceUUID)
             do {
-                try PronoteAccountStore.save(refreshToken)
+                try PronoteAccountStore.save(renewed)
             } catch {
                 NSLog("[noto] ENT→Pronote token not saved: %@", error.localizedDescription)
             }
+            PronoteService.shared.setBridge(bridge, for: renewed.username)
 
-            // Set bridge for immediate data sync
-            PronoteService.shared.setBridge(bridge, for: refreshToken.username)
-
-            // Sync school data for all Pronote children (through the coordinator)
-            guard let family else { return }
-            let syncService = PronoteSyncService(modelContext: modelContext)
-            let pronoteChildren = bridge.getChildren()
-            let familyChildren = family.children
-            await SyncCoordinator.shared.requestSync(force: true) {
-                for (index, child) in familyChildren.enumerated() where child.schoolType == .pronote {
-                    bridge.setActiveChild(index: min(index, pronoteChildren.count - 1))
-                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
-                }
-            }
-
-            NSLog("[noto] ENT→Pronote session established, username=%@", refreshToken.username)
+            let children = try PronoteChildImporter.importChildren(
+                from: bridge, token: renewed, family: family, modelContext: modelContext
+            )
+            _ = await PronoteChildImporter.initialSync(children: children, bridge: bridge, modelContext: modelContext)
+            NSLog("[noto] ENT→Pronote session established (%d children)", children.count)
+            return true
         } catch {
-            // CAS→Pronote auth failed — not fatal, ENT data still works
+            if case PronoteError.doubleAuthRequired(let info) = error, let rescued = info?.rescuedToken {
+                try? PronoteAccountStore.save(rescued)
+            }
             NSLog("[noto] ENT→Pronote session failed: %@", error.localizedDescription)
-            NSLog("[noto] Pronote sync will not be available until next CAS login")
+            return false
         }
     }
 

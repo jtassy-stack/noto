@@ -54,4 +54,34 @@ enum ChildDedupe {
             return true
         }
     }
+
+    /// Same purpose for a child listed by an ENT (MonLycée logbook, PCN
+    /// roster): returns the row to reuse, or nil.
+    ///
+    ///   1. `entChildId` on the same provider — the ENT's own stable id.
+    ///   2. A child with the same first name and no ENT id yet, on this
+    ///      provider OR with no provider at all. The second case is the
+    ///      MonLycée case: the ENT lists Gaston, and the Pronote session
+    ///      opened through that same ENT also listed Gaston — one person,
+    ///      so the ENT data attaches to the Pronote row instead of making
+    ///      a second one. A row already claimed by another ENT id or by
+    ///      another provider is never reused.
+    static func matchENT(
+        in existing: [Child],
+        entChildId: String?,
+        firstName: String,
+        provider: ENTProvider
+    ) -> Child? {
+        if let entChildId, !entChildId.isEmpty,
+           let hit = existing.first(where: { $0.entProvider == provider && $0.entChildId == entChildId }) {
+            return hit
+        }
+        let normalizedName = firstName.lowercased()
+        return existing.first { child in
+            guard child.firstName.lowercased() == normalizedName else { return false }
+            guard child.entProvider == nil || child.entProvider == provider else { return false }
+            if let existingID = child.entChildId, !existingID.isEmpty { return false }
+            return true
+        }
+    }
 }

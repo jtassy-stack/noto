@@ -186,4 +186,38 @@ struct ChildDedupeTests {
         )
         #expect(hit === a)
     }
+
+    // MARK: - ENT (matchENT)
+
+    @Test("ENT: same entChildId on the same provider wins over the name")
+    func entIdWins() throws {
+        let ctx = try makeContext()
+        let existing = makeChild("Gaston", schoolType: .ent, in: ctx)
+        existing.entProvider = .monlycee
+        existing.entChildId = "ml-1"
+        let hit = ChildDedupe.matchENT(in: [existing], entChildId: "ml-1", firstName: "Renamed", provider: .monlycee)
+        #expect(hit === existing)
+    }
+
+    @Test("ENT: the logbook child attaches to the Pronote child with the same first name")
+    func entAttachesToPronoteRow() throws {
+        let ctx = try makeContext()
+        // MonLycée login: the Pronote token listed Gaston (pawnoteID set,
+        // no ENT id yet); the logbook lists him too → one row.
+        let pronote = makeChild("Gaston", pawnoteID: "pid-1", in: ctx)
+        let hit = ChildDedupe.matchENT(in: [pronote], entChildId: "ml-1", firstName: "gaston", provider: .monlycee)
+        #expect(hit === pronote)
+    }
+
+    @Test("ENT: a row claimed by another ENT id or another provider is not reused")
+    func entRespectsClaims() throws {
+        let ctx = try makeContext()
+        let other = makeChild("Gaston", schoolType: .ent, in: ctx)
+        other.entProvider = .monlycee
+        other.entChildId = "ml-other"
+        let pcn = makeChild("Gaston", schoolType: .ent, in: ctx)
+        pcn.entProvider = .pcn
+        let hit = ChildDedupe.matchENT(in: [other, pcn], entChildId: "ml-1", firstName: "Gaston", provider: .monlycee)
+        #expect(hit == nil)
+    }
 }

@@ -113,6 +113,19 @@ struct PronoteQRLoginView: View {
                 .onChange(of: selectedPhoto) { _, newItem in
                     Task { await processSelectedPhoto(newItem) }
                 }
+
+                // The establishment's ENT (MonLycée, PCN…) holds the parent's
+                // Pronote access: Pronote's own page does the CAS round trip
+                // and hands out the same mobile token as the QR code.
+                NavigationLink {
+                    PronoteWebLoginView()
+                } label: {
+                    Text("Pas de QR code ? Se connecter par l'ENT de l'établissement")
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, NotoTheme.Spacing.xs)
             }
             .padding(.horizontal, NotoTheme.Spacing.xl)
             .padding(.bottom, NotoTheme.Spacing.xl)
@@ -348,8 +361,6 @@ struct PronoteQRLoginView: View {
                 return
             }
 
-            let pronoteChildren = bridge.getChildren()
-
             guard let family else {
                 logger.error("authenticate: no Family found in SwiftData")
                 errorMessage = "Aucun profil famille trouvé. Relancez l'application."
@@ -358,83 +369,13 @@ struct PronoteQRLoginView: View {
             }
 
             // Re-login from the same parent must NOT insert a new Child row
-            // for kids we already track. We dedupe against `family.children`
-            // via ChildDedupe — primary key is pawnoteID, with a composite
-            // fallback for legacy rows that predate this field.
-            var resolved: [Child] = []
-            for pc in pronoteChildren {
-                let nameParts = pc.name.split(separator: " ")
-                let firstName = nameParts.count > 1
-                    ? String(nameParts.dropFirst().joined(separator: " "))
-                    : pc.name
-
-                if let existing = ChildDedupe.match(
-                    in: family.children,
-                    pawnoteID: pc.id,
-                    firstName: firstName,
-                    schoolType: .pronote
-                ) {
-                    // Refresh fields that may have shifted on the school side
-                    // (grade change at year roll-over, establishment rename).
-                    // firstName is intentionally NOT touched so a parent
-                    // who edited it in Settings keeps their preferred label.
-                    existing.level = GradeInference.level(from: pc.className)
-                    existing.grade = GradeInference.grade(from: pc.className)
-                    existing.establishment = refreshToken.url
-                    if existing.pawnoteID == nil || existing.pawnoteID?.isEmpty == true {
-                        // Backfill the stable key onto legacy rows matched
-                        // via the composite fallback so the next re-login
-                        // is resolved by the primary path.
-                        existing.pawnoteID = pc.id
-                    }
-                    resolved.append(existing)
-                    continue
-                }
-
-                let child = Child(
-                    firstName: firstName,
-                    level: GradeInference.level(from: pc.className),
-                    grade: GradeInference.grade(from: pc.className),
-                    schoolType: .pronote,
-                    establishment: refreshToken.url,
-                    pawnoteID: pc.id.isEmpty ? nil : pc.id
-                )
-                child.family = family
-                modelContext.insert(child)
-                resolved.append(child)
-            }
-
-            if pronoteChildren.isEmpty {
-                // Pawnote returned no children — either a single-child parent
-                // account where the resource isn't listed, or a student login.
-                // Fall back to the parent username as a synthetic Child.
-                // Use an empty grade (not "?") so CurriculumService doesn't
-                // store a corrupt value that breaks culture-api filtering.
-                logger.warning("Pronote login returned no children; creating synthetic child for \(refreshToken.username, privacy: .private)")
-                if let existing = ChildDedupe.match(
-                    in: family.children,
-                    pawnoteID: nil,
-                    firstName: refreshToken.username,
-                    schoolType: .pronote
-                ) {
-                    existing.establishment = refreshToken.url
-                    resolved.append(existing)
-                } else {
-                    let child = Child(
-                        firstName: refreshToken.username,
-                        level: .college,
-                        grade: "",
-                        schoolType: .pronote,
-                        establishment: refreshToken.url
-                    )
-                    child.family = family
-                    modelContext.insert(child)
-                    resolved.append(child)
-                }
-            }
-
+            // for kids we already track: the importer dedupes through
+            // ChildDedupe (pawnoteID, then a composite fallback).
+            let resolved: [Child]
             do {
-                try modelContext.save()
+                resolved = try PronoteChildImporter.importChildren(
+                    from: bridge, token: refreshToken, family: family, modelContext: modelContext
+                )
             } catch {
                 logger.error("SwiftData save failed: \(error)")
                 errorMessage = "Impossible de sauvegarder le profil de votre enfant : \(error.localizedDescription)"
@@ -442,26 +383,9 @@ struct PronoteQRLoginView: View {
                 return
             }
 
-            // Sync only children from THIS login session, using bridge-local indices.
-            // Partial fetch failures (e.g. school blocks one endpoint) are non-fatal:
-            // the child row and refresh token are already persisted; missing sections
-            // will retry on the next sync cycle.
-            // Goes through SyncCoordinator like every other sync.
-            let syncService = PronoteSyncService(modelContext: modelContext)
-            var hadPartialFailure = false
-            await SyncCoordinator.shared.requestSync(force: true) {
-                for (index, child) in resolved.enumerated() {
-                    await syncService.sync(child: child, bridge: bridge, childIndex: index)
-                    if !syncService.failedCategories.isEmpty {
-                        hadPartialFailure = true
-                        // Plain Strings: OSLog's interpolation captures its arguments in an
-                        // escaping closure, which Swift 6 rejects for the non-Sendable model.
-                        let childName = child.firstName
-                        let missing = syncService.failedCategories.joined(separator: ", ")
-                        logger.warning("Partial sync during onboarding for \(childName, privacy: .private): missing \(missing, privacy: .public)")
-                    }
-                }
-            }
+            let hadPartialFailure = await PronoteChildImporter.initialSync(
+                children: resolved, bridge: bridge, modelContext: modelContext
+            )
 
             PronoteService.shared.setBridge(bridge, for: refreshToken.username)
 

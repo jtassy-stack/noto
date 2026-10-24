@@ -87,6 +87,8 @@
 ## Pronote Protocol
 
 - Login uses QR code: user photographs QR from Pronote web → `CIDetector` extracts URL → `PawnoteBridge.login(qrUrl:)`
+- Login through an ENT (MonLycée, PCN…) without QR: `PronoteMobileLogin` (pure) builds Pronote's own mobile page URL with `bydlg` + `login=true`, a web view (`PronoteWebLoginView`, also the Pronote step of the MonLycée web login) lets Pronote do the CAS redirect and injects `hookAccesDepuisAppli`, the page body then carries `{login, mdp}` = a single-use mobile token → `loginWithToken`, same path as the QR. No cookie transfer, no `loginENT` in the bundle. Unverified on a real ENT account at merge time (Papillon's method)
+- Children of any Pronote login go through `PronoteChildImporter` (dedupe via `ChildDedupe.match`); ENT-listed children attach to the matching Pronote row via `ChildDedupe.matchENT`
 - Refresh token stored in Keychain as `PronoteRefreshToken_<childId>`
 - `PawnoteBridge` calls pawnote JS functions via `JSContext`; results are JSON-decoded to Swift types
 - Do NOT use the `pawnote` npm package (bug with parent accounts #61) — only `@niicojs/pawnote`

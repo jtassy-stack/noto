@@ -130,53 +130,6 @@ final class PawnoteBridge {
         return Self.refreshToken(from: dict)
     }
 
-    /// Login via ENT/CAS SSO. Requires CAS cookies to already be in HTTPCookieStorage.shared.
-    /// Call `PawnoteBridge.transferCookies(_:for:)` before this method.
-    func loginENT(url: String, deviceUUID: String) async throws -> PronoteRefreshToken {
-        context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
-        session = context.objectForKeyedSubscript("_pawnoteSession")
-
-        let result = try await callAsync("""
-            PawnoteBridge.loginENT(
-                \(sessionRef),
-                "\(url.jsEscaped)",
-                "\(deviceUUID.jsEscaped)"
-            )
-        """)
-
-        guard let dict = result.toDictionary() as? [String: Any] else {
-            throw PronoteError.invalidResponse("Invalid ENT login response")
-        }
-
-        return Self.refreshToken(from: dict)
-    }
-
-    /// Transfer cookies from WKWebView to HTTPCookieStorage so pawnote's fetch polyfill can use them.
-    @MainActor
-    static func transferCookies(_ cookies: [HTTPCookie], for url: URL) {
-        let storage = HTTPCookieStorage.shared
-        var transferred = 0
-        for cookie in cookies {
-            // Only transfer cookies relevant to the Pronote domain
-            if let host = url.host, cookie.domain.contains(host) || host.contains(cookie.domain.replacingOccurrences(of: ".", with: "", options: .anchored)) {
-                storage.setCookie(cookie)
-                transferred += 1
-            }
-        }
-        // Also transfer CAS cookies (needed for SSO redirect)
-        for cookie in cookies {
-            if cookie.domain.contains("monlycee") || cookie.domain.contains("index-education") || cookie.domain.contains("pronote") {
-                storage.setCookie(cookie)
-                transferred += 1
-            }
-        }
-        if transferred == 0 {
-            NSLog("[noto][warning] transferCookies: 0/%d cookies matched for %@. ENT login may fail.", cookies.count, url.host ?? "?")
-        } else {
-            NSLog("[noto] transferCookies: %d/%d cookies transferred for %@", transferred, cookies.count, url.host ?? "?")
-        }
-    }
-
     /// Reopens a session from a stored token. Replays the account kind and
     /// the navigator identifier of the previous login (see
     /// `PronoteRefreshToken`); a missing navigator id (token stored by an

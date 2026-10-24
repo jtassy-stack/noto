@@ -1,11 +1,14 @@
 // Bridge between Swift (JavaScriptCore) and pawnote
 // This file is bundled with all dependencies into pawnote-bundle.js
 //
-// WARNING: bundle hand-patched (fetchLessonContents + loginENT); do not
-// rebuild without re-applying both. pawnote-bundle.js carries the real
-// versions of these two functions (they call bundle-internal helpers:
-// `ns` / `Q.Resources` / `le` for fetchLessonContents, Identification with
-// pourENT:true for loginENT). The versions below document the intent only.
+// WARNING: bundle hand-patched (fetchLessonContents); do not rebuild
+// without re-applying it. pawnote-bundle.js carries the real version of
+// that function (it calls bundle-internal helpers: `ns` / `Q.Resources` /
+// `le`). The version below documents the intent only.
+//
+// ENT logins no longer go through the bundle: the web view captures the
+// mobile token on Pronote's own page (PronoteMobileLogin.swift) and the
+// session opens with loginToken, like after a QR scan.
 
 import * as pronote from "@niicojs/pawnote";
 
@@ -211,38 +214,9 @@ globalThis.PawnoteBridge = {
     const empty = { entries: [], rawKeys: [], rawEntryKeys: [], rawContentKeys: [] };
     const start = new Date(startDateISO);
     const end = new Date(endDateISO);
-    // Placeholder (like loginENT below): the real fetch + mapping live in the
-    // bundle patch. A rebuild must copy that block back here.
+    // Placeholder: the real fetch + mapping live in the bundle patch. A rebuild must copy that block back here.
     await pronote.resourcesFromIntervals(session, start, end);
     return empty;
-  },
-
-  // ENT/CAS login — uses CAS cookies (pre-transferred to URLSession) for SSO auth.
-  // NOTE: This source version uses loginCredentials as a placeholder.
-  // The actual pawnote-bundle.js has a hand-patched version that calls
-  // Identification with pourENT:true (useCAS:true) for proper CAS auth.
-  // If rebuilding the bundle, the hand-patched loginENT in pawnote-bundle.js
-  // must be re-applied (see the block above fetchDiscussions in the bundle).
-  loginENT: async (session, url, deviceUUID) => {
-    let refresh;
-    try {
-      refresh = await pronote.loginCredentials(session, {
-        url,
-        kind: pronote.AccountKind.PARENT,
-        username: "",
-        password: "",
-        deviceUUID,
-      });
-    } catch (e) {
-      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
-    }
-    return {
-      token: refresh.token,
-      username: refresh.username,
-      url: refresh.url,
-      kind: refresh.kind,
-      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
-    };
   },
 
   // Fetch discussions

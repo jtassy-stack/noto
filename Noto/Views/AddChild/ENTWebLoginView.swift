@@ -131,9 +131,10 @@ struct ENTWebLoginView: View {
                     ENTClient.importCookies(cookies)
                     DispatchQueue.main.async {
                         if let pronoteService = raw["pronoteService"] as? [String: Any],
-                           let pronoteLink = pronoteService["link"] as? String {
-                            self.statusMessage = "Connexion Pronote via SSO…"
-                            self.navigateToPronoteSSO(pronoteURL: pronoteLink, entData: raw)
+                           let pronoteLink = pronoteService["link"] as? String,
+                           let instance = PronoteMobileLogin.instanceURL(from: pronoteLink) {
+                            self.statusMessage = "Ouverture de Pronote…"
+                            self.capturePronoteToken(instance: instance, entData: raw)
                         } else {
                             self.onSuccess(raw)
                         }
@@ -146,34 +147,27 @@ struct ENTWebLoginView: View {
         }
     }
 
-    /// Step 2: Navigate the WKWebView to Pronote — CAS SSO will auto-authenticate
-    private func navigateToPronoteSSO(pronoteURL: String, entData: [String: Any]) {
-        guard let webView = webViewHolder.webView else {
+    /// Step 2: open the establishment's Pronote mobile page in the same
+    /// web view. The ENT session the parent just opened lets Pronote's CAS
+    /// redirect pass silently, and the `bydlg` + `login=true` page answers
+    /// with the account login and a single-use mobile token (see
+    /// `PronoteMobileLogin`). nōto then opens the session with `loginToken`,
+    /// exactly like after a QR scan — no cookie transfer, no patched pawnote.
+    private func capturePronoteToken(instance: URL, entData: [String: Any]) {
+        guard let webView = webViewHolder.webView,
+              let pageURL = PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent) else {
             onError("WebView non disponible")
             return
         }
 
-        // Pronote's mobile parent page — this is where we can extract session data
-        let mobileURL = pronoteURL.hasSuffix("/")
-            ? "\(pronoteURL)mobile.parent.html"
-            : "\(pronoteURL)/mobile.parent.html"
+        webView.load(URLRequest(url: pageURL))
 
-        #if DEBUG
-        NSLog("[noto] Navigating to Pronote SSO: \(mobileURL)")
-        #endif
-
-        // Load Pronote — the MonLycée CAS session will auto-authenticate
-        webView.load(URLRequest(url: URL(string: mobileURL)!))
-
-        // Wait for Pronote page to load, then extract session
-        // We use a polling approach since we can't easily add another didFinish handler
         var attempts = 0
-        func checkPronoteLoaded() {
+        func poll() {
             attempts += 1
-            guard attempts < 20 else { // 10 seconds max
-                // Timeout — return ENT data only, Pronote SSO failed
+            guard attempts <= 40 else { // 20 s: the CAS round trip can be slow
                 DispatchQueue.main.async {
-                    self.statusMessage = "Pronote SSO timeout — données ENT uniquement"
+                    self.statusMessage = "Pronote n'a pas répondu — données ENT uniquement"
                     var result = entData
                     result["_pronoteSSO"] = "timeout"
                     self.onSuccess(result)
@@ -181,55 +175,32 @@ struct ENTWebLoginView: View {
                 return
             }
 
-            webView.evaluateJavaScript("document.documentElement.outerHTML.substring(0, 500)") { [self] htmlResult, _ in
-                let html = htmlResult as? String ?? ""
-                let currentURL = webView.url?.absoluteString ?? ""
+            guard let current = webView.url, PronoteMobileLogin.isMobilePage(current, of: instance) else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
+                return
+            }
 
-                #if DEBUG
-                if attempts % 5 == 0 {
-                    NSLog("[noto] Pronote SSO check #\(attempts): url=\(currentURL) html=\(String(html.prefix(100)))")
-                }
-                #endif
-
-                // Check if we landed on a Pronote page with Start() data
-                if html.contains("Start (") || html.contains("Start(") || currentURL.contains("parent.html") {
-                    // Extract the full HTML to parse Start() data
-                    webView.evaluateJavaScript("document.documentElement.outerHTML") { fullHTML, _ in
-                        guard let fullHTML = fullHTML as? String else {
-                            var result = entData
-                            result["_pronoteSSO"] = "no_html"
-                            DispatchQueue.main.async { self.onSuccess(result) }
-                            return
-                        }
-
-                        var result = entData
-                        result["_pronoteSSO"] = "success"
-                        result["_pronoteHTML"] = String(fullHTML.prefix(10000))
-                        result["_pronoteURL"] = pronoteURL
-
-                        DispatchQueue.main.async {
-                            self.statusMessage = "Pronote connecté !"
-                            self.onSuccess(result)
-                        }
-                    }
-                } else if html.contains("<!DOCTYPE") && !currentURL.contains("auth.monlycee") {
-                    // Still loading or redirecting — wait more
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        checkPronoteLoaded()
+            webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { value, _ in
+                if let text = value as? String,
+                   let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
+                    var result = entData
+                    result["_pronoteSSO"] = "success"
+                    result["_pronoteToken"] = [
+                        "login": payload.login,
+                        "mdp": payload.token,
+                        "url": instance.absoluteString,
+                    ]
+                    DispatchQueue.main.async {
+                        self.statusMessage = "Pronote connecté !"
+                        self.onSuccess(result)
                     }
                 } else {
-                    // Still on auth redirect — wait more
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        checkPronoteLoaded()
-                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
                 }
             }
         }
 
-        // Start checking after 1 second delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            checkPronoteLoaded()
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { poll() }
     }
 }
 
@@ -249,6 +220,13 @@ private struct ENTWebViewWrapper: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        // Pronote's mobile page calls this hook on a `bydlg` login; on the
+        // ENT's own pages the function is simply never called.
+        config.userContentController.addUserScript(WKUserScript(
+            source: PronoteMobileLogin.hookScript(deviceUUID: PronoteAccountStore.deviceUUID()),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = context.coordinator
         onWebViewReady(wv)
