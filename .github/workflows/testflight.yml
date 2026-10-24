@@ -7,8 +7,11 @@ on:
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
+  # Every pull request, whatever its base: stacked PRs (a step branch opened
+  # against the previous step) must compile and pass the tests too. The
+  # upload job below is gated on refs/heads/master and non-PR events, so a
+  # PR against another branch only builds and tests.
   pull_request:
-    branches: [master]
   workflow_dispatch:
 
 concurrency:
