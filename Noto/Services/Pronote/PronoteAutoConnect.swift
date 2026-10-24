@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Attempts to silently restore the Pronote session on app launch
+/// Attempts to silently restore the Pronote sessions on app launch
 /// using stored refresh tokens — no QR scan required after first login.
 @MainActor
 enum PronoteAutoConnect {
@@ -27,56 +27,73 @@ enum PronoteAutoConnect {
     }
 
     private static func performAutoConnect() async -> Bool {
-        let usernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
-        guard !usernames.isEmpty else { return false }
+        let service = PronoteService.shared
+        let accounts = PronoteAccountStore.all()
+        let unreadable = PronoteAccountStore.unreadableUsernames
+        guard !accounts.isEmpty || !unreadable.isEmpty else { return false }
 
-        PronoteService.shared.isReconnecting = true
-        defer { PronoteService.shared.isReconnecting = false }
+        service.isReconnecting = true
+        defer { service.isReconnecting = false }
 
-        let deviceUUID = getOrCreateDeviceUUID()
+        for username in unreadable {
+            // Listed but no readable token: typically an app reinstall (the
+            // Keychain items are ThisDeviceOnly). Say so instead of a silent skip.
+            service.recordReconnectFailure(
+                username: username,
+                message: "Identifiants Pronote introuvables sur cet appareil. Rescannez le QR code."
+            )
+        }
+
+        let deviceUUID = PronoteAccountStore.deviceUUID()
         var anySuccess = false
 
-        for username in usernames {
-            guard
-                let tokenData = try? KeychainService.load(key: "pronote_token_\(username)"),
-                let refreshToken = try? JSONDecoder().decode(PronoteRefreshToken.self, from: tokenData)
-            else { continue }
-
+        for stored in accounts {
+            // One attempt per account and per launch: a refused token is
+            // refused again, and repeated attempts get the IP suspended.
             do {
                 let bridge = try PawnoteBridge()
-                let newToken = try await bridge.loginWithToken(
-                    url: refreshToken.url,
-                    username: refreshToken.username,
-                    token: refreshToken.token,
-                    deviceUUID: deviceUUID
-                )
+                let renewed = try await bridge.loginWithToken(stored, deviceUUID: deviceUUID)
 
-                // Persist updated token
-                if let updatedData = try? JSONEncoder().encode(newToken) {
-                    try? KeychainService.save(key: "pronote_token_\(newToken.username)", data: updatedData)
-                }
+                // The token Pronote just handed out replaces the single-use
+                // one we presented. Failing to persist it means the next
+                // launch replays a dead token, so this is a real failure.
+                try PronoteAccountStore.save(renewed)
 
-                PronoteService.shared.setBridge(bridge)
+                service.setBridge(bridge, for: renewed.username)
                 anySuccess = true
-                NSLog("[noto] Auto-reconnect succeeded for %@", username)
+                NSLog("[noto] Auto-reconnect succeeded (kind=%d, navigator=%@)",
+                      renewed.kind.rawValue, renewed.navigatorIdentifier == nil ? "none" : "kept")
             } catch {
-                NSLog("[noto] Auto-reconnect failed for %@: %@", username, error.localizedDescription)
-                // Keep the stored token — it may just be a network error; don't purge it.
+                let message = userMessage(for: error)
+                service.recordReconnectFailure(username: stored.username, message: message)
+                NSLog("[noto] Auto-reconnect failed: %@", error.localizedDescription)
+                // Keep the stored token: a network error is not a refusal,
+                // and the parent decides when to rescan.
             }
         }
 
         return anySuccess
     }
 
-    // MARK: - Private
-
-    private static func getOrCreateDeviceUUID() -> String {
-        if let data = try? KeychainService.load(key: "device_uuid"),
-           let uuid = String(data: data, encoding: .utf8) {
-            return uuid
+    /// A short, parent-facing reason shown on the Accueil reconnect card.
+    static func userMessage(for error: Error) -> String {
+        if let pronoteError = error as? PronoteError {
+            switch pronoteError {
+            case .doubleAuthRequired:
+                return pronoteError.localizedDescription
+            case .suspendedIP, .rateLimited:
+                return "Pronote limite les connexions pour le moment. Réessayez dans quelques minutes."
+            case .networkError:
+                return "Pronote est injoignable. Vérifiez votre connexion."
+            default:
+                break
+            }
         }
-        let uuid = UUID().uuidString
-        try? KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
-        return uuid
+        let raw = error.localizedDescription.lowercased()
+        if raw.contains("network") || raw.contains("timeout") || raw.contains("connexion")
+            || raw.contains("offline") || raw.contains("internet") {
+            return "Pronote est injoignable. Vérifiez votre connexion."
+        }
+        return "Pronote a refusé la reconnexion automatique. Rescannez le QR code pour rouvrir la session."
     }
 }

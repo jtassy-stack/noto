@@ -18,6 +18,12 @@ enum KeychainService {
 
         var newItem = query
         newItem[kSecValueData as String] = data
+        // Readable once the device has been unlocked after boot, so background
+        // refresh can reopen sessions, and never restored onto another device
+        // (an iCloud / iTunes backup restored elsewhere does not carry the
+        // school tokens). Items written before this attribute existed get it
+        // on their next save, since save is delete + add.
+        newItem[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
         let status = SecItemAdd(newItem as CFDictionary, nil)
         guard status == errSecSuccess else {

@@ -131,6 +131,7 @@ struct HomeView: View {
                         if !pronoteChildrenNeedingReconnect.isEmpty {
                             PronoteReconnectCard(
                                 children: pronoteChildrenNeedingReconnect,
+                                reason: pronoteService.reconnectFailures.values.first,
                                 onReconnect: { showPronoteReconnect = true }
                             )
                         }
@@ -1143,6 +1144,9 @@ private struct AbsenceShortcutCard: View {
 
 private struct PronoteReconnectCard: View {
     let children: [Child]
+    /// Why the automatic reconnect failed, when it ran (double
+    /// authentication, token refused, network…); nil = never attempted.
+    var reason: String? = nil
     let onReconnect: () -> Void
 
     var body: some View {
@@ -1157,6 +1161,12 @@ private struct PronoteReconnectCard: View {
                 Text(children.map(\.firstName).joined(separator: ", ") + " · données non synchronisées")
                     .font(NotoTheme.Typography.caption)
                     .foregroundStyle(NotoTheme.Colors.textSecondary)
+                if let reason {
+                    Text(reason)
+                        .font(NotoTheme.Typography.caption)
+                        .foregroundStyle(NotoTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             Button("Reconnecter", action: onReconnect)

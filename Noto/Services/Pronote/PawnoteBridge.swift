@@ -127,12 +127,7 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid login response")
         }
 
-        return PronoteRefreshToken(
-            url: dict["url"] as? String ?? "",
-            token: dict["token"] as? String ?? "",
-            username: dict["username"] as? String ?? "",
-            kind: .parent
-        )
+        return Self.refreshToken(from: dict)
     }
 
     /// Login via ENT/CAS SSO. Requires CAS cookies to already be in HTTPCookieStorage.shared.
@@ -153,12 +148,7 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid ENT login response")
         }
 
-        return PronoteRefreshToken(
-            url: dict["url"] as? String ?? "",
-            token: dict["token"] as? String ?? "",
-            username: dict["username"] as? String ?? "",
-            kind: .parent
-        )
+        return Self.refreshToken(from: dict)
     }
 
     /// Transfer cookies from WKWebView to HTTPCookieStorage so pawnote's fetch polyfill can use them.
@@ -187,17 +177,24 @@ final class PawnoteBridge {
         }
     }
 
-    func loginWithToken(url: String, username: String, token: String, deviceUUID: String) async throws -> PronoteRefreshToken {
+    /// Reopens a session from a stored token. Replays the account kind and
+    /// the navigator identifier of the previous login (see
+    /// `PronoteRefreshToken`); a missing navigator id (token stored by an
+    /// earlier build) is passed as null and pawnote asks for a new one.
+    func loginWithToken(_ stored: PronoteRefreshToken, deviceUUID: String) async throws -> PronoteRefreshToken {
         context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
         session = context.objectForKeyedSubscript("_pawnoteSession")
 
+        let navigator = stored.navigatorIdentifier.map { "\"\($0.jsEscaped)\"" } ?? "null"
         let result = try await callAsync("""
             PawnoteBridge.loginToken(
                 \(sessionRef),
-                "\(url.jsEscaped)",
-                "\(username.jsEscaped)",
-                "\(token.jsEscaped)",
-                "\(deviceUUID.jsEscaped)"
+                "\(stored.url.jsEscaped)",
+                "\(stored.username.jsEscaped)",
+                "\(stored.token.jsEscaped)",
+                "\(deviceUUID.jsEscaped)",
+                \(stored.kind.rawValue),
+                \(navigator)
             )
         """)
 
@@ -205,12 +202,32 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid login response")
         }
 
+        return Self.refreshToken(from: dict)
+    }
+
+    /// Maps a pawnote login result. `kind` is pawnote's numeric AccountKind
+    /// (6 élève / 7 parent / 8 professeur); an unknown value falls back to
+    /// parent, the historical assumption.
+    static func refreshToken(from dict: [String: Any]) -> PronoteRefreshToken {
+        let kindRaw = (dict["kind"] as? Int) ?? Int((dict["kind"] as? Double) ?? 0)
+        let navigator = (dict["navigatorIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return PronoteRefreshToken(
             url: dict["url"] as? String ?? "",
             token: dict["token"] as? String ?? "",
             username: dict["username"] as? String ?? "",
-            kind: .parent
+            kind: PronoteAccountKind(rawValue: kindRaw) ?? .parent,
+            navigatorIdentifier: navigator
         )
+    }
+
+    /// Turns the message of a JS exception into the typed error the UI
+    /// knows how to explain. Everything else stays `invalidResponse`.
+    static func error(fromJSMessage message: String) -> PronoteError {
+        if message.hasPrefix("DOUBLE_AUTH_REQUIRED") { return .doubleAuthRequired }
+        let lower = message.lowercased()
+        if lower.contains("suspended") || lower.contains("suspendu") { return .suspendedIP }
+        if lower.contains("rate limit") || lower.contains("too many") { return .rateLimited }
+        return .invalidResponse("JS error: \(message)")
     }
 
     // MARK: - Children
@@ -378,7 +395,7 @@ final class PawnoteBridge {
                !errorVal.isNull, !errorVal.isUndefined,
                let errorStr = errorVal.toString(), !errorStr.isEmpty {
                 context.evaluateScript("delete globalThis.\(resultKey); delete globalThis.\(errorKey)")
-                throw PronoteError.invalidResponse("JS error: \(errorStr)")
+                throw Self.error(fromJSMessage: errorStr)
             }
 
             if let resultVal = context.objectForKeyedSubscript(resultKey),

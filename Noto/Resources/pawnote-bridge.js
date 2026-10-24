@@ -28,23 +28,42 @@ globalThis.PawnoteBridge = {
       username: refresh.username,
       url: refresh.url,
       kind: refresh.kind,
+      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
     };
   },
 
-  // Token login (reconnection)
-  loginToken: async (session, url, username, token, deviceUUID) => {
-    const refresh = await pronote.loginToken(session, {
-      url,
-      kind: pronote.AccountKind.PARENT,
-      username,
-      token,
-      deviceUUID,
-    });
+  // Token login (reconnection). `kind` is the numeric AccountKind the
+  // previous login returned (6 élève / 7 parent / 8 professeur) and
+  // `navigatorIdentifier` the `identifiantNav` Pronote handed out then:
+  // both must be replayed, Pronote refuses a mobile token presented for
+  // another space or from an unknown navigator. Missing values fall back
+  // to the pre-fix behaviour (parent, fresh navigator).
+  // A SecurityError (Pronote asks to set up double authentication) is
+  // rethrown with a stable prefix the Swift side maps to
+  // PronoteError.doubleAuthRequired.
+  loginToken: async (session, url, username, token, deviceUUID, kind, navigatorIdentifier) => {
+    let refresh;
+    try {
+      refresh = await pronote.loginToken(session, {
+        url,
+        kind: typeof kind === "number" && kind > 0 ? kind : pronote.AccountKind.PARENT,
+        username,
+        token,
+        deviceUUID,
+        navigatorIdentifier: navigatorIdentifier || undefined,
+      });
+    } catch (e) {
+      if (e && e.name === "SecurityError") {
+        throw new Error("DOUBLE_AUTH_REQUIRED: " + (e.message || ""));
+      }
+      throw e;
+    }
     return {
       token: refresh.token,
       username: refresh.username,
       url: refresh.url,
       kind: refresh.kind,
+      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
     };
   },
 
@@ -62,6 +81,7 @@ globalThis.PawnoteBridge = {
       username: refresh.username,
       url: refresh.url,
       kind: refresh.kind,
+      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
     };
   },
 
@@ -186,6 +206,7 @@ globalThis.PawnoteBridge = {
       username: refresh.username,
       url: refresh.url,
       kind: refresh.kind,
+      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
     };
   },
 

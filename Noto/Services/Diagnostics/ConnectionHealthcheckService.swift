@@ -63,20 +63,23 @@ enum ConnectionHealthcheckService {
             }
         }
 
-        guard let bridge = PronoteService.shared.bridge else {
+        guard PronoteService.shared.bridge != nil else {
+            // Report the reason the automatic reconnect gave, when it gave
+            // one, instead of a generic line.
+            let reason = PronoteService.shared.reconnectFailures.values.first
+                ?? "Connexion impossible — reconnectez-vous via QR code."
             return children.map {
                 ConnectionCheckResult(
                     childName: $0.firstName,
                     connectionLabel: "Pronote",
-                    status: .failed("Connexion impossible — reconnectez-vous via QR code.")
+                    status: .failed(reason)
                 )
             }
         }
 
-        let roster = bridge.getChildren()
         var results: [ConnectionCheckResult] = []
         for child in children {
-            guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: roster) else {
+            guard let (bridge, idx) = PronoteService.shared.resolve(child: child) else {
                 results.append(ConnectionCheckResult(
                     childName: child.firstName,
                     connectionLabel: "Pronote",

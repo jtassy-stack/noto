@@ -334,26 +334,22 @@ struct ENTLoginView: View {
         }
         PawnoteBridge.transferCookies(cookies, for: url)
 
-        let deviceUUID = getOrCreateDeviceUUID()
+        let deviceUUID = PronoteAccountStore.deviceUUID()
 
         do {
             let bridge = try PawnoteBridge()
             let refreshToken = try await bridge.loginENT(url: pronoteURL, deviceUUID: deviceUUID)
 
-            // Store refresh token in Keychain
-            if let tokenData = try? JSONEncoder().encode(refreshToken) {
-                try? KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
-
-                // Track username for auto-reconnect
-                var knownUsernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
-                if !knownUsernames.contains(refreshToken.username) {
-                    knownUsernames.append(refreshToken.username)
-                    UserDefaults.standard.set(knownUsernames, forKey: "pronote_known_usernames")
-                }
+            // Store the refresh token; the session is usable either way, but
+            // a failed save means the next launch needs a new ENT login.
+            do {
+                try PronoteAccountStore.save(refreshToken)
+            } catch {
+                NSLog("[noto] ENT→Pronote token not saved: %@", error.localizedDescription)
             }
 
             // Set bridge for immediate data sync
-            PronoteService.shared.setBridge(bridge)
+            PronoteService.shared.setBridge(bridge, for: refreshToken.username)
 
             // Sync school data for all Pronote children (through the coordinator)
             guard let family else { return }
@@ -375,15 +371,6 @@ struct ENTLoginView: View {
         }
     }
 
-    private func getOrCreateDeviceUUID() -> String {
-        if let data = try? KeychainService.load(key: "device_uuid"),
-           let uuid = String(data: data, encoding: .utf8) {
-            return uuid
-        }
-        let uuid = UUID().uuidString
-        try? KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
-        return uuid
-    }
 
     // MARK: - Form Login (PCN — headless WKWebView)
     // Edifice/PCN login page is a JS SPA — URLSession cannot authenticate.
