@@ -223,8 +223,19 @@ final class PawnoteBridge {
     /// Turns the message of a JS exception into the typed error the UI
     /// knows how to explain. Everything else stays `invalidResponse`.
     static func error(fromJSMessage message: String) -> PronoteError {
-        if message.hasPrefix("DOUBLE_AUTH_REQUIRED") { return .doubleAuthRequired }
+        if message.hasPrefix("DOUBLE_AUTH_REQUIRED") {
+            // "DOUBLE_AUTH_REQUIRED:{json}" from the bridge's _doubleAuthError;
+            // an unreadable payload still yields the typed error.
+            let payload = Data(message.drop(while: { $0 != ":" }).dropFirst().utf8)
+            var info: PronoteDoubleAuth? = nil
+            if !payload.isEmpty {
+                info = try? JSONDecoder().decode(PronoteDoubleAuth.self, from: payload)
+            }
+            return .doubleAuthRequired(info)
+        }
         let lower = message.lowercased()
+        // pawnote's own SecurityError wording, in case a path bypasses the helper.
+        if lower.contains("custom your security methods") { return .doubleAuthRequired(nil) }
         if lower.contains("suspended") || lower.contains("suspendu") { return .suspendedIP }
         if lower.contains("rate limit") || lower.contains("too many") { return .rateLimited }
         return .invalidResponse("JS error: \(message)")

@@ -16,13 +16,42 @@ globalThis.PawnoteBridge = {
     return pronote.createSessionHandle();
   },
 
+  // Pronote answered the authentication with `actionsDoubleAuth`: the
+  // account must set up (or confirm) its double authentication in Pronote
+  // before the session is usable. pawnote throws a SecurityError there, but
+  // Pronote's answer already carries the renewed single-use mobile token, so
+  // the error is rethrown with everything Swift needs to keep the account
+  // alive (PronoteError.doubleAuthRequired). Any other error passes through.
+  _doubleAuthError: (session, e) => {
+    if (!e || e.name !== "SecurityError") return e;
+    const h = e.handle || {};
+    const ctx = h.context || {};
+    const auth = ctx.authentication || {};
+    const payload = {
+      token: auth.jetonConnexionAppliMobile || null,
+      username: ctx.initialUsername || (ctx.identity && ctx.identity.login) || null,
+      url: (session.information && session.information.url) || null,
+      kind: (session.information && session.information.accountKind) || null,
+      navigatorIdentifier: (session.instance && session.instance.navigatorIdentifier) || null,
+      needsPIN: Boolean(h.shouldEnterPIN),
+      needsChoice: Boolean(h.shouldCustomDoubleAuth),
+      needsPassword: Boolean(h.shouldCustomPassword),
+    };
+    return new Error("DOUBLE_AUTH_REQUIRED:" + JSON.stringify(payload));
+  },
+
   // QR Code login
   loginQrCode: async (session, deviceUUID, pin, qrData) => {
-    const refresh = await pronote.loginQrCode(session, {
-      deviceUUID,
-      pin,
-      qr: qrData,
-    });
+    let refresh;
+    try {
+      refresh = await pronote.loginQrCode(session, {
+        deviceUUID,
+        pin,
+        qr: qrData,
+      });
+    } catch (e) {
+      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+    }
     return {
       token: refresh.token,
       username: refresh.username,
@@ -39,8 +68,7 @@ globalThis.PawnoteBridge = {
   // another space or from an unknown navigator. Missing values fall back
   // to the pre-fix behaviour (parent, fresh navigator).
   // A SecurityError (Pronote asks to set up double authentication) is
-  // rethrown with a stable prefix the Swift side maps to
-  // PronoteError.doubleAuthRequired.
+  // rethrown via _doubleAuthError (see above).
   loginToken: async (session, url, username, token, deviceUUID, kind, navigatorIdentifier) => {
     let refresh;
     try {
@@ -53,10 +81,7 @@ globalThis.PawnoteBridge = {
         navigatorIdentifier: navigatorIdentifier || undefined,
       });
     } catch (e) {
-      if (e && e.name === "SecurityError") {
-        throw new Error("DOUBLE_AUTH_REQUIRED: " + (e.message || ""));
-      }
-      throw e;
+      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
     }
     return {
       token: refresh.token,
@@ -69,13 +94,18 @@ globalThis.PawnoteBridge = {
 
   // Credentials login
   loginCredentials: async (session, url, username, password, deviceUUID) => {
-    const refresh = await pronote.loginCredentials(session, {
-      url,
-      kind: pronote.AccountKind.PARENT,
-      username,
-      password,
-      deviceUUID,
-    });
+    let refresh;
+    try {
+      refresh = await pronote.loginCredentials(session, {
+        url,
+        kind: pronote.AccountKind.PARENT,
+        username,
+        password,
+        deviceUUID,
+      });
+    } catch (e) {
+      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+    }
     return {
       token: refresh.token,
       username: refresh.username,
@@ -194,13 +224,18 @@ globalThis.PawnoteBridge = {
   // If rebuilding the bundle, the hand-patched loginENT in pawnote-bundle.js
   // must be re-applied (see the block above fetchDiscussions in the bundle).
   loginENT: async (session, url, deviceUUID) => {
-    const refresh = await pronote.loginCredentials(session, {
-      url,
-      kind: pronote.AccountKind.PARENT,
-      username: "",
-      password: "",
-      deviceUUID,
-    });
+    let refresh;
+    try {
+      refresh = await pronote.loginCredentials(session, {
+        url,
+        kind: pronote.AccountKind.PARENT,
+        username: "",
+        password: "",
+        deviceUUID,
+      });
+    } catch (e) {
+      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+    }
     return {
       token: refresh.token,
       username: refresh.username,

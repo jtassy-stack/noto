@@ -132,7 +132,10 @@ struct HomeView: View {
                             PronoteReconnectCard(
                                 children: pronoteChildrenNeedingReconnect,
                                 reason: pronoteService.reconnectFailures.values.first,
-                                onReconnect: { showPronoteReconnect = true }
+                                onReconnect: { showPronoteReconnect = true },
+                                onRetry: pronoteService.reconnectFailures.isEmpty ? nil : {
+                                    Task { await retryPronoteReconnect() }
+                                }
                             )
                         }
 
@@ -383,6 +386,17 @@ struct HomeView: View {
     ///   Réessayer — bypasses the cooldown and is the only case where a lost
     ///   Pronote session shows the modal alert (at launch the reconnect card
     ///   above the feed already covers it).
+    /// « Réessayer » on the reconnect card: the parent has done what Pronote
+    /// asked (double authentication, network back…) and wants the stored
+    /// token replayed now rather than at the next launch.
+    private func retryPronoteReconnect() async {
+        pronoteService.clearReconnectFailures()
+        let reconnected = await PronoteAutoConnect.autoConnect(modelContext: modelContext)
+        if reconnected {
+            await syncNow(userInitiated: true)
+        }
+    }
+
     private func syncNow(userInitiated: Bool) async {
         let targets = scopedChildren
         await syncCoordinator.requestSync(force: userInitiated) {
@@ -1148,9 +1162,12 @@ private struct PronoteReconnectCard: View {
     /// authentication, token refused, network…); nil = never attempted.
     var reason: String? = nil
     let onReconnect: () -> Void
+    /// Replays the stored token (after a double-auth setup or a network
+    /// blip). nil = no stored account to retry with; only the QR path remains.
+    var onRetry: (() async -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: NotoTheme.Spacing.md) {
+        HStack(alignment: .top, spacing: NotoTheme.Spacing.md) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 18))
                 .foregroundStyle(NotoTheme.Colors.amber)
@@ -1169,13 +1186,24 @@ private struct PronoteReconnectCard: View {
                 }
             }
             Spacer()
-            Button("Reconnecter", action: onReconnect)
-                .font(NotoTheme.Typography.functional(12, weight: .bold))
-                .foregroundStyle(NotoTheme.Colors.shadow)
-                .padding(.horizontal, NotoTheme.Spacing.sm)
-                .padding(.vertical, 6)
-                .background(NotoTheme.Colors.brand)
-                .clipShape(Capsule())
+            VStack(alignment: .trailing, spacing: NotoTheme.Spacing.xs) {
+                if let onRetry {
+                    Button("Réessayer") { Task { await onRetry() } }
+                        .font(NotoTheme.Typography.functional(12, weight: .bold))
+                        .foregroundStyle(NotoTheme.Colors.shadow)
+                        .padding(.horizontal, NotoTheme.Spacing.sm)
+                        .padding(.vertical, 6)
+                        .background(NotoTheme.Colors.brand)
+                        .clipShape(Capsule())
+                }
+                Button("Rescanner", action: onReconnect)
+                    .font(NotoTheme.Typography.functional(12, weight: .bold))
+                    .foregroundStyle(onRetry == nil ? NotoTheme.Colors.shadow : NotoTheme.Colors.textPrimary)
+                    .padding(.horizontal, NotoTheme.Spacing.sm)
+                    .padding(.vertical, 6)
+                    .background(onRetry == nil ? NotoTheme.Colors.brand : NotoTheme.Colors.amber.opacity(0.2))
+                    .clipShape(Capsule())
+            }
         }
         .padding(NotoTheme.Spacing.md)
         .background(NotoTheme.Colors.amber.opacity(0.08))

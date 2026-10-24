@@ -58,6 +58,46 @@ struct PronoteRefreshTokenTests {
         #expect(message.contains("double authentification"))
     }
 
+    @Test("double-auth payload yields the renewed token and a PIN instruction")
+    @MainActor
+    func decodesDoubleAuthPayload() throws {
+        let json = #"{"token":"t2","username":"u","url":"https://p","kind":6,"navigatorIdentifier":"nav","needsPIN":true,"needsChoice":false,"needsPassword":false}"#
+        let error = PawnoteBridge.error(fromJSMessage: "DOUBLE_AUTH_REQUIRED:" + json)
+        guard case .doubleAuthRequired(let info) = error, let info else {
+            Issue.record("expected doubleAuthRequired with payload, got \(error)")
+            return
+        }
+        let rescued = try #require(info.rescuedToken)
+        #expect(rescued == PronoteRefreshToken(url: "https://p", token: "t2", username: "u", kind: .student, navigatorIdentifier: "nav"))
+        #expect(info.instruction.contains("PIN"))
+        #expect(PronoteAutoConnect.userMessage(for: error).contains("Réessayer"))
+    }
+
+    @Test("double-auth payload without a token rescues nothing and asks for a rescan")
+    @MainActor
+    func doubleAuthWithoutToken() {
+        let json = #"{"token":null,"username":"u","url":"https://p","kind":7,"needsChoice":true}"#
+        let error = PawnoteBridge.error(fromJSMessage: "DOUBLE_AUTH_REQUIRED:" + json)
+        guard case .doubleAuthRequired(let info) = error else {
+            Issue.record("expected doubleAuthRequired, got \(error)")
+            return
+        }
+        #expect(info?.rescuedToken == nil)
+        #expect(info?.instruction.contains("méthode") == true)
+        #expect(PronoteAutoConnect.userMessage(for: error).contains("QR"))
+    }
+
+    @Test("pawnote's raw SecurityError wording maps to double auth too")
+    @MainActor
+    func mapsRawSecurityError() {
+        let error = PawnoteBridge.error(fromJSMessage: "You're asked to custom your security methods")
+        guard case .doubleAuthRequired(let info) = error else {
+            Issue.record("expected doubleAuthRequired, got \(error)")
+            return
+        }
+        #expect(info == nil)
+    }
+
     @Test("other JS errors stay invalidResponse with a generic reconnect message")
     @MainActor
     func mapsOther() {
