@@ -209,7 +209,8 @@ jobs:
     # Direct pushes to master are blocked: open a small PR whose squash
     # title starts with [tf], its merge commit triggers the upload.
     # Build numbers follow the commit count, so each [tf] merge gets a
-    # higher number than the previous upload.
+    # higher number than the previous upload (a squash merge adds one
+    # commit, so a [tf] PR is enough to move it).
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event_name != 'pull_request' &&
