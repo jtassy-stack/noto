@@ -18,7 +18,16 @@ struct PronoteMobileLoginTests {
         #expect(PronoteMobileLogin.instanceURL(from: "https://") == nil)
     }
 
-    @Test("login page carries fd, bydlg and login=true for the right space")
+    @Test("instance URL: Pronote carried in an ENT connector or CAS query")
+    func instanceFromENTLink() {
+        let expected = URL(string: "https://0750000a.index-education.net/pronote")
+        #expect(PronoteMobileLogin.instanceURL(from: "https://ent.example.fr/cas/login?service=https%3A%2F%2F0750000a.index-education.net%2Fpronote%2F") == expected)
+        #expect(PronoteMobileLogin.instanceURL(from: "https://ent.example.fr/connecteur?url=https://0750000a.index-education.net/pronote/parent.html") == expected)
+        // A query without a Pronote URL keeps the link's own host.
+        #expect(PronoteMobileLogin.instanceURL(from: "https://ent.example.fr/pronote?service=x")?.host == "ent.example.fr")
+    }
+
+    @Test("login page: fd + bydlg, login=true only for a direct login")
     func loginPage() throws {
         let instance = try #require(URL(string: "https://p.example.net/pronote"))
         let url = try #require(PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent))
@@ -26,7 +35,10 @@ struct PronoteMobileLoginTests {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(items.contains(URLQueryItem(name: "fd", value: "1")))
         #expect(items.contains(URLQueryItem(name: "bydlg", value: PronoteMobileLogin.applicationIdentifier)))
-        #expect(items.contains(URLQueryItem(name: "login", value: "true")))
+        #expect(!items.contains { $0.name == "login" })
+        let direct = try #require(PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent, directLogin: true))
+        let directItems = URLComponents(url: direct, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(directItems.contains(URLQueryItem(name: "login", value: "true")))
         let student = try #require(PronoteMobileLogin.loginPageURL(instance: instance, kind: .student))
         #expect(student.path == "/pronote/mobile.eleve.html")
     }
@@ -56,6 +68,13 @@ struct PronoteMobileLoginTests {
         let instance = try #require(URL(string: "https://p.example.net/pronote"))
         let token = PronoteMobileLogin.TokenPayload(login: "PARENT1", token: "abc").refreshToken(instance: instance, kind: .parent)
         #expect(token == PronoteRefreshToken(url: "https://p.example.net/pronote", token: "abc", username: "PARENT1", kind: .parent))
+    }
+
+    @Test("log label keeps host and path, never the query")
+    func logLabel() {
+        let url = URL(string: "https://cas.example.fr/cas/login?ticket=ST-secret#frag")
+        #expect(PronoteMobileLogin.logLabel(url) == "cas.example.fr/cas/login")
+        #expect(PronoteMobileLogin.logLabel(nil) == "nil")
     }
 
     @Test("hook script escapes the device id and defines the Pronote hook")
