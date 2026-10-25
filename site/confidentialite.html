@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politique de confidentialité · nōto</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<h1>Politique de confidentialité</h1>
+<p class="meta">nōto · Dernière mise à jour : 22 octobre 2026</p>
+<p class="lang"><a href="privacy.html" hreflang="en">English version</a></p>
+
+<p>nōto aide les parents à suivre la scolarité de leurs enfants, du collège au lycée, et propose aux enfants des quiz de révision. L'application est conçue pour que vos données restent sur vos appareils : nōto n'a pas de compte utilisateur, ne stocke aucune donnée scolaire sur un serveur et n'utilise ni publicité, ni outil de mesure d'audience, ni traceur.</p>
+
+<h2>1. Ce qui reste sur votre téléphone</h2>
+<p>Les données suivantes sont enregistrées uniquement sur l'appareil où vous utilisez nōto :</p>
+<ul>
+<li>le prénom et la classe de vos enfants, leur établissement et leurs spécialités ;</li>
+<li>les données récupérées auprès de l'école : notes, emploi du temps, devoirs, cahier de textes, absences, messages, photos de l'école ;</li>
+<li>les e-mails de l'école lus depuis votre messagerie, si vous la connectez ;</li>
+<li>les quiz faits par votre enfant, sa progression par notion, sa série et les minutes de temps d'écran gagnées ;</li>
+<li>les enregistrements et transcriptions de réunions parents-professeurs, si vous utilisez cette fonction.</li>
+</ul>
+<p>Les identifiants de connexion (jetons Pronote, identifiants École Directe ou Skolengo, mots de passe d'application de messagerie) sont rangés dans le trousseau sécurisé d'iOS (Keychain). Ils ne sont jamais envoyés à nōto ni à un tiers.</p>
+<p>Les résumés, conseils et quiz générés le sont sur l'appareil, avec les modèles d'Apple intégrés à iOS quand ils sont disponibles, sinon avec des règles fixes. La transcription des réunions se fait sur l'appareil : l'audio ne quitte jamais votre téléphone.</p>
+
+<h2>2. Avec qui l'application communique</h2>
+<h3>L'école de votre enfant</h3>
+<p>nōto se connecte directement, depuis votre téléphone, aux services de l'école que vous choisissez (Pronote, École Directe, Skolengo, ENT comme Paris Classe Numérique ou MonLycée.net), avec vos propres identifiants. Aucun intermédiaire ne voit passer ces échanges.</p>
+<h3>Votre messagerie</h3>
+<p>Si vous connectez une boîte mail, nōto la lit directement chez votre fournisseur (IMAP) pour retrouver les messages de l'école. Seuls les messages des expéditeurs de l'école que vous autorisez sont affichés.</p>
+<h3>celyn, pour la culture et les quiz</h3>
+<p>Pour les recommandations culturelles (onglet Découvrir) et pour la banque de questions de quiz, nōto interroge l'API celyn (celyn.io). Les requêtes contiennent uniquement :</p>
+<ul>
+<li>des mots-clés du programme scolaire (par exemple « Révolution française »), le niveau de classe et une tranche d'âge ;</li>
+<li>pour les sorties proches, votre position approximative, seulement si vous avez autorisé la localisation ;</li>
+<li>pour la recherche d'établissement, le nom ou la commune saisis.</li>
+</ul>
+<p>Elles ne contiennent ni nom, ni note, ni identifiant de l'enfant ou de l'appareil. Si vous signalez une question de quiz erronée, nōto envoie un identifiant aléatoire propre à l'installation, que celyn conserve uniquement sous forme chiffrée (empreinte), pour compter les signalements.</p>
+<h3>Le service public geo.api.gouv.fr</h3>
+<p>Pour retrouver la commune de l'établissement de votre enfant, nōto peut envoyer votre position à l'API publique de l'État (geo.api.gouv.fr), qui renvoie le nom de la commune.</p>
+<h3>Apple</h3>
+<p>Les notifications sont créées par l'application sur votre téléphone : aucun serveur n'en envoie. Le temps d'écran (Screen Time) est géré par iOS, sur l'appareil de l'enfant ; nōto ne lit pas l'usage des applications. La synchronisation famille, décrite ci-dessous, passe par iCloud.</p>
+
+<h2 id="synchro-famille">3. Synchronisation entre le téléphone du parent et celui de l'enfant</h2>
+<p>nōto peut relier le téléphone d'un parent à celui de son enfant, pour que le parent voie les révisions de l'enfant et règle ses récompenses depuis son propre téléphone. Cette synchronisation est désactivée par défaut. Seul le parent peut l'activer, depuis Réglages › « Relier le téléphone de [prénom] », et l'enfant doit accepter l'invitation sur son téléphone.</p>
+<h3>Les données qui passent d'un téléphone à l'autre</h3>
+<p>Du téléphone de l'enfant vers celui du parent :</p>
+<ul>
+<li>les quiz faits : date, nombre de bonnes réponses, durée, minutes gagnées, matière de chaque question ;</li>
+<li>la progression par notion : thème du programme, niveau de révision, dates de la dernière et de la prochaine révision ;</li>
+<li>les jokers de série (les jours couverts) ;</li>
+<li>les minutes de temps d'écran gagnées dans la journée (créditées, en réserve, débloquées).</li>
+</ul>
+<p>Du téléphone du parent vers celui de l'enfant :</p>
+<ul>
+<li>les règles de récompense : barème, plafond quotidien, seuil de réussite, durée minimale, bonus de veille de contrôle, activation du quiz de culture générale et du défi famille.</li>
+</ul>
+<p><strong>Les données qui ne passent jamais par ce canal</strong> : les identifiants et mots de passe de l'école, les notes, l'emploi du temps, les devoirs, le cahier de textes, les messages, les photos, le texte des questions et des réponses. Le téléphone du parent obtient ses propres notes et son propre emploi du temps directement auprès de l'école, avec son propre compte.</p>
+<h3>Comment les données transitent</h3>
+<p>La synchronisation utilise iCloud (CloudKit), le service d'Apple, sans aucun serveur de nōto. Les données sont rangées dans une zone de l'iCloud privé du parent, créée pour cet enfant et partagée uniquement avec le compte iCloud de l'enfant invité par le parent. Tous les contenus sont chiffrés de bout en bout avant de quitter le téléphone (champs chiffrés de CloudKit) : ni nōto, ni Apple ne peuvent les lire. Apple voit seulement les informations techniques nécessaires au fonctionnement du service, comme les comptes iCloud qui participent au partage, des identifiants d'enregistrement aléatoires et les dates de modification. L'éditeur de nōto ne reçoit aucune de ces données et n'y a pas accès. L'utilisation d'iCloud est soumise à la <a href="https://www.apple.com/fr/legal/privacy/">politique de confidentialité d'Apple</a>.</p>
+<p>La synchronisation a lieu à l'ouverture de l'application, à son retour au premier plan et en tâche de fond, quand iOS le permet.</p>
+<h3>Base légale et durée de conservation</h3>
+<p>La synchronisation repose sur le consentement du parent, titulaire de l'autorité parentale, qui l'active lui-même. Les données sont conservées dans l'iCloud du parent tant que les deux téléphones restent reliés.</p>
+<h3>Désactiver la synchronisation et effacer les données</h3>
+<ul>
+<li>Sur le téléphone du parent, Réglages › « Délier le téléphone de [prénom] » supprime la zone iCloud et tout ce qu'elle contient. Le téléphone de l'enfant perd l'accès, et les données reçues de l'enfant sont effacées du téléphone du parent. Le téléphone de l'enfant garde ses propres données, comme avant la liaison.</li>
+<li>Supprimer l'enfant dans nōto, ou utiliser « Effacer toutes les données », sur le téléphone du parent a le même effet. Si iCloud est injoignable à ce moment-là, la suppression est refaite au lancement suivant.</li>
+<li>Les données restent aussi supprimables depuis les réglages iCloud de l'appareil (Réglages › [votre nom] › iCloud › Gérer le stockage).</li>
+</ul>
+
+<h2>4. Autorisations demandées</h2>
+<table>
+<tr><th>Autorisation</th><th>Pourquoi</th></tr>
+<tr><td>Appareil photo</td><td>Scanner le QR code Pronote pour connecter le compte de votre enfant.</td></tr>
+<tr><td>Photos</td><td>Enregistrer les photos de l'école dans l'album « nōto » de votre Pellicule.</td></tr>
+<tr><td>Calendrier</td><td>Ajouter un événement culturel ou l'emploi du temps à votre calendrier, à votre demande.</td></tr>
+<tr><td>Localisation</td><td>Retrouver l'établissement de votre enfant et proposer des sorties culturelles proches.</td></tr>
+<tr><td>Micro et reconnaissance vocale</td><td>Enregistrer et transcrire une réunion parents-professeurs, sur l'appareil.</td></tr>
+<tr><td>Face ID</td><td>Protéger l'accès aux données scolaires.</td></tr>
+<tr><td>Temps d'écran</td><td>Bloquer les applications de l'enfant pendant les cours et débloquer les minutes gagnées en révisant.</td></tr>
+<tr><td>Notifications</td><td>Vous prévenir d'un devoir à rendre, d'une difficulté ou d'un message de l'école. Les notifications sont créées sur l'appareil.</td></tr>
+</table>
+<p>Chaque autorisation peut être retirée à tout moment dans les Réglages d'iOS.</p>
+
+<h2>5. Enfants</h2>
+<p>nōto est destiné aux familles d'élèves de la 6e à la Terminale. Les données de l'enfant sont saisies et contrôlées par le parent, qui installe l'application, choisit ce qui est connecté et peut tout effacer. Sur le téléphone de l'enfant, les réglages de récompense sont protégés par un code parent.</p>
+
+<h2>6. Conservation et effacement</h2>
+<p>Les données restent sur votre appareil tant que vous gardez l'application. Réglages › « Effacer toutes les données » supprime les données de nōto et les identifiants enregistrés dans le trousseau ; supprimer l'application efface aussi ses données locales. Les données sont chiffrées par iOS quand l'appareil est verrouillé, et suivent vos réglages de sauvegarde iCloud de l'appareil.</p>
+
+<h2>7. Vos droits</h2>
+<p>Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, d'opposition et de limitation. Comme nōto ne détient aucune donnée personnelle sur un serveur, la plupart de ces droits s'exercent directement dans l'application. Pour toute question, écrivez à <span class="todo">[adresse de contact]</span>. Vous pouvez aussi adresser une réclamation à la CNIL (<a href="https://www.cnil.fr">cnil.fr</a>).</p>
+
+<h2>8. Éditeur</h2>
+<p>nōto est édité par <span class="todo">[raison sociale et adresse de l'éditeur]</span>.</p>
+<p>Cette politique peut évoluer avec l'application. La date de dernière mise à jour figure en haut de la page.</p>
+</main>
+</body>
+</html>
