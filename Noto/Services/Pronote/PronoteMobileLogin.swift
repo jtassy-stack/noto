@@ -53,22 +53,55 @@ enum PronoteMobileLogin {
         return components.url
     }
 
-    /// The page to load: `<instance>/mobile.<space>.html?fd=1&bydlg=…`.
+    /// The page to load: `<instance>/mobile.<space>.html?fd=1[&bydlg=…][&login=true]`.
     ///
-    /// `directLogin` adds `login=true`, Pronote's own identification form
-    /// (the switch the pawnote password login sends). It bypasses the ENT,
-    /// so the ENT flows leave it off and let Pronote redirect to the CAS:
-    /// the first real-account test (2026-10-25) never got past that form.
-    static func loginPageURL(instance: URL, kind: PronoteAccountKind, directLogin: Bool = false) -> URL? {
+    /// - `applicationMode` adds `bydlg` (« accès depuis une application »).
+    ///   Measured on a real MonLycée instance (2026-10-25): with the app's
+    ///   `bydlg`, Pronote does NOT delegate to the CAS and serves its own
+    ///   form; without it, it redirects to the ENT's CAS. The ENT flows
+    ///   therefore enter through `casEntryURL` first.
+    /// - `directLogin` adds `login=true`, Pronote's own identification form.
+    static func loginPageURL(
+        instance: URL,
+        kind: PronoteAccountKind,
+        applicationMode: Bool = true,
+        directLogin: Bool = false
+    ) -> URL? {
         var components = URLComponents(url: instance, resolvingAgainstBaseURL: false)
         components?.path = instance.path + "/mobile.\(kind.path).html"
-        var items = [
-            URLQueryItem(name: "fd", value: "1"),
-            URLQueryItem(name: "bydlg", value: applicationIdentifier),
-        ]
+        var items = [URLQueryItem(name: "fd", value: "1")]
+        if applicationMode { items.append(URLQueryItem(name: "bydlg", value: applicationIdentifier)) }
         if directLogin { items.append(URLQueryItem(name: "login", value: "true")) }
         components?.queryItems = items
         return components?.url
+    }
+
+    /// Entry of the ENT flows: the plain mobile page, which Pronote sends
+    /// through the ENT's CAS (silent when the ENT session is open). Once
+    /// back on it, `triggerScript` asks the page for the mobile token.
+    static func casEntryURL(instance: URL, kind: PronoteAccountKind) -> URL? {
+        loginPageURL(instance: instance, kind: kind, applicationMode: false)
+    }
+
+    /// Asks an authenticated mobile page for the « application » token
+    /// (the call `hookAccesDepuisAppli` makes in `bydlg` mode). Returns a
+    /// short status string for the logs: `called`, `no-method`,
+    /// `no-interface` (page not ready, or the login form) or `error`.
+    static func triggerScript(deviceUUID: String) -> String {
+        let escaped = deviceUUID
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        return """
+        (function () {
+            try {
+                var i = window.GInterface;
+                if (!i) { return 'no-interface'; }
+                if (typeof i.passerEnModeValidationAppliMobile !== 'function') { return 'no-method'; }
+                i.passerEnModeValidationAppliMobile('', '\(escaped)');
+                return 'called';
+            } catch (e) { return 'error'; }
+        })();
+        """
     }
 
     /// `host/path` of a URL for the logs: never the query or fragment,
