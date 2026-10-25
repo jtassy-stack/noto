@@ -14,7 +14,9 @@ struct ENTLoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showWebLogin = false
+    /// MonLycée saved its children but Pronote did not open: the error
+    /// screen also offers to continue without Pronote.
+    @State private var canContinueWithoutPronote = false
 
     private var family: Family? { families.first }
     private var needsWebAuth: Bool { provider == .monlycee }
@@ -36,9 +38,12 @@ struct ENTLoginView: View {
                         VStack(spacing: NotoTheme.Spacing.md) {
                             Label(error, systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(NotoTheme.Colors.danger)
-                            Button("Réessayer") { showWebLogin = true }
+                            Button("Réessayer") { errorMessage = nil }
                                 .buttonStyle(.borderedProminent)
                                 .tint(NotoTheme.Colors.brand)
+                            if canContinueWithoutPronote {
+                                Button("Continuer sans Pronote") { onDismissAll?() ?? dismiss() }
+                            }
                         }
                         .padding(NotoTheme.Spacing.xl)
                     } else {
@@ -105,6 +110,7 @@ struct ENTLoginView: View {
     private func handleWebLoginSuccess(json: [String: Any]) async {
         isLoading = true
         errorMessage = nil
+        canContinueWithoutPronote = false
 
         #if DEBUG
         NSLog("[noto] Web login data keys: \(json.keys.sorted())")
@@ -261,7 +267,16 @@ struct ENTLoginView: View {
         let mailContext = modelContext
 
         isLoading = false
-        onDismissAll?() ?? dismiss()
+        if json["_pronoteSSO"] as? String == "timeout" {
+            // MonLycée is connected and its children are saved, but Pronote
+            // (notes, devoirs, emploi du temps) is not: say so instead of
+            // closing as if everything worked. « Réessayer » reruns the
+            // login; children are matched, never duplicated.
+            canContinueWithoutPronote = true
+            errorMessage = "MonLycée est connecté, mais Pronote n'a pas répondu : les notes, les devoirs et l'emploi du temps ne sont pas encore disponibles. Réessayez, ou ajoutez Pronote avec le QR code."
+        } else {
+            onDismissAll?() ?? dismiss()
+        }
 
         if provider == .monlycee {
             let imapConfigs = IMAPService.loadConfigs()

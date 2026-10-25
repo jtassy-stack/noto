@@ -13,6 +13,10 @@ struct ENTWebLoginView: View {
     @State private var isLoggedIn = false
     @State private var isFetching = false
     @State private var statusMessage = ""
+    /// The Pronote step is waiting on a page the parent may have to act on
+    /// (a profile choice, a consent screen): the web view is shown again,
+    /// with a hint instead of the spinner.
+    @State private var showsPronotePage = false
     @StateObject private var webViewHolder = WebViewHolder()
 
     var body: some View {
@@ -25,7 +29,15 @@ struct ENTWebLoginView: View {
                 onLoginDetected: { isLoggedIn = true }
             )
 
-            if isLoggedIn && !isFetching {
+            if showsPronotePage {
+                Text("Pronote s'ouvre… Si une page vous demande de choisir un profil ou de confirmer, faites-le ici.")
+                    .font(NotoTheme.Typography.caption)
+                    .foregroundStyle(NotoTheme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(NotoTheme.Spacing.md)
+                    .frame(maxWidth: .infinity)
+                    .background(.regularMaterial)
+            } else if isLoggedIn && !isFetching {
                 Button {
                     fetchChildren()
                 } label: {
@@ -41,7 +53,7 @@ struct ENTWebLoginView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            if isFetching {
+            if isFetching && !showsPronotePage {
                 VStack(spacing: NotoTheme.Spacing.md) {
                     ProgressView()
                     Text(statusMessage.isEmpty ? "Récupération des données…" : statusMessage)
@@ -133,6 +145,9 @@ struct ENTWebLoginView: View {
                         if let pronoteService = raw["pronoteService"] as? [String: Any],
                            let pronoteLink = pronoteService["link"] as? String,
                            let instance = PronoteMobileLogin.instanceURL(from: pronoteLink) {
+                            #if DEBUG
+                            NSLog("[noto] Pronote via ENT: link=\(PronoteMobileLogin.logLabel(URL(string: pronoteLink))) instance=\(PronoteMobileLogin.logLabel(instance))")
+                            #endif
                             self.statusMessage = "Ouverture de Pronote…"
                             self.capturePronoteToken(instance: instance, entData: raw)
                         } else {
@@ -148,11 +163,12 @@ struct ENTWebLoginView: View {
     }
 
     /// Step 2: open the establishment's Pronote mobile page in the same
-    /// web view. The ENT session the parent just opened lets Pronote's CAS
-    /// redirect pass silently, and the `bydlg` + `login=true` page answers
-    /// with the account login and a single-use mobile token (see
-    /// `PronoteMobileLogin`). nōto then opens the session with `loginToken`,
-    /// exactly like after a QR scan — no cookie transfer, no patched pawnote.
+    /// web view. Without `login=true`, Pronote sends the parent to the ENT's
+    /// CAS, which the session just opened lets through, and the `bydlg`
+    /// page then answers with the account login and a single-use mobile
+    /// token (see `PronoteMobileLogin`). nōto opens the session with
+    /// `loginToken`, exactly like after a QR scan — no cookie transfer,
+    /// no patched pawnote.
     private func capturePronoteToken(instance: URL, entData: [String: Any]) {
         guard let webView = webViewHolder.webView,
               let pageURL = PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent) else {
@@ -162,27 +178,49 @@ struct ENTWebLoginView: View {
 
         webView.load(URLRequest(url: pageURL))
 
+        let interval = 0.5
+        let maxAttempts = 120 // 60 s: CAS round trips can be slow
+        let revealAfter = 16  // 8 s on another page: let the parent see it
         var attempts = 0
+        #if DEBUG
+        var lastLogged = ""
+        #endif
+
+        func finishWithoutToken() {
+            #if DEBUG
+            NSLog("[noto] Pronote via ENT: timeout, last page=\(PronoteMobileLogin.logLabel(webView.url))")
+            #endif
+            showsPronotePage = false
+            statusMessage = "Pronote n'a pas répondu — données ENT uniquement"
+            var result = entData
+            result["_pronoteSSO"] = "timeout"
+            onSuccess(result)
+        }
+
         func poll() {
             attempts += 1
-            guard attempts <= 40 else { // 20 s: the CAS round trip can be slow
-                DispatchQueue.main.async {
-                    self.statusMessage = "Pronote n'a pas répondu — données ENT uniquement"
-                    var result = entData
-                    result["_pronoteSSO"] = "timeout"
-                    self.onSuccess(result)
-                }
-                return
+            guard attempts <= maxAttempts else { finishWithoutToken(); return }
+
+            #if DEBUG
+            let label = PronoteMobileLogin.logLabel(webView.url)
+            if label != lastLogged || attempts % 20 == 0 {
+                NSLog("[noto] Pronote via ENT: poll \(attempts) on \(label)")
+                lastLogged = label
             }
+            #endif
 
             guard let current = webView.url, PronoteMobileLogin.isMobilePage(current, of: instance) else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
+                if attempts >= revealAfter { showsPronotePage = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + interval) { poll() }
                 return
             }
 
             webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { value, _ in
-                if let text = value as? String,
-                   let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
+                let text = value as? String ?? ""
+                if let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
+                    #if DEBUG
+                    NSLog("[noto] Pronote via ENT: token received after \(attempts) polls")
+                    #endif
                     var result = entData
                     result["_pronoteSSO"] = "success"
                     result["_pronoteToken"] = [
@@ -191,11 +229,19 @@ struct ENTWebLoginView: View {
                         "url": instance.absoluteString,
                     ]
                     DispatchQueue.main.async {
+                        self.showsPronotePage = false
                         self.statusMessage = "Pronote connecté !"
                         self.onSuccess(result)
                     }
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
+                    #if DEBUG
+                    if attempts % 20 == 0 {
+                        // Length only: the body may hold the parent's name.
+                        NSLog("[noto] Pronote via ENT: mobile page without token (\(text.count) chars)")
+                    }
+                    #endif
+                    if attempts >= revealAfter { DispatchQueue.main.async { self.showsPronotePage = true } }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + interval) { poll() }
                 }
             }
         }
@@ -252,12 +298,48 @@ private struct ENTWebViewWrapper: UIViewRepresentable {
             self.onLoginDetected = onLoginDetected
         }
 
+        // Navigation trace (host + path only, never the query: CAS tickets).
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            #if DEBUG
+            NSLog("[noto] WebView start: \(PronoteMobileLogin.logLabel(webView.url))")
+            #endif
+        }
+
+        func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+            #if DEBUG
+            NSLog("[noto] WebView redirect: \(PronoteMobileLogin.logLabel(webView.url))")
+            #endif
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            #if DEBUG
+            if let http = navigationResponse.response as? HTTPURLResponse, http.statusCode >= 400 {
+                NSLog("[noto] WebView HTTP \(http.statusCode): \(PronoteMobileLogin.logLabel(http.url))")
+            }
+            #endif
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            #if DEBUG
+            NSLog("[noto] WebView fail: \(PronoteMobileLogin.logLabel(webView.url)) code=\((error as NSError).code)")
+            #endif
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            #if DEBUG
+            let nsError = error as NSError
+            let failing = nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL
+            NSLog("[noto] WebView fail (provisional): \(PronoteMobileLogin.logLabel(failing ?? webView.url)) code=\(nsError.code)")
+            #endif
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            #if DEBUG
+            NSLog("[noto] WebView didFinish: \(PronoteMobileLogin.logLabel(webView.url))")
+            #endif
             guard !detected else { return }
             let url = webView.url?.absoluteString ?? ""
-            #if DEBUG
-            NSLog("[noto] WebView didFinish: \(url)")
-            #endif
 
             let isOnENT = url.contains(providerDomain)
             // PCN: logged in when on ENT domain but NOT on the login page

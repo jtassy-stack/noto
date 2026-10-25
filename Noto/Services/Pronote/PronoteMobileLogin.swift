@@ -5,7 +5,7 @@ import Foundation
 /// in through an ENT: nōto opens the establishment's Pronote URL in a web
 /// view, Pronote redirects to the ENT's CAS, the parent signs in on the real
 /// ENT page, and Pronote comes back to its mobile page. Opened with the
-/// `bydlg` application identifier and `login=true`, that page calls
+/// `bydlg` application identifier, that page calls
 /// `hookAccesDepuisAppli` instead of rendering; the hook below answers with
 /// `passerEnModeValidationAppliMobile`, and the page body becomes a JSON
 /// document holding the account login and a single-use mobile token
@@ -23,12 +23,23 @@ enum PronoteMobileLogin {
     /// The Pronote instance root (`https://host/pronote`) from whatever the
     /// parent typed or the ENT linked: trailing slash, `mobile.parent.html`,
     /// `parent.html`, query and fragment are dropped. nil = not an https URL.
+    /// An ENT may link Pronote through its own connector or CAS
+    /// (`…/cas/login?service=https://….index-education.net/pronote/`): the
+    /// Pronote URL carried in such a query is used instead of the ENT host.
     static func instanceURL(from raw: String) -> URL? {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
         if !text.lowercased().hasPrefix("http") { text = "https://" + text }
         guard var components = URLComponents(string: text), let host = components.host, !host.isEmpty else {
             return nil
+        }
+        let carriers = ["service", "url", "redirect", "redirect_uri", "target", "targeturl"]
+        if let nested = components.queryItems?.first(where: {
+            carriers.contains($0.name.lowercased())
+                && ($0.value?.lowercased().contains("pronote") ?? false)
+                && ($0.value?.lowercased().hasPrefix("http") ?? false)
+        })?.value, nested != text {
+            return instanceURL(from: nested)
         }
         components.query = nil
         components.fragment = nil
@@ -42,16 +53,29 @@ enum PronoteMobileLogin {
         return components.url
     }
 
-    /// The page to load: `<instance>/mobile.<space>.html?fd=1&bydlg=…&login=true`.
-    static func loginPageURL(instance: URL, kind: PronoteAccountKind) -> URL? {
+    /// The page to load: `<instance>/mobile.<space>.html?fd=1&bydlg=…`.
+    ///
+    /// `directLogin` adds `login=true`, Pronote's own identification form
+    /// (the switch the pawnote password login sends). It bypasses the ENT,
+    /// so the ENT flows leave it off and let Pronote redirect to the CAS:
+    /// the first real-account test (2026-10-25) never got past that form.
+    static func loginPageURL(instance: URL, kind: PronoteAccountKind, directLogin: Bool = false) -> URL? {
         var components = URLComponents(url: instance, resolvingAgainstBaseURL: false)
         components?.path = instance.path + "/mobile.\(kind.path).html"
-        components?.queryItems = [
+        var items = [
             URLQueryItem(name: "fd", value: "1"),
             URLQueryItem(name: "bydlg", value: applicationIdentifier),
-            URLQueryItem(name: "login", value: "true"),
         ]
+        if directLogin { items.append(URLQueryItem(name: "login", value: "true")) }
+        components?.queryItems = items
         return components?.url
+    }
+
+    /// `host/path` of a URL for the logs: never the query or fragment,
+    /// which carry CAS tickets and session identifiers.
+    static func logLabel(_ url: URL?) -> String {
+        guard let url else { return "nil" }
+        return (url.host ?? "?") + url.path
     }
 
     /// True when `url` is the mobile page of `instance` (any space), i.e.
