@@ -39,6 +39,11 @@ struct PronoteMobileLoginTests {
         let direct = try #require(PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent, directLogin: true))
         let directItems = URLComponents(url: direct, resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(directItems.contains(URLQueryItem(name: "login", value: "true")))
+        // The ENT entry carries no bydlg: that switch turns Pronote's CAS
+        // delegation off (real MonLycée instance, 2026-10-25).
+        let entry = try #require(PronoteMobileLogin.casEntryURL(instance: instance, kind: .parent))
+        #expect(entry.path == "/pronote/mobile.parent.html")
+        #expect(URLComponents(url: entry, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "fd", value: "1")])
         let student = try #require(PronoteMobileLogin.loginPageURL(instance: instance, kind: .student))
         #expect(student.path == "/pronote/mobile.eleve.html")
     }
@@ -75,6 +80,14 @@ struct PronoteMobileLoginTests {
         let url = URL(string: "https://cas.example.fr/cas/login?ticket=ST-secret#frag")
         #expect(PronoteMobileLogin.logLabel(url) == "cas.example.fr/cas/login")
         #expect(PronoteMobileLogin.logLabel(nil) == "nil")
+    }
+
+    @Test("trigger script calls the page's application handshake, escaped")
+    func trigger() {
+        let script = PronoteMobileLogin.triggerScript(deviceUUID: "a'b")
+        #expect(script.contains("GInterface"))
+        #expect(script.contains("passerEnModeValidationAppliMobile('', 'a\\'b')"))
+        #expect(script.contains("'no-interface'"))
     }
 
     @Test("hook script escapes the device id and defines the Pronote hook")
