@@ -65,24 +65,9 @@ final class PawnoteBridge {
                 }
                 globalThis.TextDecoder = TextDecoder;
             }
-            if (typeof URLSearchParams === 'undefined') {
-                class URLSearchParams {
-                    constructor(init) {
-                        this._params = {};
-                        if (typeof init === 'string') {
-                            init.replace(/^\\?/, '').split('&').forEach(p => {
-                                const [k, v] = p.split('=');
-                                if (k) this._params[decodeURIComponent(k)] = decodeURIComponent(v || '');
-                            });
-                        }
-                    }
-                    set(k, v) { this._params[k] = String(v); }
-                    get(k) { return this._params[k] ?? null; }
-                    toString() { return Object.entries(this._params).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&'); }
-                }
-                globalThis.URLSearchParams = URLSearchParams;
-            }
         """)
+
+        context.evaluateScript(Self.urlPolyfillJS)
 
         // Provide a fetch polyfill (pawnote needs HTTP)
         setupFetch(context)
@@ -413,6 +398,62 @@ final class PawnoteBridge {
 
     // MARK: - Fetch Polyfill
 
+    /// URLSearchParams + URL polyfills for JavaScriptCore, which has neither.
+    /// `href` is computed from `searchParams`: pawnote sets Pronote's query
+    /// parameters through `searchParams.set`. Exposed for tests.
+    nonisolated static let urlPolyfillJS = """
+            if (typeof URLSearchParams === 'undefined') {
+                class URLSearchParams {
+                    constructor(init) {
+                        this._params = {};
+                        if (typeof init === 'string') {
+                            init.replace(/^\\?/, '').split('&').forEach(p => {
+                                const [k, v] = p.split('=');
+                                if (k) this._params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+                            });
+                        }
+                    }
+                    set(k, v) { this._params[k] = String(v); }
+                    append(k, v) { this._params[k] = String(v); }
+                    get(k) { return this._params[k] ?? null; }
+                    has(k) { return Object.prototype.hasOwnProperty.call(this._params, k); }
+                    delete(k) { delete this._params[k]; }
+                    entries() { return Object.entries(this._params)[Symbol.iterator](); }
+                    toString() { return Object.entries(this._params).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&'); }
+                }
+                globalThis.URLSearchParams = URLSearchParams;
+            }
+            if (typeof URL === 'undefined') {
+                class URL {
+                    constructor(url, base) {
+                        if (base) url = base.replace(/\\/$/, '') + '/' + url.replace(/^\\//, '');
+                        const match = url.match(/^(https?:\\/\\/[^/?#]+)(\\/[^?#]*)?([^#]*)?/);
+                        this.protocol = url.startsWith('https') ? 'https:' : 'http:';
+                        this.host = match ? match[1].replace(/^https?:\\/\\//, '') : '';
+                        this.hostname = this.host.split(':')[0];
+                        this.pathname = match && match[2] ? match[2] : '/';
+                        const hashIndex = url.indexOf('#');
+                        this.hash = hashIndex === -1 ? '' : url.slice(hashIndex);
+                        this.origin = this.protocol + '//' + this.host;
+                        this.searchParams = new URLSearchParams(match && match[3] ? match[3] : '');
+                    }
+                    // Computed from searchParams so that searchParams.set(...) reaches
+                    // the request: pawnote builds Pronote URLs that way (fd=1, bydlg,
+                    // login). A href frozen at construction dropped them, and Pronote
+                    // answered « Votre navigateur est incompatible » instead of the
+                    // page holding Start() (seen on 2026.2.7 after the MonLycée CAS).
+                    get search() {
+                        const q = this.searchParams.toString();
+                        return q ? '?' + q : '';
+                    }
+                    get href() { return this.origin + this.pathname + this.search + this.hash; }
+                    toString() { return this.href; }
+                    toJSON() { return this.href; }
+                }
+                globalThis.URL = URL;
+            }
+        """
+
     private func setupFetch(_ context: JSContext) {
         // Provide a native fetch implementation for pawnote
         let fetchImpl: @convention(block) (JSValue) -> JSValue = { options in
@@ -506,7 +547,7 @@ final class PawnoteBridge {
         // fetch(url, opts) → { status, content: string, headers }
         context.evaluateScript("""
             globalThis.fetch = async (urlOrHref, opts = {}) => {
-                const url = typeof urlOrHref === 'string' ? urlOrHref : urlOrHref.href || urlOrHref.toString();
+                const url = typeof urlOrHref === 'string' ? urlOrHref : urlOrHref.toString();
                 const result = await __nativeFetch({
                     url: url,
                     method: opts.method || 'GET',
@@ -528,24 +569,6 @@ final class PawnoteBridge {
                 };
             };
 
-            // Also need URL class for pawnote
-            if (typeof URL === 'undefined') {
-                class URL {
-                    constructor(url, base) {
-                        if (base) url = base.replace(/\\/$/, '') + '/' + url.replace(/^\\//, '');
-                        const match = url.match(/^(https?:\\/\\/[^/?#]+)(\\/[^?#]*)?([^#]*)?/);
-                        this.protocol = url.startsWith('https') ? 'https:' : 'http:';
-                        this.host = match ? match[1].replace(/^https?:\\/\\//, '') : '';
-                        this.hostname = this.host.split(':')[0];
-                        this.pathname = match && match[2] ? match[2] : '/';
-                        this.search = match && match[3] ? match[3] : '';
-                        this.href = url;
-                        this.searchParams = new URLSearchParams(this.search);
-                    }
-                    toString() { return this.href; }
-                }
-                globalThis.URL = URL;
-            }
         """)
     }
 

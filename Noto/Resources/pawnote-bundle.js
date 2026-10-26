@@ -22883,7 +22883,7 @@
           pageUrl.searchParams.set(k, v2);
         }
         // Use redirect:follow so CAS redirect chain is traversed
-        const resp = await session.fetcher({ url: pageUrl, redirect: "follow" });
+        const resp = await session.fetcher({ url: pageUrl, redirect: "follow", headers: { "User-Agent": Z } });
         const html = resp.content;
 
         // Extract version — works for both old Pronote (inline Start()) and new Vite builds (meta/script tag)
