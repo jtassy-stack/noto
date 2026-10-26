@@ -86,8 +86,10 @@ struct PronoteMobileLoginTests {
     func trigger() {
         let script = PronoteMobileLogin.triggerScript(deviceUUID: "a'b")
         #expect(script.contains("GInterface"))
-        #expect(script.contains("passerEnModeValidationAppliMobile('', 'a\\'b')"))
-        #expect(script.contains("'no-interface ["))
+        #expect(script.contains("GApplication"))
+        #expect(script.contains("passerEnModeValidationAppliMobile"))
+        #expect(script.contains("o[name]('', 'a\\'b')"))
+        #expect(script.contains("'no-method'"))
     }
 
     @Test("hook script escapes the device id and defines the Pronote hook")
