@@ -47,12 +47,11 @@ struct PronoteWebLoginView: View {
                 urlForm
             case .web:
                 if let instance,
-                   let page = PronoteMobileLogin.casEntryURL(instance: instance, kind: kind),
-                   let appModePage = PronoteMobileLogin.loginPageURL(instance: instance, kind: kind) {
+                   let entry = PronoteMobileLogin.casEntryURL(instance: instance, kind: kind) {
                     ZStack(alignment: .bottom) {
                         PronoteTokenWebView(
-                            pageURL: page,
-                            appModeURL: appModePage,
+                            pageURL: PronoteMobileLogin.infoMobileAppURL(instance: instance) ?? entry,
+                            entryURL: entry,
                             instance: instance,
                             deviceUUID: PronoteAccountStore.deviceUUID(),
                             onToken: { payload in Task { await finish(with: payload) } },
@@ -242,14 +241,15 @@ struct PronoteWebLoginView: View {
 
 // MARK: - Web view
 
-/// WKWebView that loads Pronote's plain mobile page, lets the CAS
-/// redirects happen (the parent signs in on the ENT page), then asks the
-/// authenticated page for the application token (falling back to the
-/// `bydlg` page once) and reports the token document. Entering with `bydlg`
-/// directly turns Pronote's CAS delegation off (see `PronoteMobileLogin`).
+/// WKWebView that opens the instance's `infoMobileApp.json`, sets the
+/// « application » cookies there (`PronoteMobileLogin.appModeCookieScript`),
+/// then loads Pronote's plain mobile page and lets the CAS redirects happen
+/// (the parent signs in on the ENT page). Back on the mobile page, Pronote
+/// renders the token document; meanwhile nōto also asks the page for it.
+/// Never `bydlg`: it turns Pronote's CAS delegation off.
 private struct PronoteTokenWebView: UIViewRepresentable {
     let pageURL: URL
-    let appModeURL: URL
+    let entryURL: URL
     let instance: URL
     let deviceUUID: String
     let onToken: (PronoteMobileLogin.TokenPayload) -> Void
@@ -274,29 +274,29 @@ private struct PronoteTokenWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(instance: instance, appModeURL: appModeURL, deviceUUID: deviceUUID, onToken: onToken, onError: onError)
+        Coordinator(instance: instance, entryURL: entryURL, deviceUUID: deviceUUID, onToken: onToken, onError: onError)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         let instance: URL
-        let appModeURL: URL
+        let entryURL: URL
         let deviceUUID: String
         let onToken: (PronoteMobileLogin.TokenPayload) -> Void
         let onError: (String) -> Void
         private var delivered = false
-        private var appModeLoaded = false
+        private var cookiesSet = false
         /// Bumped on each mobile-page load so a stale poll loop stops.
         private var generation = 0
 
         init(
             instance: URL,
-            appModeURL: URL,
+            entryURL: URL,
             deviceUUID: String,
             onToken: @escaping (PronoteMobileLogin.TokenPayload) -> Void,
             onError: @escaping (String) -> Void
         ) {
             self.instance = instance
-            self.appModeURL = appModeURL
+            self.entryURL = entryURL
             self.deviceUUID = deviceUUID
             self.onToken = onToken
             self.onError = onError
@@ -304,22 +304,24 @@ private struct PronoteTokenWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             logger.debug("didFinish \(PronoteMobileLogin.logLabel(webView.url), privacy: .public)")
-            guard !delivered, let url = webView.url, PronoteMobileLogin.isMobilePage(url, of: instance) else { return }
+            guard !delivered, let url = webView.url else { return }
+            if !cookiesSet, PronoteMobileLogin.isInfoMobileApp(url, of: instance) {
+                cookiesSet = true
+                let script = PronoteMobileLogin.appModeCookieScript(deviceUUID: deviceUUID, next: entryURL)
+                webView.evaluateJavaScript(script) { value, _ in
+                    logger.debug("app cookies → \(value as? String ?? "nil", privacy: .public)")
+                }
+                return
+            }
+            guard PronoteMobileLogin.isMobilePage(url, of: instance) else { return }
             generation += 1
             poll(webView, attempt: 0, generation: generation)
         }
 
-        /// Reads the body for the token; meanwhile asks the page for it
-        /// (attempts 4, 10, 16), then loads the `bydlg` page once.
+        /// Reads the body for the token for 90 s; meanwhile asks the page
+        /// for it every 3 s (at most 6 times).
         private func poll(_ webView: WKWebView, attempt: Int, generation: Int) {
-            guard !delivered, generation == self.generation else { return }
-            if attempt >= 24 {
-                guard !appModeLoaded else { return }
-                appModeLoaded = true
-                logger.debug("loading the bydlg page")
-                webView.load(URLRequest(url: appModeURL))
-                return
-            }
+            guard !delivered, generation == self.generation, attempt < 180 else { return }
             webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { [weak self, weak webView] result, _ in
                 guard let self, !self.delivered, let webView else { return }
                 if let text = result as? String, let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
@@ -327,7 +329,7 @@ private struct PronoteTokenWebView: UIViewRepresentable {
                     self.onToken(payload)
                     return
                 }
-                if !self.appModeLoaded, attempt >= 4, attempt % 6 == 4 {
+                if attempt >= 4, attempt % 6 == 4, attempt < 40 {
                     webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: self.deviceUUID)) { value, _ in
                         logger.debug("trigger → \(value as? String ?? "nil", privacy: .public)")
                     }
@@ -342,6 +344,13 @@ private struct PronoteTokenWebView: UIViewRepresentable {
             let nsError = error as NSError
             // -999 = cancelled by a redirect, the normal CAS dance.
             guard nsError.code != NSURLErrorCancelled else { return }
+            if !cookiesSet, let failing = nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL,
+               PronoteMobileLogin.isInfoMobileApp(failing, of: instance) {
+                // No infoMobileApp.json: go on without the cookies.
+                cookiesSet = true
+                webView.load(URLRequest(url: entryURL))
+                return
+            }
             onError("Impossible d'ouvrir cette page : \(error.localizedDescription)")
         }
     }

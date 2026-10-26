@@ -87,7 +87,7 @@ struct PronoteMobileLoginTests {
         let script = PronoteMobileLogin.triggerScript(deviceUUID: "a'b")
         #expect(script.contains("GInterface"))
         #expect(script.contains("passerEnModeValidationAppliMobile('', 'a\\'b')"))
-        #expect(script.contains("'no-interface'"))
+        #expect(script.contains("'no-interface ["))
     }
 
     @Test("hook script escapes the device id and defines the Pronote hook")
@@ -95,5 +95,27 @@ struct PronoteMobileLoginTests {
         let script = PronoteMobileLogin.hookScript(deviceUUID: "a'b")
         #expect(script.contains("window.hookAccesDepuisAppli"))
         #expect(script.contains("passerEnModeValidationAppliMobile('', 'a\\'b')"))
+    }
+
+    @Test("infoMobileApp URL and detection on the instance host")
+    func infoMobileApp() throws {
+        let instance = try #require(URL(string: "https://0000000a.index-education.net/pronote"))
+        let url = try #require(PronoteMobileLogin.infoMobileAppURL(instance: instance))
+        #expect(url.absoluteString == "https://0000000a.index-education.net/pronote/infoMobileApp.json?id=0D264427-EEFC-4810-A9E9-346942A862A4")
+        #expect(PronoteMobileLogin.isInfoMobileApp(url, of: instance))
+        let other = try #require(URL(string: "https://auth.monlycee.net/infoMobileApp.json"))
+        #expect(!PronoteMobileLogin.isInfoMobileApp(other, of: instance))
+    }
+
+    @Test("app cookie script sets the three cookies and goes to the plain page")
+    func appModeCookies() throws {
+        let next = try #require(URL(string: "https://x.index-education.net/pronote/mobile.parent.html?fd=1"))
+        let script = PronoteMobileLogin.appModeCookieScript(deviceUUID: "a'b", next: next)
+        #expect(script.contains("validationAppliMobile="))
+        #expect(script.contains("jetonCAS"))
+        #expect(script.contains("'uuidAppliMobile=' + 'a\\'b'"))
+        #expect(script.contains("ielang=1036"))
+        #expect(script.contains("window.location.assign('https://x.index-education.net/pronote/mobile.parent.html?fd=1')"))
+        #expect(!script.contains("bydlg"))
     }
 }

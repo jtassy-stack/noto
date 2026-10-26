@@ -83,6 +83,64 @@ enum PronoteMobileLogin {
         loginPageURL(instance: instance, kind: kind, applicationMode: false)
     }
 
+    /// Identifier of the public `infoMobileApp.json` document (the one
+    /// pawnote and the official app read).
+    static let infoMobileAppIdentifier = "0D264427-EEFC-4810-A9E9-346942A862A4"
+
+    /// `<instance>/infoMobileApp.json?id=…`: public, no credentials. It
+    /// describes the instance and, when it delegates to an ENT, carries a
+    /// short-lived `CAS.jetonCAS`.
+    static func infoMobileAppURL(instance: URL) -> URL? {
+        var components = URLComponents(url: instance, resolvingAgainstBaseURL: false)
+        components?.path = instance.path + "/infoMobileApp.json"
+        components?.queryItems = [URLQueryItem(name: "id", value: infoMobileAppIdentifier)]
+        return components?.url
+    }
+
+    /// True when `url` is the `infoMobileApp.json` document of `instance`.
+    static func isInfoMobileApp(_ url: URL, of instance: URL) -> Bool {
+        url.host?.lowercased() == instance.host?.lowercased()
+            && url.lastPathComponent.lowercased() == "infomobileapp.json"
+    }
+
+    /// Run on the `infoMobileApp.json` page (same origin as Pronote): sets
+    /// the cookies Pronote reads to know the visit comes from an application
+    /// (`validationAppliMobile` = the instance's `jetonCAS`,
+    /// `uuidAppliMobile` = this install's device id, `ielang` = French),
+    /// valid 5 minutes, then goes to `next` (the plain mobile page, which
+    /// still goes through the ENT's CAS). Back from the CAS, Pronote calls
+    /// `hookAccesDepuisAppli` and renders the token document. This is the
+    /// method of Papillon's ENT login; `bydlg` is not used, since it turns
+    /// the CAS delegation off. Returns `cas` or `no-cas` for the logs (the
+    /// token itself is never returned).
+    static func appModeCookieScript(deviceUUID: String, next: URL) -> String {
+        """
+        (function () {
+            var status = 'no-cas';
+            try {
+                var info = JSON.parse(document.body ? document.body.innerText : '{}');
+                var jeton = info && info.CAS && info.CAS.jetonCAS;
+                var expires = new Date(Date.now() + 5 * 60 * 1000).toUTCString();
+                var tail = '; expires=' + expires + '; path=/';
+                if (jeton) {
+                    document.cookie = 'validationAppliMobile=' + jeton + tail;
+                    status = 'cas';
+                }
+                document.cookie = 'uuidAppliMobile=' + '\(jsEscaped(deviceUUID))' + tail;
+                document.cookie = 'ielang=1036' + tail;
+            } catch (e) { status = 'error'; }
+            window.location.assign('\(jsEscaped(next.absoluteString))');
+            return status;
+        })();
+        """
+    }
+
+    private static func jsEscaped(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+    }
+
     /// Asks an authenticated mobile page for the « application » token
     /// (the call `hookAccesDepuisAppli` makes in `bydlg` mode). Returns a
     /// short status string for the logs: `called`, `no-method`,
@@ -95,7 +153,13 @@ enum PronoteMobileLogin {
         (function () {
             try {
                 var i = window.GInterface;
-                if (!i) { return 'no-interface'; }
+                if (!i) {
+                    // Names of the page's global objects only (code, never data).
+                    var names = Object.keys(window).filter(function (k) {
+                        return /Interface|Appli|^G[A-Z]/.test(k);
+                    }).slice(0, 8).join(',');
+                    return 'no-interface [' + names + ']';
+                }
                 if (typeof i.passerEnModeValidationAppliMobile !== 'function') { return 'no-method'; }
                 i.passerEnModeValidationAppliMobile('', '\(escaped)');
                 return 'called';

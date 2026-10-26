@@ -162,44 +162,44 @@ struct ENTWebLoginView: View {
         }
     }
 
-    /// Step 2: open the establishment's plain Pronote mobile page in the
-    /// same web view. Pronote sends it through the ENT's CAS, which the
-    /// session just opened lets through silently. Back on an authenticated
-    /// mobile page, nōto asks it for the « application » token
-    /// (`PronoteMobileLogin.triggerScript`); if the page has no such call,
-    /// it reloads the page in `bydlg` mode, now that Pronote holds the CAS
-    /// session. The token document then gives the account login and a
-    /// single-use mobile token, and the session opens with `loginToken`,
-    /// exactly like after a QR scan — no cookie transfer, no patched pawnote.
+    /// Step 2: open Pronote in the same web view, the way Papillon does.
+    /// First the instance's public `infoMobileApp.json`, where nōto sets the
+    /// cookies that tell Pronote the visit comes from an application
+    /// (`PronoteMobileLogin.appModeCookieScript`), then the plain mobile
+    /// page. Pronote sends it through the ENT's CAS, which the session just
+    /// opened lets through silently, and on the way back calls
+    /// `hookAccesDepuisAppli`: the page body becomes the token document
+    /// (account login + single-use mobile token), and the session opens
+    /// with `loginToken`, exactly like after a QR scan.
     ///
-    /// Entering with `bydlg` directly does not work: measured on a real
-    /// MonLycée instance (2026-10-25), that switch turns the CAS delegation
-    /// off and Pronote shows its own login form.
+    /// Never `bydlg`: measured on a real MonLycée instance (2026-10-25/26),
+    /// that switch turns the CAS delegation off and Pronote shows its own
+    /// login form, even with a CAS session open.
     private func capturePronoteToken(instance: URL, entData: [String: Any]) {
         let deviceUUID = PronoteAccountStore.deviceUUID()
         guard let webView = webViewHolder.webView,
-              let entryURL = PronoteMobileLogin.casEntryURL(instance: instance, kind: .parent),
-              let appModeURL = PronoteMobileLogin.loginPageURL(instance: instance, kind: .parent) else {
+              let entryURL = PronoteMobileLogin.casEntryURL(instance: instance, kind: .parent) else {
             onError("WebView non disponible")
             return
         }
+        let infoURL = PronoteMobileLogin.infoMobileAppURL(instance: instance)
 
-        webView.load(URLRequest(url: entryURL))
+        webView.load(URLRequest(url: infoURL ?? entryURL))
 
         let interval = 0.5
         let maxAttempts = 180 // 90 s: CAS round trips can be slow
-        let revealAfter = 16  // 8 s off the mobile page: let the parent see it
+        let revealAfter = 16  // 8 s without a token: let the parent see the page
         var attempts = 0
         var pollsOnMobile = 0
         var triggers = 0
-        var appModeLoaded = false
+        var cookiesSet = infoURL == nil
         #if DEBUG
         var lastLogged = ""
         #endif
 
         func finishWithoutToken() {
             #if DEBUG
-            NSLog("[noto] Pronote via ENT: timeout, last page=\(PronoteMobileLogin.logLabel(webView.url)) triggers=\(triggers) appMode=\(appModeLoaded)")
+            NSLog("[noto] Pronote via ENT: timeout, last page=\(PronoteMobileLogin.logLabel(webView.url)) triggers=\(triggers) cookies=\(cookiesSet)")
             #endif
             showsPronotePage = false
             statusMessage = "Pronote n'a pas répondu — données ENT uniquement"
@@ -210,7 +210,7 @@ struct ENTWebLoginView: View {
 
         func deliver(_ payload: PronoteMobileLogin.TokenPayload) {
             #if DEBUG
-            NSLog("[noto] Pronote via ENT: token received after \(attempts) polls (triggers=\(triggers) appMode=\(appModeLoaded))")
+            NSLog("[noto] Pronote via ENT: token received after \(attempts) polls (triggers=\(triggers))")
             #endif
             var result = entData
             result["_pronoteSSO"] = "success"
@@ -228,24 +228,16 @@ struct ENTWebLoginView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + interval) { poll() }
         }
 
-        /// On the mobile page without a token yet: ask for it a few times,
-        /// then fall back to the `bydlg` page once.
+        /// On the mobile page without a token yet: ask the page for it
+        /// every 3 s, at most 6 times.
         func nudge() {
-            if !appModeLoaded, pollsOnMobile >= 4, pollsOnMobile % 6 == 4, triggers < 3 {
-                triggers += 1
-                let n = triggers
-                webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: deviceUUID)) { value, _ in
-                    #if DEBUG
-                    NSLog("[noto] Pronote via ENT: trigger \(n) → \(value as? String ?? "nil")")
-                    #endif
-                }
-            } else if !appModeLoaded, pollsOnMobile >= 24 {
-                appModeLoaded = true
-                pollsOnMobile = 0
+            guard pollsOnMobile >= 4, pollsOnMobile % 6 == 4, triggers < 6 else { return }
+            triggers += 1
+            let n = triggers
+            webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: deviceUUID)) { value, _ in
                 #if DEBUG
-                NSLog("[noto] Pronote via ENT: loading the bydlg page")
+                NSLog("[noto] Pronote via ENT: trigger \(n) → \(value as? String ?? "nil")")
                 #endif
-                webView.load(URLRequest(url: appModeURL))
             }
         }
 
@@ -260,6 +252,25 @@ struct ENTWebLoginView: View {
                 lastLogged = label
             }
             #endif
+
+            if !cookiesSet, let current = webView.url, PronoteMobileLogin.isInfoMobileApp(current, of: instance), !webView.isLoading {
+                cookiesSet = true
+                webView.evaluateJavaScript(PronoteMobileLogin.appModeCookieScript(deviceUUID: deviceUUID, next: entryURL)) { value, _ in
+                    #if DEBUG
+                    NSLog("[noto] Pronote via ENT: app cookies → \(value as? String ?? "nil")")
+                    #endif
+                }
+                again()
+                return
+            }
+            if !cookiesSet, attempts >= 20 {
+                // infoMobileApp.json never showed up: go on without the cookies.
+                cookiesSet = true
+                #if DEBUG
+                NSLog("[noto] Pronote via ENT: no infoMobileApp page, plain entry")
+                #endif
+                webView.load(URLRequest(url: entryURL))
+            }
 
             guard let current = webView.url, PronoteMobileLogin.isMobilePage(current, of: instance) else {
                 pollsOnMobile = 0
