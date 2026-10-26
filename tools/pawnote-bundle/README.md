@@ -17,3 +17,10 @@ committed file differs from the build.
 
 Lesson contents (cahier de textes, onglet 89) go through pawnote's public
 `resourcesFromIntervals`; the earlier hand patch of the bundle is gone.
+
+One patch remains, applied to pawnote's source at build time by `build.mjs`
+(never to the bundle): pawnote's identification / authentication internals
+are exported as `__noto_*` so the bridge can run `loginENT`, the CAS login
+used by the TestFlight builds for MonLycée. Each internal is checked against
+a signature of pawnote 1.6.2 and the build fails if one is missing, so a
+version bump must re-check them.

@@ -1,9 +1,9 @@
 {
   "name": "noto-pawnote-bundle",
   "private": true,
-  "description": "Reproducible build of Noto/Resources/pawnote-bundle.js (pawnote + bridge, esbuild). No hand patch.",
+  "description": "Reproducible build of Noto/Resources/pawnote-bundle.js (pawnote + bridge, esbuild). The only source patch (build.mjs) exports pawnote internals for the ENT login.",
   "scripts": {
-    "build": "NODE_PATH=./node_modules esbuild ../../Noto/Resources/pawnote-bridge.js --bundle --format=iife --platform=browser --target=es2020 --outfile=../../Noto/Resources/pawnote-bundle.js"
+    "build": "node build.mjs"
   },
   "dependencies": {
     "@niicojs/pawnote": "1.6.2"

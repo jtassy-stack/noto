@@ -91,32 +91,30 @@ final class FullSyncService {
             }
         }
 
-        // MonLycée children: school data through Pronote, news best-effort
+        // MonLycée children: Pronote when a session is open, else (or when
+        // the session does not list the child) the logbook captured at the
+        // last MonLycée login, as in the TestFlight builds.
         if !monlyceeChildren.isEmpty {
-            let newsService = MonLyceeSyncService(modelContext: modelContext)
-            for child in monlyceeChildren { newsService.syncStoredNews(for: child) }
+            let monlyceeService = MonLyceeSyncService(modelContext: modelContext)
+            for child in monlyceeChildren { monlyceeService.syncStoredNews(for: child) }
             if pronoteService.bridge == nil {
                 await PronoteAutoConnect.autoConnect(modelContext: modelContext)
             }
-            if pronoteService.bridge != nil {
-                let syncService = PronoteSyncService(modelContext: modelContext)
-                for child in monlyceeChildren {
-                    guard let (bridge, idx) = pronoteService.resolve(child: child) else {
-                        logger.warning("Skipping monlycee sync for \(child.firstName, privacy: .private): no matching pawnote resource")
-                        result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via QR code pour relier cet enfant à Pronote.")
-                        continue
-                    }
+            let syncService = PronoteSyncService(modelContext: modelContext)
+            for child in monlyceeChildren {
+                if let (bridge, idx) = pronoteService.resolve(child: child) {
                     await syncService.sync(child: child, bridge: bridge, childIndex: idx)
                     if !syncService.failedCategories.isEmpty {
                         result.errors.append("Sync incomplète pour \(child.firstName) : \(syncService.failedCategories.joined(separator: ", "))")
                     }
+                    continue
                 }
-            } else {
-                // No Pronote session and no logbook snapshot any more (it
-                // froze homework and grades at login time): the data cannot
-                // be refreshed, and the parent is told why.
-                for child in monlyceeChildren {
-                    result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via MonLycée pour rouvrir Pronote.")
+                // An absent or non-matching logbook is a failure, not an
+                // empty sync: otherwise the child would be stamped as synced
+                // with no data and no way for the parent to know.
+                if !monlyceeService.syncFromStoredLogbook(for: child) {
+                    logger.warning("No Pronote session nor logbook for \(child.firstName, privacy: .private)")
+                    result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via MonLycée.")
                 }
             }
 

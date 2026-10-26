@@ -587,6 +587,9 @@ struct SettingsView: View {
         PronoteAccountStore.removeAll()
         PronoteService.shared.disconnect()
         try? IMAPService.clearAllConfigs()
+        MonLyceeLogbookStore.clear()
+        MonLyceeNewsStore.clear()
+        MonLyceeNewsStore.purgeLegacyDefaults()
         imapConfigs = []
         try? modelContext.save()
     }

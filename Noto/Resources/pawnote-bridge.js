@@ -2,10 +2,9 @@
 // This file is bundled with all dependencies into pawnote-bundle.js
 //
 // Rebuild with `tools/pawnote-bundle/build.sh` (pinned pawnote + esbuild,
-// no hand patch: CI checks that the committed bundle matches). ENT logins
-// do not go through the bundle: the web view captures the mobile token on
-// Pronote's own page (PronoteMobileLogin.swift) and the session opens with
-// loginToken, like after a QR scan.
+// no hand patch: CI checks that the committed bundle matches). The build
+// exports a few pawnote internals as `__noto_*` (tools/pawnote-bundle/
+// build.mjs) for `loginENT`, the CAS login the TestFlight builds used.
 
 import * as pronote from "@niicojs/pawnote";
 
@@ -80,6 +79,93 @@ globalThis.PawnoteBridge = {
         deviceUUID,
         navigatorIdentifier: navigatorIdentifier || undefined,
       });
+    } catch (e) {
+      throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+    }
+    return {
+      token: refresh.token,
+      username: refresh.username,
+      url: refresh.url,
+      kind: refresh.kind,
+      navigatorIdentifier: refresh.navigatorIdentifier ?? null,
+    };
+  },
+
+  // ENT/CAS login, as in the TestFlight builds: the web view opened the
+  // Pronote mobile page through the ENT's CAS and its cookies were copied to
+  // HTTPCookieStorage (PawnoteBridge.transferCookies). The page is fetched
+  // again here with redirect:follow (pawnote's own fetch uses manual
+  // redirects, which break the CAS chain), then Identification with
+  // useCAS, a challenge solved with an empty password (the CAS session is
+  // the authentication) and Authentification. No password is ever handled.
+  loginENT: async (session, url, deviceUUID) => {
+    const baseUrl = pronote.__noto_cleanURL(url);
+    let information, version;
+    try {
+      const pageUrl = new URL(baseUrl + "/mobile.parent.html");
+      for (const [k, v] of Object.entries({ ...pronote.__noto_loginParams, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" })) {
+        pageUrl.searchParams.set(k, v);
+      }
+      const resp = await session.fetcher({ url: pageUrl, redirect: "follow" });
+      const html = resp.content;
+      const versionMatch = html.match(/>PRONOTE (?<version>\d+\.\d+\.\d+)/) ||
+                           html.match(/["'](?<version>\d{4}\.\d+\.\d+\.\d+)["']/) ||
+                           html.match(/versionPN['":\s]+['"](?<version>[\d.]+)['"]/);
+      const versionStr = versionMatch?.groups?.version || versionMatch?.[1];
+      if (!versionStr) throw new Error("version not found (len=" + html.length + ")");
+      version = versionStr.split(".").map(Number);
+      const noSpaces = html.replace(/ /gu, "").replace(/\n/gu, "");
+      const startIdx = noSpaces.indexOf("Start(");
+      if (startIdx === -1) throw new Error("Start() not found (len=" + html.length + ")");
+      const endIdx = noSpaces.indexOf(")}catch");
+      const startJson = noSpaces.substring(startIdx + 6, endIdx)
+        .replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ')
+        .replace(/'/gu, '"');
+      information = pronote.__noto_parseSessionInformation(JSON.parse(startJson), baseUrl, version);
+    } catch (e) {
+      throw new Error("ENT_PAGE_FAIL: " + (e && e.message || String(e)));
+    }
+    session.information = information;
+    session.instance = { version };
+    try {
+      session.instance = await pronote.__noto_instanceParameters(session);
+    } catch (e) {
+      throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
+    }
+
+    let identity;
+    try {
+      identity = await pronote.__noto_identify(session, {
+        username: "",
+        deviceUUID,
+        requestFirstMobileAuthentication: true,
+        reuseMobileAuthentication: false,
+        requestFromQRCode: false,
+        useCAS: true,
+      });
+    } catch (e) {
+      throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
+    }
+
+    const username = identity.login || "";
+    const credentials = { username, password: "" };
+    pronote.__noto_transformCredentials(credentials, "password", identity);
+    const key = pronote.__noto_createAuthKey(identity, credentials.username, credentials.password);
+    let authentication;
+    try {
+      const challenge = pronote.__noto_solveChallenge(session, identity, key);
+      authentication = await pronote.__noto_authenticate(session, challenge);
+    } catch (e) {
+      throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
+    }
+    pronote.__noto_switchToAuthKey(session, authentication, key);
+
+    let refresh;
+    try {
+      if (pronote.__noto_hasDoubleAuth(authentication)) {
+        throw new pronote.SecurityError(authentication, identity, username);
+      }
+      refresh = await pronote.finishLoginManually(session, authentication, identity, username);
     } catch (e) {
       throw globalThis.PawnoteBridge._doubleAuthError(session, e);
     }

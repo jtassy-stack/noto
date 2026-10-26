@@ -14,9 +14,6 @@ struct ENTLoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    /// MonLycée saved its children but Pronote did not open: the error
-    /// screen also offers to continue without Pronote.
-    @State private var canContinueWithoutPronote = false
 
     private var family: Family? { families.first }
     private var needsWebAuth: Bool { provider == .monlycee }
@@ -41,9 +38,6 @@ struct ENTLoginView: View {
                             Button("Réessayer") { errorMessage = nil }
                                 .buttonStyle(.borderedProminent)
                                 .tint(NotoTheme.Colors.brand)
-                            if canContinueWithoutPronote {
-                                Button("Continuer sans Pronote") { onDismissAll?() ?? dismiss() }
-                            }
                         }
                         .padding(NotoTheme.Spacing.xl)
                     } else {
@@ -110,7 +104,6 @@ struct ENTLoginView: View {
     private func handleWebLoginSuccess(json: [String: Any]) async {
         isLoading = true
         errorMessage = nil
-        canContinueWithoutPronote = false
 
         #if DEBUG
         NSLog("[noto] Web login data keys: \(json.keys.sorted())")
@@ -170,17 +163,21 @@ struct ENTLoginView: View {
         NSLog("[noto] MonLycée: \(entChildren.count) children, pronote=\(json["_pronoteSSO"] as? String ?? "nil")")
         #endif
 
-        // The logbook (homework and grades of every child) is read above
-        // for the roster only and never stored: school data comes from the
-        // Pronote session below. Only the news survive the login, in a
-        // protected file. Earlier builds kept both in UserDefaults.
+        // The logbook (homework, grades and class of every child) and the
+        // news feed the MonLycée children whenever no Pronote session lists
+        // them, as in the TestFlight builds. Kept in protected files on the
+        // device; earlier builds wrote them to UserDefaults.
         MonLyceeNewsStore.purgeLegacyDefaults()
+        if let logbook = json["logbook"] as? [String: Any] {
+            do { try MonLyceeLogbookStore.save(logbook) }
+            catch { NSLog("[noto] MonLycée logbook not stored: %@", error.localizedDescription) }
+        }
         if let news = json["news"] as? [[String: Any]] {
             do { try MonLyceeNewsStore.save(news) }
             catch { NSLog("[noto] MonLycée news not stored: %@", error.localizedDescription) }
         }
 
-        NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote=\(pronoteToken != nil)")
+        NSLog("[noto] \(provider.name) found \(entChildren.count) children, pronote token=\(pronoteToken != nil)")
 
         guard let family else {
             errorMessage = "Aucune famille configurée."
@@ -188,14 +185,25 @@ struct ENTLoginView: View {
             return
         }
 
-        // Cookies to HTTPCookieStorage: the monlycee.net mail client needs them.
-        await transferMonlyceeCookies()
+        // Cookies to HTTPCookieStorage: the monlycee.net mail client needs
+        // them, and pawnote's fetch reuses the CAS ones for loginENT.
+        let pronoteURL = (json["_pronoteURL"] as? String).flatMap { URL(string: $0) }
+        await transferWebViewCookies(pronoteHost: pronoteURL?.host)
 
         // Pronote first: the session's own roster creates (or refreshes) the
-        // Pronote children, deduped exactly like after a QR scan.
+        // Pronote children, deduped exactly like after a QR scan. Mobile
+        // token if the page gave one, else the CAS login of the TestFlight
+        // builds. A failure is not fatal: the logbook below still feeds the
+        // MonLycée children.
         var pronoteOpened = false
         if let pronoteToken {
-            pronoteOpened = await establishPronoteSession(token: pronoteToken, family: family)
+            pronoteOpened = await establishPronoteSession(family: family) { bridge, deviceUUID in
+                try await bridge.loginWithToken(pronoteToken, deviceUUID: deviceUUID)
+            }
+        } else if json["_pronoteSSO"] as? String == "success", let pronoteURL {
+            pronoteOpened = await establishPronoteSession(family: family) { bridge, deviceUUID in
+                try await bridge.loginENT(url: pronoteURL.absoluteString, deviceUUID: deviceUUID)
+            }
         }
 
         guard !entChildren.isEmpty || pronoteOpened else {
@@ -244,10 +252,14 @@ struct ENTLoginView: View {
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
 
-        // The school's news captured above, as messages of each ENT child.
-        let newsService = MonLyceeSyncService(modelContext: modelContext)
+        // The school's news, and homework / grades / class from the logbook
+        // for every MonLycée child no Pronote session lists.
+        let monlyceeService = MonLyceeSyncService(modelContext: modelContext)
         for child in family.children where child.entProvider == provider {
-            newsService.syncStoredNews(for: child)
+            monlyceeService.syncStoredNews(for: child)
+            if PronoteService.shared.resolve(child: child) == nil {
+                monlyceeService.syncFromStoredLogbook(for: child)
+            }
         }
 
         // Mail via the SSO session cookies — skipped when the parent
@@ -270,31 +282,22 @@ struct ENTLoginView: View {
             }
         }
 
+        // As in the TestFlight builds, the sheet closes even when Pronote did
+        // not open: the MonLycée children already have the logbook's
+        // homework and grades.
+        if !pronoteOpened {
+            NSLog("[noto] MonLycée: Pronote not opened (sso=%@), logbook only", json["_pronoteSSO"] as? String ?? "nil")
+        }
         isLoading = false
-        if pronoteToken != nil && !pronoteOpened {
-            // The ENT children exist (news + mail work), but without the
-            // Pronote session their homework and grades stay empty: say so
-            // instead of closing the sheet as if everything had worked.
-            canContinueWithoutPronote = true
-            errorMessage = "MonLycée est connecté, mais Pronote a refusé d'ouvrir la session. Réessayez, ou scannez le QR code Pronote."
-            return
-        }
-        if json["_pronoteSSO"] as? String == "timeout" {
-            // Same when Pronote never answered on its mobile page.
-            // « Réessayer » reruns the login; children are matched, never
-            // duplicated.
-            canContinueWithoutPronote = true
-            errorMessage = "MonLycée est connecté, mais Pronote n'a pas répondu : les notes, les devoirs et l'emploi du temps ne sont pas encore disponibles. Réessayez, ou ajoutez Pronote avec le QR code."
-            return
-        }
         onDismissAll?() ?? dismiss()
     }
 
-    /// Transfers monlycee.net cookies (session + CSRF) from the SSO
-    /// WKWebView into `HTTPCookieStorage.shared`, where `URLSession.shared`
-    /// (and pawnote's own fetch) picks them up automatically.
+    /// Transfers the login web view's cookies into `HTTPCookieStorage.shared`,
+    /// where `URLSession.shared` (and pawnote's own fetch) picks them up:
+    /// monlycee.net session + CSRF for the mail client, and the Pronote /
+    /// CAS ones for `loginENT`.
     @MainActor
-    private func transferMonlyceeCookies() async {
+    private func transferWebViewCookies(pronoteHost: String?) async {
         let cookies = await withCheckedContinuation { continuation in
             WKWebsiteDataStore.default().httpCookieStore.getAllCookies {
                 continuation.resume(returning: $0)
@@ -303,6 +306,8 @@ struct ENTLoginView: View {
         for cookie in cookies where MonLyceeWebmailClient.isMonLyceeDomain(cookie.domain) {
             HTTPCookieStorage.shared.setCookie(cookie)
         }
+        let transferred = PawnoteBridge.transferCookies(cookies, pronoteHost: pronoteHost)
+        NSLog("[noto] MonLycée: %d/%d cookies for Pronote", transferred, cookies.count)
     }
 
     // MARK: - PCN Web Login Success
@@ -358,18 +363,21 @@ struct ENTLoginView: View {
 
     // MARK: - Pronote Session from the ENT token
 
-    /// Opens the Pronote session with the single-use token the web view
-    /// captured, stores the renewed token (PronoteAutoConnect replays it on
-    /// the next launches) and imports the roster through the shared
-    /// importer. A failure is not fatal: the ENT data still works and the
-    /// parent can retry or scan a QR code.
+    /// Opens the Pronote session (`login`: the token the web view captured,
+    /// or the CAS login), stores the renewed token (PronoteAutoConnect
+    /// replays it on the next launches) and imports the roster through the
+    /// shared importer. A failure is not fatal: the logbook still feeds the
+    /// MonLycée children and the parent can retry or scan a QR code.
     @MainActor
     @discardableResult
-    private func establishPronoteSession(token: PronoteRefreshToken, family: Family) async -> Bool {
+    private func establishPronoteSession(
+        family: Family,
+        login: (PawnoteBridge, String) async throws -> PronoteRefreshToken
+    ) async -> Bool {
         let deviceUUID = PronoteAccountStore.deviceUUID()
         do {
             let bridge = try PawnoteBridge()
-            let renewed = try await bridge.loginWithToken(token, deviceUUID: deviceUUID)
+            let renewed = try await login(bridge, deviceUUID)
             do {
                 try PronoteAccountStore.save(renewed)
             } catch {

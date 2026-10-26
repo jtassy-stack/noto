@@ -162,65 +162,48 @@ struct ENTWebLoginView: View {
         }
     }
 
-    /// Step 2: open Pronote in the same web view, the way Papillon does.
-    /// First the instance's public `infoMobileApp.json`, where nōto sets the
-    /// cookies that tell Pronote the visit comes from an application
-    /// (`PronoteMobileLogin.appModeCookieScript`), then the plain mobile
-    /// page. Pronote sends it through the ENT's CAS, which the session just
-    /// opened lets through silently, and on the way back calls
-    /// `hookAccesDepuisAppli`: the page body becomes the token document
-    /// (account login + single-use mobile token), and the session opens
-    /// with `loginToken`, exactly like after a QR scan.
+    /// Step 2, as in the TestFlight builds: open the plain Pronote mobile
+    /// page in the same web view. Pronote sends it through the ENT's CAS,
+    /// which the session just opened lets through silently. Once the web
+    /// view is back on that page, the CAS cookies it now holds let
+    /// `PawnoteBridge.loginENT` open the Pronote session (ENTLoginView). If
+    /// the page itself happens to render the mobile token document, it is
+    /// passed along too (`loginToken`, same as a QR scan).
     ///
-    /// Never `bydlg`: measured on a real MonLycée instance (2026-10-25/26),
+    /// Never `bydlg` here: measured on a real MonLycée instance (2026-10-25),
     /// that switch turns the CAS delegation off and Pronote shows its own
-    /// login form, even with a CAS session open.
+    /// login form.
     private func capturePronoteToken(instance: URL, entData: [String: Any]) {
-        let deviceUUID = PronoteAccountStore.deviceUUID()
         guard let webView = webViewHolder.webView,
               let entryURL = PronoteMobileLogin.casEntryURL(instance: instance, kind: .parent) else {
             onError("WebView non disponible")
             return
         }
-        let infoURL = PronoteMobileLogin.infoMobileAppURL(instance: instance)
-
-        webView.load(URLRequest(url: infoURL ?? entryURL))
+        webView.load(URLRequest(url: entryURL))
 
         let interval = 0.5
-        let maxAttempts = 300 // 150 s: CAS round trips and Pronote can be slow
-        let revealAfter = 16  // 8 s without a token: let the parent see the page
+        let maxAttempts = 90  // 45 s: the CAS round trip and Pronote can be slow
+        let revealAfter = 16  // 8 s: let the parent see the page (a CAS form, if any)
         var attempts = 0
-        var pollsOnMobile = 0
-        var triggers = 0
-        var cookiesSet = infoURL == nil
+        var finished = false
         #if DEBUG
         var lastLogged = ""
         #endif
 
-        func finishWithoutToken() {
+        func finish(_ status: String, token: PronoteMobileLogin.TokenPayload? = nil) {
+            guard !finished else { return }
+            finished = true
             #if DEBUG
-            NSLog("[noto] Pronote via ENT: timeout, last page=\(PronoteMobileLogin.logLabel(webView.url)) triggers=\(triggers) cookies=\(cookiesSet)")
-            #endif
-            showsPronotePage = false
-            statusMessage = "Pronote n'a pas répondu — données ENT uniquement"
-            var result = entData
-            result["_pronoteSSO"] = "timeout"
-            onSuccess(result)
-        }
-
-        func deliver(_ payload: PronoteMobileLogin.TokenPayload) {
-            #if DEBUG
-            NSLog("[noto] Pronote via ENT: token received after \(attempts) polls (triggers=\(triggers))")
+            NSLog("[noto] Pronote via ENT: \(status) after \(attempts) polls, page=\(PronoteMobileLogin.logLabel(webView.url))")
             #endif
             var result = entData
-            result["_pronoteSSO"] = "success"
-            result["_pronoteToken"] = [
-                "login": payload.login,
-                "mdp": payload.token,
-                "url": instance.absoluteString,
-            ]
+            result["_pronoteSSO"] = status
+            result["_pronoteURL"] = instance.absoluteString
+            if let token {
+                result["_pronoteToken"] = ["login": token.login, "mdp": token.token, "url": instance.absoluteString]
+            }
             showsPronotePage = false
-            statusMessage = "Pronote connecté !"
+            statusMessage = status == "timeout" ? "Pronote n'a pas répondu — données MonLycée uniquement" : "Ouverture de Pronote…"
             onSuccess(result)
         }
 
@@ -228,23 +211,16 @@ struct ENTWebLoginView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + interval) { poll() }
         }
 
-        /// On the loaded mobile page without a token yet: ask the page for
-        /// it every 3 s until the wait ends. Only once the page has finished
-        /// loading: the CAS round trip goes through the same URL first.
-        func nudge() {
-            guard !webView.isLoading, pollsOnMobile >= 2, pollsOnMobile % 6 == 2 else { return }
-            triggers += 1
-            let n = triggers
-            webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: deviceUUID)) { value, _ in
-                #if DEBUG
-                NSLog("[noto] Pronote via ENT: trigger \(n) → \(value as? String ?? "nil")")
-                #endif
-            }
-        }
-
         func poll() {
+            guard !finished else { return }
             attempts += 1
-            guard attempts <= maxAttempts else { finishWithoutToken(); return }
+            let onMobilePage = webView.url.map { PronoteMobileLogin.isMobilePage($0, of: instance) } ?? false
+            guard attempts <= maxAttempts else {
+                // Still on the Pronote page (slow to finish loading): the CAS
+                // went through, loginENT can try. Elsewhere: Pronote never came.
+                finish(onMobilePage ? "success" : "timeout")
+                return
+            }
 
             #if DEBUG
             let label = PronoteMobileLogin.logLabel(webView.url)
@@ -254,48 +230,14 @@ struct ENTWebLoginView: View {
             }
             #endif
 
-            if !cookiesSet, let current = webView.url, PronoteMobileLogin.isInfoMobileApp(current, of: instance), !webView.isLoading {
-                cookiesSet = true
-                webView.evaluateJavaScript(PronoteMobileLogin.appModeCookieScript(deviceUUID: deviceUUID, next: entryURL)) { value, _ in
-                    #if DEBUG
-                    NSLog("[noto] Pronote via ENT: app cookies → \(value as? String ?? "nil")")
-                    #endif
-                }
-                again()
-                return
-            }
-            if !cookiesSet, attempts >= 20 {
-                // infoMobileApp.json never showed up: go on without the cookies.
-                cookiesSet = true
-                #if DEBUG
-                NSLog("[noto] Pronote via ENT: no infoMobileApp page, plain entry")
-                #endif
-                webView.load(URLRequest(url: entryURL))
-            }
-
-            guard let current = webView.url, PronoteMobileLogin.isMobilePage(current, of: instance) else {
-                pollsOnMobile = 0
+            guard onMobilePage, !webView.isLoading else {
                 if attempts >= revealAfter { showsPronotePage = true }
                 again()
                 return
             }
-
-            if !webView.isLoading { pollsOnMobile += 1 }
             webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { value, _ in
-                let text = value as? String ?? ""
-                if let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
-                    deliver(payload)
-                    return
-                }
-                #if DEBUG
-                if attempts % 20 == 0 {
-                    // Length only: the body may hold the parent's name.
-                    NSLog("[noto] Pronote via ENT: mobile page without token (\(text.count) chars)")
-                }
-                #endif
-                if attempts >= revealAfter { showsPronotePage = true }
-                nudge()
-                again()
+                let payload = PronoteMobileLogin.parseTokenPayload(bodyText: value as? String ?? "")
+                finish("success", token: payload)
             }
         }
 

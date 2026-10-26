@@ -130,6 +130,56 @@ final class PawnoteBridge {
         return Self.refreshToken(from: dict)
     }
 
+    /// Opens Pronote through an ENT's CAS, the way the TestFlight builds did
+    /// for MonLycée: the login web view already went through the CAS to the
+    /// Pronote mobile page, and its cookies must be in
+    /// `HTTPCookieStorage.shared` (`transferCookies(_:)`) first. Returns the
+    /// mobile token every later launch replays with `loginWithToken`.
+    func loginENT(url: String, deviceUUID: String) async throws -> PronoteRefreshToken {
+        context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
+        session = context.objectForKeyedSubscript("_pawnoteSession")
+
+        let result = try await callAsync("""
+            PawnoteBridge.loginENT(
+                \(sessionRef),
+                "\(url.jsEscaped)",
+                "\(deviceUUID.jsEscaped)"
+            )
+        """)
+
+        guard let dict = result.toDictionary() as? [String: Any] else {
+            throw PronoteError.invalidResponse("Invalid ENT login response")
+        }
+        return Self.refreshToken(from: dict)
+    }
+
+    /// Copies the login web view's cookies of the Pronote host, the ENT and
+    /// its CAS into `HTTPCookieStorage.shared`, where pawnote's native fetch
+    /// reads them. Returns how many were copied (cookie names and values are
+    /// never logged).
+    @MainActor
+    @discardableResult
+    static func transferCookies(_ cookies: [HTTPCookie], pronoteHost: String?) -> Int {
+        let storage = HTTPCookieStorage.shared
+        var transferred = 0
+        for cookie in cookies where shouldTransfer(cookieDomain: cookie.domain, pronoteHost: pronoteHost) {
+            storage.setCookie(cookie)
+            transferred += 1
+        }
+        return transferred
+    }
+
+    /// Pronote's own host, any index-education / pronote domain, and the
+    /// MonLycée ENT and CAS domains.
+    nonisolated static func shouldTransfer(cookieDomain: String, pronoteHost: String?) -> Bool {
+        let domain = cookieDomain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if let host = pronoteHost?.lowercased(), !domain.isEmpty,
+           host == domain || host.hasSuffix("." + domain) {
+            return true
+        }
+        return ["monlycee", "index-education", "pronote"].contains { domain.contains($0) }
+    }
+
     /// Reopens a session from a stored token. Replays the account kind and
     /// the navigator identifier of the previous login (see
     /// `PronoteRefreshToken`); a missing navigator id (token stored by an

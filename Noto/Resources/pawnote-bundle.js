@@ -22791,6 +22791,85 @@
         navigatorIdentifier: refresh.navigatorIdentifier ?? null
       };
     },
+    // ENT/CAS login, as in the TestFlight builds: the web view opened the
+    // Pronote mobile page through the ENT's CAS and its cookies were copied to
+    // HTTPCookieStorage (PawnoteBridge.transferCookies). The page is fetched
+    // again here with redirect:follow (pawnote's own fetch uses manual
+    // redirects, which break the CAS chain), then Identification with
+    // useCAS, a challenge solved with an empty password (the CAS session is
+    // the authentication) and Authentification. No password is ever handled.
+    loginENT: async (session, url, deviceUUID) => {
+      const baseUrl = a(url);
+      let information, version;
+      try {
+        const pageUrl = new URL(baseUrl + "/mobile.parent.html");
+        for (const [k, v2] of Object.entries({ ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" })) {
+          pageUrl.searchParams.set(k, v2);
+        }
+        const resp = await session.fetcher({ url: pageUrl, redirect: "follow" });
+        const html = resp.content;
+        const versionMatch = html.match(/>PRONOTE (?<version>\d+\.\d+\.\d+)/) || html.match(/["'](?<version>\d{4}\.\d+\.\d+\.\d+)["']/) || html.match(/versionPN['":\s]+['"](?<version>[\d.]+)['"]/);
+        const versionStr = versionMatch?.groups?.version || versionMatch?.[1];
+        if (!versionStr) throw new Error("version not found (len=" + html.length + ")");
+        version = versionStr.split(".").map(Number);
+        const noSpaces = html.replace(/ /gu, "").replace(/\n/gu, "");
+        const startIdx = noSpaces.indexOf("Start(");
+        if (startIdx === -1) throw new Error("Start() not found (len=" + html.length + ")");
+        const endIdx = noSpaces.indexOf(")}catch");
+        const startJson = noSpaces.substring(startIdx + 6, endIdx).replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ').replace(/'/gu, '"');
+        information = W(JSON.parse(startJson), baseUrl, version);
+      } catch (e) {
+        throw new Error("ENT_PAGE_FAIL: " + (e && e.message || String(e)));
+      }
+      session.information = information;
+      session.instance = { version };
+      try {
+        session.instance = await me(session);
+      } catch (e) {
+        throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
+      }
+      let identity;
+      try {
+        identity = await he(session, {
+          username: "",
+          deviceUUID,
+          requestFirstMobileAuthentication: true,
+          reuseMobileAuthentication: false,
+          requestFromQRCode: false,
+          useCAS: true
+        });
+      } catch (e) {
+        throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
+      }
+      const username = identity.login || "";
+      const credentials = { username, password: "" };
+      Ne(credentials, "password", identity);
+      const key = Pe(identity, credentials.username, credentials.password);
+      let authentication;
+      try {
+        const challenge = Se(session, identity, key);
+        authentication = await fe(session, challenge);
+      } catch (e) {
+        throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
+      }
+      Ie(session, authentication, key);
+      let refresh;
+      try {
+        if (Le(authentication)) {
+          throw new f(authentication, identity, username);
+        }
+        refresh = await Te(session, authentication, identity, username);
+      } catch (e) {
+        throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+      }
+      return {
+        token: refresh.token,
+        username: refresh.username,
+        url: refresh.url,
+        kind: refresh.kind,
+        navigatorIdentifier: refresh.navigatorIdentifier ?? null
+      };
+    },
     // Credentials login
     loginCredentials: async (session, url, username, password, deviceUUID) => {
       let refresh;
