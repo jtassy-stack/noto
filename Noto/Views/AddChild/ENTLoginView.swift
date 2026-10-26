@@ -163,15 +163,10 @@ struct ENTLoginView: View {
         NSLog("[noto] MonLycée: \(entChildren.count) children, pronote=\(json["_pronoteSSO"] as? String ?? "nil")")
         #endif
 
-        // The logbook (homework, grades and class of every child) and the
-        // news feed the MonLycée children whenever no Pronote session lists
-        // them, as in the TestFlight builds. Kept in protected files on the
-        // device; earlier builds wrote them to UserDefaults.
+        // The logbook is read above for the roster only and never stored:
+        // school data comes from the Pronote session below. Only the news
+        // survive the login, in a protected file.
         MonLyceeNewsStore.purgeLegacyDefaults()
-        if let logbook = json["logbook"] as? [String: Any] {
-            do { try MonLyceeLogbookStore.save(logbook) }
-            catch { NSLog("[noto] MonLycée logbook not stored: %@", error.localizedDescription) }
-        }
         if let news = json["news"] as? [[String: Any]] {
             do { try MonLyceeNewsStore.save(news) }
             catch { NSLog("[noto] MonLycée news not stored: %@", error.localizedDescription) }
@@ -193,8 +188,8 @@ struct ENTLoginView: View {
         // Pronote first: the session's own roster creates (or refreshes) the
         // Pronote children, deduped exactly like after a QR scan. Mobile
         // token if the page gave one, else the CAS login of the TestFlight
-        // builds. A failure is not fatal: the logbook below still feeds the
-        // MonLycée children.
+        // builds. A failure is not fatal: the sheet closes like in those
+        // builds.
         var pronoteOpened = false
         if let pronoteToken {
             pronoteOpened = await establishPronoteSession(family: family) { bridge, deviceUUID in
@@ -252,14 +247,10 @@ struct ENTLoginView: View {
         do { try modelContext.save() }
         catch { NSLog("[noto] Failed to save children: \(error)") }
 
-        // The school's news, and homework / grades / class from the logbook
-        // for every MonLycée child no Pronote session lists.
-        let monlyceeService = MonLyceeSyncService(modelContext: modelContext)
+        // The school's news captured above, as messages of each ENT child.
+        let newsService = MonLyceeSyncService(modelContext: modelContext)
         for child in family.children where child.entProvider == provider {
-            monlyceeService.syncStoredNews(for: child)
-            if PronoteService.shared.resolve(child: child) == nil {
-                monlyceeService.syncFromStoredLogbook(for: child)
-            }
+            newsService.syncStoredNews(for: child)
         }
 
         // Mail via the SSO session cookies — skipped when the parent
@@ -283,10 +274,9 @@ struct ENTLoginView: View {
         }
 
         // As in the TestFlight builds, the sheet closes even when Pronote did
-        // not open: the MonLycée children already have the logbook's
-        // homework and grades.
+        // not open; the next sync retries.
         if !pronoteOpened {
-            NSLog("[noto] MonLycée: Pronote not opened (sso=%@), logbook only", json["_pronoteSSO"] as? String ?? "nil")
+            NSLog("[noto] MonLycée: Pronote not opened (sso=%@)", json["_pronoteSSO"] as? String ?? "nil")
         }
         isLoading = false
         onDismissAll?() ?? dismiss()
@@ -366,8 +356,8 @@ struct ENTLoginView: View {
     /// Opens the Pronote session (`login`: the token the web view captured,
     /// or the CAS login), stores the renewed token (PronoteAutoConnect
     /// replays it on the next launches) and imports the roster through the
-    /// shared importer. A failure is not fatal: the logbook still feeds the
-    /// MonLycée children and the parent can retry or scan a QR code.
+    /// shared importer. A failure is not fatal: the parent can retry or scan
+    /// a QR code.
     @MainActor
     @discardableResult
     private func establishPronoteSession(
