@@ -142,28 +142,58 @@ enum PronoteMobileLogin {
     }
 
     /// Asks an authenticated mobile page for the « application » token
-    /// (the call `hookAccesDepuisAppli` makes in `bydlg` mode). Returns a
-    /// short status string for the logs: `called`, `no-method`,
-    /// `no-interface` (page not ready, or the login form) or `error`.
+    /// (the call `hookAccesDepuisAppli` makes in application mode). The
+    /// method `passerEnModeValidationAppliMobile` is looked up on
+    /// `GInterface`, `GApplication` and the objects `GApplication` holds
+    /// (and their prototypes), then called on its owner. Returns a short
+    /// diagnostic for the logs, code names only, never page data:
+    /// `called <path>` or `no-method`, plus how many times Pronote called
+    /// our hook (and the error it raised), the `GApplication` member names
+    /// that look related, and the cookie names (not values).
     static func triggerScript(deviceUUID: String) -> String {
-        let escaped = deviceUUID
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "'", with: "\\'")
-        return """
+        """
         (function () {
+            var out = [];
             try {
-                var i = window.GInterface;
-                if (!i) {
-                    // Names of the page's global objects only (code, never data).
-                    var names = Object.keys(window).filter(function (k) {
-                        return /Interface|Appli|^G[A-Z]/.test(k);
-                    }).slice(0, 8).join(',');
-                    return 'no-interface [' + names + ']';
+                var h = window.__notoHook || { calls: 0, error: '' };
+                out.push('hook=' + h.calls + (h.error ? '(' + h.error + ')' : ''));
+                var name = 'passerEnModeValidationAppliMobile';
+                var owners = [];
+                if (window.GInterface) { owners.push(['GInterface', window.GInterface]); }
+                var app = window.GApplication;
+                if (app) {
+                    owners.push(['GApplication', app]);
+                    for (var k in app) {
+                        try {
+                            var v = app[k];
+                            if (v && (typeof v === 'object' || typeof v === 'function')) {
+                                owners.push(['GApplication.' + k, v]);
+                            }
+                        } catch (e) {}
+                    }
+                    var names = [];
+                    for (var p = app; p && names.length < 15; p = Object.getPrototypeOf(p)) {
+                        Object.getOwnPropertyNames(p).forEach(function (n) {
+                            if (/Appli|Mobile|Interface|Connexion|Ident/.test(n) && names.indexOf(n) < 0) { names.push(n); }
+                        });
+                        if (p === Object.prototype) { break; }
+                    }
+                    out.push('app=[' + names.slice(0, 15).join(',') + ']');
                 }
-                if (typeof i.passerEnModeValidationAppliMobile !== 'function') { return 'no-method'; }
-                i.passerEnModeValidationAppliMobile('', '\(escaped)');
-                return 'called';
-            } catch (e) { return 'error'; }
+                var found = '';
+                for (var i = 0; i < owners.length && !found; i++) {
+                    var o = owners[i][1];
+                    if (typeof o[name] === 'function') {
+                        try { o[name]('', '\(jsEscaped(deviceUUID))'); found = owners[i][0]; }
+                        catch (e) { found = owners[i][0] + '!' + (e && e.name); }
+                    }
+                }
+                out.unshift(found ? 'called ' + found : 'no-method');
+                out.push('cookies=[' + document.cookie.split(';').map(function (c) {
+                    return c.split('=')[0].trim();
+                }).join(',') + ']');
+            } catch (e) { out.unshift('error ' + (e && e.name)); }
+            return out.join(' ');
         })();
         """
     }
@@ -192,8 +222,15 @@ enum PronoteMobileLogin {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         return """
+        window.__notoHook = { calls: 0, error: '' };
         window.hookAccesDepuisAppli = function () {
-            this.passerEnModeValidationAppliMobile('', '\(escaped)');
+            window.__notoHook.calls += 1;
+            try {
+                this.passerEnModeValidationAppliMobile('', '\(escaped)');
+            } catch (e) {
+                window.__notoHook.error = (e && e.name) || 'error';
+                throw e;
+            }
         };
         true;
         """
