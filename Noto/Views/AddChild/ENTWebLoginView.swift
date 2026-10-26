@@ -187,7 +187,7 @@ struct ENTWebLoginView: View {
         webView.load(URLRequest(url: infoURL ?? entryURL))
 
         let interval = 0.5
-        let maxAttempts = 180 // 90 s: CAS round trips can be slow
+        let maxAttempts = 300 // 150 s: CAS round trips and Pronote can be slow
         let revealAfter = 16  // 8 s without a token: let the parent see the page
         var attempts = 0
         var pollsOnMobile = 0
@@ -228,10 +228,11 @@ struct ENTWebLoginView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + interval) { poll() }
         }
 
-        /// On the mobile page without a token yet: ask the page for it
-        /// every 3 s, at most 6 times.
+        /// On the loaded mobile page without a token yet: ask the page for
+        /// it every 3 s until the wait ends. Only once the page has finished
+        /// loading: the CAS round trip goes through the same URL first.
         func nudge() {
-            guard pollsOnMobile >= 4, pollsOnMobile % 6 == 4, triggers < 6 else { return }
+            guard !webView.isLoading, pollsOnMobile >= 2, pollsOnMobile % 6 == 2 else { return }
             triggers += 1
             let n = triggers
             webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: deviceUUID)) { value, _ in
@@ -279,7 +280,7 @@ struct ENTWebLoginView: View {
                 return
             }
 
-            pollsOnMobile += 1
+            if !webView.isLoading { pollsOnMobile += 1 }
             webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { value, _ in
                 let text = value as? String ?? ""
                 if let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
