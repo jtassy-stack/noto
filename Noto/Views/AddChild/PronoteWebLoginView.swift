@@ -318,10 +318,10 @@ private struct PronoteTokenWebView: UIViewRepresentable {
             poll(webView, attempt: 0, generation: generation)
         }
 
-        /// Reads the body for the token for 90 s; meanwhile asks the page
-        /// for it every 3 s (at most 6 times).
+        /// Reads the body for the token for 150 s; meanwhile asks the
+        /// loaded page for it every 3 s.
         private func poll(_ webView: WKWebView, attempt: Int, generation: Int) {
-            guard !delivered, generation == self.generation, attempt < 180 else { return }
+            guard !delivered, generation == self.generation, attempt < 300 else { return }
             webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { [weak self, weak webView] result, _ in
                 guard let self, !self.delivered, let webView else { return }
                 if let text = result as? String, let payload = PronoteMobileLogin.parseTokenPayload(bodyText: text) {
@@ -329,7 +329,7 @@ private struct PronoteTokenWebView: UIViewRepresentable {
                     self.onToken(payload)
                     return
                 }
-                if attempt >= 4, attempt % 6 == 4, attempt < 40 {
+                if !webView.isLoading, attempt % 6 == 2 {
                     webView.evaluateJavaScript(PronoteMobileLogin.triggerScript(deviceUUID: self.deviceUUID)) { value, _ in
                         logger.debug("trigger → \(value as? String ?? "nil", privacy: .public)")
                     }
