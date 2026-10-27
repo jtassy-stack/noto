@@ -22900,7 +22900,7 @@
 
       // Step 1: Fetch mobile.parent.html with redirect:follow (CAS redirects must be followed)
       // pawnote's built-in fetchSessionPage uses redirect:manual which breaks CAS flows.
-      let information, version, entLogin, entPassword;
+      let information, version, entLogin, entPassword, entLoginRaw, entPasswordRaw;
       try {
         const pageUrl = new URL(baseUrl + "/mobile.parent.html");
         // NOTO HAND PATCH: only fd=1. `login=true` and `bydlg` ask Pronote for its
@@ -22939,6 +22939,16 @@
         }
         entLogin = String(startData.e);
         entPassword = String(startData.f);
+        // The space-stripped/regex-rewritten JSON above can alter values (spaces,
+        // ':' or quotes inside them): also read e/f straight from the raw page.
+        const rawStart = html.substring(html.indexOf("Start"), html.indexOf("Start") + 6000);
+        const rawField = (k) => {
+          const m = rawStart.match(new RegExp("[{,]\\s*['\"]?" + k + "['\"]?\\s*:\\s*(['\"])((?:\\\\.|(?!\\1)[^\\\\])*)\\1"));
+          return m ? m[2] : null;
+        };
+        entLoginRaw = rawField("e");
+        entPasswordRaw = rawField("f");
+        console.log("[noto] ENT start: keys=" + Object.keys(startData).join(",") + " eLen=" + entLogin.length + " fLen=" + entPassword.length + " eRawLen=" + (entLoginRaw ? entLoginRaw.length : -1) + " fRawLen=" + (entPasswordRaw ? entPasswordRaw.length : -1) + " fSame=" + (entPasswordRaw === entPassword));
       } catch (e) {
         throw new Error("ENT_STEP1_FAIL: " + (e && e.message || String(e)));
       }
@@ -22966,12 +22976,30 @@
       // Step 3: Solve the challenge with the ENT credentials from Start().
       // ENT key = SHA256(f) uppercased, no alea and no username prefix (pronotepy).
       const username = identData.login || entLogin;
-      const authKey = Pe({ alea: "" }, "", entPassword);
-      let solvedChallenge;
-      try {
-        solvedChallenge = Se(session, identData, authKey);
-      } catch (e) {
-        throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + "): " + (e && e.message || String(e)));
+      // The challenge is decrypted locally, so several key derivations can be
+      // tried without any extra request: pronotepy's ENT rule first, then the
+      // regular password rule, with the raw / parsed / lowercased values.
+      const fValues = [...new Set([entPasswordRaw, entPassword].filter((v) => typeof v === "string" && v.length))];
+      const eValues = [...new Set([identData.login, entLoginRaw, entLogin].filter((v) => typeof v === "string" && v.length))];
+      const candidates = [];
+      for (const f of fValues) for (const fv of [...new Set([f, f.toLowerCase()])]) {
+        candidates.push(["ent", () => Pe({ alea: "" }, "", fv)]);
+        for (const ev of eValues) for (const evv of [...new Set([ev, ev.toLowerCase()])]) {
+          candidates.push(["pwd", () => Pe(identData, evv, fv)]);
+        }
+      }
+      console.log("[noto] ENT ident: alea=" + (identData.alea ? "set" : "empty") + " modeCompLog=" + identData.modeCompLog + " modeCompMdp=" + identData.modeCompMdp + " challengeLen=" + String(identData.challenge || "").length + " candidates=" + candidates.length);
+      let solvedChallenge, authKey;
+      for (let ci = 0; ci < candidates.length && !solvedChallenge; ci++) {
+        try {
+          const k = candidates[ci][1]();
+          solvedChallenge = Se(session, identData, k);
+          authKey = k;
+          console.log("[noto] ENT challenge solved with candidate " + ci + " (" + candidates[ci][0] + ")");
+        } catch (e) {}
+      }
+      if (!solvedChallenge) {
+        throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + ",tried=" + candidates.length + "): no key derivation decrypts the challenge");
       }
       let authData;
       try {
