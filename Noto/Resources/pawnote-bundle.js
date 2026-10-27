@@ -22899,12 +22899,13 @@
 
       // Step 1: Fetch mobile.parent.html with redirect:follow (CAS redirects must be followed)
       // pawnote's built-in fetchSessionPage uses redirect:manual which breaks CAS flows.
-      let information, version;
+      let information, version, entLogin, entPassword;
       try {
         const pageUrl = new URL(baseUrl + "/mobile.parent.html");
-        for (const [k, v2] of Object.entries({ ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" })) {
-          pageUrl.searchParams.set(k, v2);
-        }
+        // NOTO HAND PATCH: only fd=1. `login=true` and `bydlg` ask Pronote for its
+        // direct login page and skip the CAS redirect, so the page never carries
+        // the ENT identity (Start fields e/f) and the challenge cannot be solved.
+        pageUrl.searchParams.set("fd", "1");
         // Use redirect:follow so CAS redirect chain is traversed
         const resp = await session.fetcher({ url: pageUrl, redirect: "follow", headers: { "User-Agent": Z } });
         const html = resp.content;
@@ -22927,8 +22928,16 @@
           .replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ')
           .replace(/'/gu, '"');
 
-        information = W(JSON.parse(startJson), baseUrl, versionArr);
+        const startData = JSON.parse(startJson);
+        information = W(startData, baseUrl, versionArr);
         version = versionArr;
+        // After the CAS round trip Pronote puts the ENT login (e) and a one-time
+        // password (f) in Start(), like pronotepy reads them.
+        if (!startData.e || !startData.f) {
+          throw new Error("ENT_NO_CAS_IDENTITY (keys=" + Object.keys(startData).join(",") + " finalUrl=" + String(resp.finalUrl || "").split("?")[0] + ")");
+        }
+        entLogin = String(startData.e);
+        entPassword = String(startData.f);
       } catch (e) {
         throw new Error("ENT_STEP1_FAIL: " + (e && e.message || String(e)));
       }
@@ -22942,7 +22951,7 @@
       let identData;
       try {
         identData = await he(session, {
-          username: "",
+          username: entLogin,
           deviceUUID: deviceUUID,
           requestFirstMobileAuthentication: true,
           reuseMobileAuthentication: false,
@@ -22953,11 +22962,10 @@
         throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
       }
 
-      // Step 3: Solve challenge with empty password (CAS session provides auth)
-      const username = identData.login || "";
-      const opts = { username, password: "" };
-      Ne(opts, "password", identData);
-      const authKey = Pe(identData, opts.username, opts.password);
+      // Step 3: Solve the challenge with the ENT credentials from Start().
+      // ENT key = SHA256(f) uppercased, no alea and no username prefix (pronotepy).
+      const username = identData.login || entLogin;
+      const authKey = Pe({ alea: "" }, "", entPassword);
       let solvedChallenge;
       try {
         solvedChallenge = Se(session, identData, authKey);
