@@ -22954,6 +22954,10 @@
       }
       session.information = information;
       session.instance = { version };
+      // Like pronotepy and pawnote's credentials login, the ENT session's POSTs
+      // go without the appliMobile cookie.
+      const baseFetcher = session.fetcher;
+      session.fetcher = (o) => baseFetcher({ ...o, appliMobile: false });
       try { session.instance = await me(session); } catch (e) {
         throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
       }
@@ -22989,15 +22993,35 @@
         }
       }
       console.log("[noto] ENT ident: alea=" + (identData.alea ? "set" : "empty") + " modeCompLog=" + identData.modeCompLog + " modeCompMdp=" + identData.modeCompMdp + " challengeLen=" + String(identData.challenge || "").length + " candidates=" + candidates.length);
-      let solvedChallenge, authKey;
-      for (let ci = 0; ci < candidates.length && !solvedChallenge; ci++) {
+      // A wrong key still "decrypts" when the padding happens to be valid, so
+      // describe each plaintext (lengths and character classes, never values)
+      // and prefer the one that looks like Pronote's challenge.
+      const classOf = (t) => /^[0-9]*$/.test(t) ? "digits" : /^[0-9a-fA-F]*$/.test(t) ? "hex" : /^[\x20-\x7e]*$/.test(t) ? "ascii" : "binary";
+      const ivBuf = () => import_node_forge.default.util.createBuffer(session.information.aesIV);
+      let solvedChallenge, authKey, bestScore = -1;
+      for (let ci = 0; ci < candidates.length; ci++) {
+        let k, dec;
         try {
-          const k = candidates[ci][1]();
-          solvedChallenge = Se(session, identData, k);
-          authKey = k;
-          console.log("[noto] ENT challenge solved with candidate " + ci + " (" + candidates[ci][0] + ")");
-        } catch (e) {}
+          k = candidates[ci][1]();
+          dec = import_node_forge.default.util.decodeUtf8(se.decrypt(identData.challenge, k, ivBuf()));
+        } catch (e) {
+          console.log("[noto] ENT candidate " + ci + " (" + candidates[ci][0] + "): no decrypt");
+          continue;
+        }
+        let even = "";
+        for (let i = 0; i < dec.length; i += 2) even += dec.charAt(i);
+        const cls = classOf(dec), evenCls = classOf(even);
+        const score = { digits: 3, hex: 3, ascii: 2, binary: 0 }[evenCls] + { digits: 1, hex: 1, ascii: 1, binary: 0 }[cls];
+        console.log("[noto] ENT candidate " + ci + " (" + candidates[ci][0] + "): decLen=" + dec.length + " decClass=" + cls + " evenClass=" + evenCls + " score=" + score);
+        if (score > bestScore) {
+          try {
+            solvedChallenge = Se(session, identData, k);
+            authKey = k;
+            bestScore = score;
+          } catch (e) {}
+        }
       }
+      if (solvedChallenge) console.log("[noto] ENT using best candidate, score=" + bestScore);
       if (!solvedChallenge) {
         throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + ",tried=" + candidates.length + "): no key derivation decrypts the challenge");
       }
@@ -23005,6 +23029,7 @@
       try {
         authData = await fe(session, solvedChallenge);
       } catch (e) {
+        console.log("[noto] ENT auth refused: " + (e && e.name));
         throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
       }
 
