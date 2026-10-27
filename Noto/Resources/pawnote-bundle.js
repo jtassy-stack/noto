@@ -17891,8 +17891,9 @@
     e.headers || (e.headers = {}), n(e.headers) ? e.headers.set(t, r) : e.headers[t] = r;
   };
   var d = async (e) => {
-    const t = await fetch(e.url.href, { redirect: e.redirect ?? "follow", headers: e.headers ?? {}, method: e.method ?? "GET", body: e.content });
-    return { status: t.status, content: await t.text(), headers: t.headers };
+    // NOTO HAND PATCH: forward `appliMobile` and expose the final URL (ENT login).
+    const t = await fetch(e.url.href, { redirect: e.redirect ?? "follow", headers: e.headers ?? {}, method: e.method ?? "GET", body: e.content, appliMobile: e.appliMobile });
+    return { status: t.status, content: await t.text(), headers: t.headers, finalUrl: t.url };
   };
 
   // node_modules/@niicojs/pawnote/dist/index.mjs
@@ -22936,7 +22937,7 @@
         // the ENT identity (Start fields e/f) and the challenge cannot be solved.
         pageUrl.searchParams.set("fd", "1");
         // Use redirect:follow so CAS redirect chain is traversed
-        const resp = await session.fetcher({ url: pageUrl, redirect: "follow", headers: { "User-Agent": Z } });
+        const resp = await session.fetcher({ url: pageUrl, redirect: "follow", appliMobile: false, headers: { "User-Agent": Z } });
         const html = resp.content;
 
         // Extract version — works for both old Pronote (inline Start()) and new Vite builds (meta/script tag)
