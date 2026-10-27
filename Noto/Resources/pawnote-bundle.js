@@ -1,5 +1,28 @@
 "use strict";
 (() => {
+  // NOTO HAND PATCH: Pronote 2026.2.7 ends the call with ");}catch" instead of ")}catch".
+  // Take the balanced {...} object after "Start(" (input has spaces/newlines removed),
+  // falling back to the old end markers.
+  var __notoStartBody = (e) => {
+    const k = e.indexOf("Start(");
+    if (k === -1) return null;
+    let i = k + 6;
+    if (e[i] === "{") {
+      let depth = 0, q = null;
+      for (let j = i; j < e.length; j++) {
+        const ch = e[j];
+        if (q) { if (ch === "\\") j++; else if (ch === q) q = null; continue; }
+        if (ch === '"' || ch === "'") q = ch;
+        else if (ch === "{") depth++;
+        else if (ch === "}" && --depth === 0) return e.substring(i, j + 1);
+      }
+    }
+    for (const m of [");}catch", ")}catch", ");}"]) {
+      const end = e.indexOf(m, i);
+      if (end !== -1) return e.substring(i, end);
+    }
+    return null;
+  };
   var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -22188,7 +22211,7 @@
     const { content: o2 } = await i(r), c3 = o2.match(X)?.groups?.version?.split(".").map(Number);
     if (!c3) throw new w();
     try {
-      const e = o2.replace(/ /gu, "").replace(/\n/gu, ""), s = "Start(", t = ")}catch", i2 = e.substring(e.indexOf(s) + s.length, e.indexOf(t)).replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ').replace(/'/gu, '"');
+      const e = o2.replace(/ /gu, "").replace(/\n/gu, ""), s = "Start(", t = ")}catch", i2 = (__notoStartBody(e) ?? e.substring(e.indexOf(s) + s.length, e.indexOf(t))).replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ').replace(/'/gu, '"');
       return { information: W(JSON.parse(i2), n3.base, c3), version: c3 };
     } catch (e) {
       if (o2.includes("Votre adresse IP est provisoirement suspendue")) throw new D();
@@ -22898,8 +22921,9 @@
         const noSpaces = html.replace(/ /gu, "").replace(/\n/gu, "");
         const startIdx = noSpaces.indexOf("Start(");
         if (startIdx === -1) throw new Error("Start() not found (len=" + html.length + " ver=" + versionStr + " prefix=" + html.substring(0, 300).replace(/\n/g, ' ') + ")");
-        const endIdx = noSpaces.indexOf(")}catch");
-        const startJson = noSpaces.substring(startIdx + 6, endIdx)
+        const startBody = __notoStartBody(noSpaces);
+        if (startBody === null) throw new Error("Start() end not found (ver=" + versionStr + ")");
+        const startJson = startBody
           .replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ')
           .replace(/'/gu, '"');
 
