@@ -482,8 +482,15 @@ final class PawnoteBridge {
                         }
                     }
                 }
-                // Inject appliMobile=1 as a separate cookie so it's stored and forwarded on redirects
-                if let appliCookie = HTTPCookie(properties: [
+                // Inject appliMobile=1 as a separate cookie so it's stored and forwarded on redirects.
+                // `appliMobile: false` (the ENT page fetch) removes it instead: with it Pronote
+                // serves its direct login page and never redirects to the ENT's CAS.
+                if options.objectForKeyedSubscript("appliMobile")?.isBoolean == true,
+                   options.objectForKeyedSubscript("appliMobile")?.toBool() == false {
+                    for cookie in HTTPCookieStorage.shared.cookies(for: url) ?? [] where cookie.name == "appliMobile" {
+                        HTTPCookieStorage.shared.deleteCookie(cookie)
+                    }
+                } else if let appliCookie = HTTPCookie(properties: [
                     .name: "appliMobile", .value: "1",
                     .domain: url.host ?? "", .path: "/", .discard: true
                 ]) {
@@ -533,6 +540,7 @@ final class PawnoteBridge {
                             "content": content,
                             "statusCode": statusCode,
                             "headers": headers,
+                            "finalUrl": response?.url?.absoluteString ?? "",
                         ]
                         jsResolve.call(withArguments: [result])
                     }
@@ -554,12 +562,14 @@ final class PawnoteBridge {
                     headers: opts.headers || {},
                     content: opts.body || undefined,
                     redirect: opts.redirect || 'follow',
+                    appliMobile: opts.appliMobile === false ? false : true,
                 });
                 // Return format compatible with both standard fetch and @literate.ink
                 const hdrs = result.headers || {};
                 return {
                     ok: result.statusCode >= 200 && result.statusCode < 300,
                     status: result.statusCode,
+                    url: result.finalUrl || url,
                     text: async () => result.content,
                     json: async () => JSON.parse(result.content),
                     headers: {
