@@ -168,6 +168,77 @@ struct PronoteRefreshToken: Codable, Sendable, Equatable {
     var navigatorIdentifier: String? = nil
 }
 
+/// What Pronote answered when it refused to open the session until the
+/// account sets up its double authentication (`actionsDoubleAuth`). pawnote
+/// throws there, but the answer already carries the renewed single-use
+/// mobile token: keeping it means the account survives the refusal instead
+/// of needing a new QR scan once the parent has done the setup in Pronote.
+/// Decoded from the JSON the bridge appends to `DOUBLE_AUTH_REQUIRED:`.
+struct PronoteDoubleAuth: Codable, Sendable, Equatable {
+    var token: String? = nil
+    var username: String? = nil
+    var url: String? = nil
+    var kind: Int? = nil
+    var navigatorIdentifier: String? = nil
+    var needsPIN: Bool = false
+    var needsChoice: Bool = false
+    var needsPassword: Bool = false
+
+    init(token: String? = nil, username: String? = nil, url: String? = nil, kind: Int? = nil,
+         navigatorIdentifier: String? = nil, needsPIN: Bool = false, needsChoice: Bool = false,
+         needsPassword: Bool = false) {
+        self.token = token
+        self.username = username
+        self.url = url
+        self.kind = kind
+        self.navigatorIdentifier = navigatorIdentifier
+        self.needsPIN = needsPIN
+        self.needsChoice = needsChoice
+        self.needsPassword = needsPassword
+    }
+
+    /// Every key is optional on the wire: a bridge build that omits a flag
+    /// must not turn the whole payload (and its token) into nil.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        token = try c.decodeIfPresent(String.self, forKey: .token)
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        url = try c.decodeIfPresent(String.self, forKey: .url)
+        kind = try c.decodeIfPresent(Int.self, forKey: .kind)
+        navigatorIdentifier = try c.decodeIfPresent(String.self, forKey: .navigatorIdentifier)
+        needsPIN = try c.decodeIfPresent(Bool.self, forKey: .needsPIN) ?? false
+        needsChoice = try c.decodeIfPresent(Bool.self, forKey: .needsChoice) ?? false
+        needsPassword = try c.decodeIfPresent(Bool.self, forKey: .needsPassword) ?? false
+    }
+
+    /// The renewed token, when Pronote sent one we can store.
+    var rescuedToken: PronoteRefreshToken? {
+        guard let token, !token.isEmpty, let username, !username.isEmpty,
+              let url, !url.isEmpty else { return nil }
+        return PronoteRefreshToken(
+            url: url,
+            token: token,
+            username: username,
+            kind: kind.flatMap(PronoteAccountKind.init(rawValue:)) ?? .parent,
+            navigatorIdentifier: (navigatorIdentifier?.isEmpty == false) ? navigatorIdentifier : nil
+        )
+    }
+
+    /// What the parent has to do in Pronote, in their words.
+    var instruction: String {
+        if needsPIN {
+            return "Pronote demande de choisir un code PIN pour cette application."
+        }
+        if needsChoice {
+            return "Pronote demande de choisir une méthode de double authentification pour ce compte."
+        }
+        if needsPassword {
+            return "Pronote demande de changer le mot de passe de ce compte."
+        }
+        return "Pronote demande de configurer la double authentification de ce compte."
+    }
+}
+
 // MARK: - Errors
 
 enum PronoteError: Error, LocalizedError {
@@ -178,10 +249,11 @@ enum PronoteError: Error, LocalizedError {
     case rateLimited
     case securityModal
     /// Pronote asks the account to set up double authentication (PIN /
-    /// trusted device) before it hands out a mobile token. pawnote's token
-    /// login throws on it; the parent has to go through the Pronote app or
-    /// web once, then rescan.
-    case doubleAuthRequired
+    /// trusted device) before it opens the session. pawnote throws on it;
+    /// the parent has to go through the Pronote app or web once. The payload
+    /// (nil when the bridge could not read Pronote's answer) carries the
+    /// renewed token so the account is kept and a retry needs no QR scan.
+    case doubleAuthRequired(PronoteDoubleAuth?)
     case encryptionFailed(String)
     case networkError(Error)
     case invalidResponse(String)
@@ -189,17 +261,22 @@ enum PronoteError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badCredentials: "Identifiants incorrects"
-        case .sessionExpired: "Session expirée"
-        case .accessDenied: "Accès refusé"
-        case .suspendedIP: "Adresse IP temporairement bloquée"
-        case .rateLimited: "Trop de requêtes, réessayez dans quelques minutes"
-        case .securityModal: "Vérification de sécurité requise — connectez-vous depuis Pronote"
-        case .doubleAuthRequired: "Pronote demande une double authentification. Connectez-vous une fois dans l'app ou sur le site Pronote, puis rescannez le QR code."
-        case .encryptionFailed(let msg): "Erreur de chiffrement: \(msg)"
-        case .networkError(let err): "Erreur réseau: \(err.localizedDescription)"
-        case .invalidResponse(let msg): "Réponse invalide: \(msg)"
-        case .tabNotAuthorized(let tab): "Accès non autorisé à l'onglet \(tab)"
+        case .badCredentials: return "Identifiants incorrects"
+        case .sessionExpired: return "Session expirée"
+        case .accessDenied: return "Accès refusé"
+        case .suspendedIP: return "Adresse IP temporairement bloquée"
+        case .rateLimited: return "Trop de requêtes, réessayez dans quelques minutes"
+        case .securityModal: return "Vérification de sécurité requise — connectez-vous depuis Pronote"
+        case .doubleAuthRequired(let info):
+            let what = info?.instruction ?? "Pronote demande une double authentification pour ce compte."
+            let how = info?.rescuedToken != nil
+                ? "Faites-le une fois dans l'app ou sur le site Pronote, puis touchez « Réessayer » dans nōto."
+                : "Faites-le une fois dans l'app ou sur le site Pronote, puis rescannez le QR code."
+            return what + " " + how
+        case .encryptionFailed(let msg): return "Erreur de chiffrement: \(msg)"
+        case .networkError(let err): return "Erreur réseau: \(err.localizedDescription)"
+        case .invalidResponse(let msg): return "Réponse invalide: \(msg)"
+        case .tabNotAuthorized(let tab): return "Accès non autorisé à l'onglet \(tab)"
         }
     }
 }

@@ -478,8 +478,14 @@ struct PronoteQRLoginView: View {
                 raw = error.localizedDescription.lowercased()
             }
 
-            if case PronoteError.doubleAuthRequired = error {
-                errorMessage = PronoteError.doubleAuthRequired.localizedDescription
+            if case PronoteError.doubleAuthRequired(let info) = error {
+                if let rescued = info?.rescuedToken {
+                    // Keep the renewed token: once the parent has set up the
+                    // double authentication in Pronote, « Réessayer » on the
+                    // Accueil reopens the session without another scan.
+                    try? PronoteAccountStore.save(rescued)
+                }
+                errorMessage = error.localizedDescription
             } else if raw.contains("page does not exist") || raw.contains("requested page") {
                 errorMessage = "QR code expiré ou URL Pronote invalide. Régénérez le QR code dans Pronote et réessayez."
             } else if raw.contains("challenge") || raw.contains("credentials") || raw.contains("badcredentials") {

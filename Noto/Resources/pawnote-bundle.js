@@ -22701,13 +22701,41 @@
     createSession: () => {
       return je();
     },
+    // Pronote answered the authentication with `actionsDoubleAuth`: the
+    // account must set up (or confirm) its double authentication in Pronote
+    // before the session is usable. pawnote throws a SecurityError there, but
+    // Pronote's answer already carries the renewed single-use mobile token, so
+    // the error is rethrown with everything Swift needs to keep the account
+    // alive (PronoteError.doubleAuthRequired). Any other error passes through.
+    _doubleAuthError: (session, e) => {
+      if (!e || e.name !== "SecurityError") return e;
+      const h = e.handle || {};
+      const ctx = h.context || {};
+      const auth = ctx.authentication || {};
+      const payload = {
+        token: auth.jetonConnexionAppliMobile || null,
+        username: ctx.initialUsername || (ctx.identity && ctx.identity.login) || null,
+        url: (session.information && session.information.url) || null,
+        kind: (session.information && session.information.accountKind) || null,
+        navigatorIdentifier: (session.instance && session.instance.navigatorIdentifier) || null,
+        needsPIN: Boolean(h.shouldEnterPIN),
+        needsChoice: Boolean(h.shouldCustomDoubleAuth),
+        needsPassword: Boolean(h.shouldCustomPassword),
+      };
+      return new Error("DOUBLE_AUTH_REQUIRED:" + JSON.stringify(payload));
+    },
     // QR Code login
     loginQrCode: async (session, deviceUUID, pin, qrData) => {
-      const refresh = await Me(session, {
-        deviceUUID,
-        pin,
-        qr: qrData
-      });
+      let refresh;
+      try {
+        refresh = await Me(session, {
+          deviceUUID,
+          pin,
+          qr: qrData
+        });
+      } catch (e) {
+        throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+      }
       return {
         token: refresh.token,
         username: refresh.username,
@@ -22723,8 +22751,7 @@
     // another space or from an unknown navigator. Missing values fall back
     // to the pre-fix behaviour (parent, fresh navigator).
     // A SecurityError (Pronote asks to set up double authentication) is
-    // rethrown with a stable prefix the Swift side maps to
-    // PronoteError.doubleAuthRequired. (NOTO HAND PATCH: mirrors
+    // rethrown via _doubleAuthError (see above). (NOTO HAND PATCH: mirrors
     // pawnote-bridge.js; re-apply on a rebuild.)
     loginToken: async (session, url, username, token, deviceUUID, kind, navigatorIdentifier) => {
       let refresh;
@@ -22738,10 +22765,7 @@
           navigatorIdentifier: navigatorIdentifier || undefined
         });
       } catch (e) {
-        if (e && e.name === "SecurityError") {
-          throw new Error("DOUBLE_AUTH_REQUIRED: " + (e.message || ""));
-        }
-        throw e;
+        throw globalThis.PawnoteBridge._doubleAuthError(session, e);
       }
       return {
         token: refresh.token,
@@ -22753,13 +22777,18 @@
     },
     // Credentials login
     loginCredentials: async (session, url, username, password, deviceUUID) => {
-      const refresh = await Ee(session, {
-        url,
-        kind: V.PARENT,
-        username,
-        password,
-        deviceUUID
-      });
+      let refresh;
+      try {
+        refresh = await Ee(session, {
+          url,
+          kind: V.PARENT,
+          username,
+          password,
+          deviceUUID
+        });
+      } catch (e) {
+        throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+      }
       return {
         token: refresh.token,
         username: refresh.username,
@@ -23010,12 +23039,15 @@
       Ie(session, authData, authKey);
 
       if (Le(authData)) {
-        const result = await Ve(session, {
-          token: authData.jetonConnexionAppliMobile,
-          username: identData.login || username,
-          deviceUUID: deviceUUID,
-        });
-        return result;
+        try {
+          return await Ve(session, {
+            token: authData.jetonConnexionAppliMobile,
+            username: identData.login || username,
+            deviceUUID: deviceUUID,
+          });
+        } catch (e) {
+          throw globalThis.PawnoteBridge._doubleAuthError(session, e);
+        }
       }
 
       const result = await Te(session, authData, identData, username);

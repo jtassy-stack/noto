@@ -64,6 +64,16 @@ enum PronoteAutoConnect {
                 NSLog("[noto] Auto-reconnect succeeded (kind=%d, navigator=%@)",
                       renewed.kind.rawValue, renewed.navigatorIdentifier == nil ? "none" : "kept")
             } catch {
+                if case PronoteError.doubleAuthRequired(let info) = error,
+                   let rescued = info?.rescuedToken {
+                    // Pronote refused the session but renewed the token: keep
+                    // it, so a retry after the setup needs no new QR scan.
+                    do {
+                        try PronoteAccountStore.save(rescued)
+                    } catch {
+                        NSLog("[noto] Could not store the token Pronote returned with its double-auth refusal: %@", error.localizedDescription)
+                    }
+                }
                 let message = userMessage(for: error)
                 service.recordReconnectFailure(username: stored.username, message: message)
                 NSLog("[noto] Auto-reconnect failed: %@", error.localizedDescription)
