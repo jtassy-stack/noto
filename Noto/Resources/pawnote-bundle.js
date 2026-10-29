@@ -22968,7 +22968,11 @@
         identData = await he(session, {
           username: entLogin,
           deviceUUID: deviceUUID,
-          requestFirstMobileAuthentication: true,
+          // NOTO HAND PATCH: no mobile-app request, exactly like pronotepy's ENT
+          // login. With demandeConnexionAppliMobile the server encrypts the
+          // challenge with a key we cannot derive (2026-10-29: every candidate
+          // failed or decrypted to nothing, then BadCredentialsError).
+          requestFirstMobileAuthentication: false,
           reuseMobileAuthentication: false,
           requestFromQRCode: false,
           useCAS: true,
@@ -23013,7 +23017,8 @@
         const cls = classOf(dec), evenCls = classOf(even);
         const score = { digits: 3, hex: 3, ascii: 2, binary: 0 }[evenCls] + { digits: 1, hex: 1, ascii: 1, binary: 0 }[cls];
         console.log("[noto] ENT candidate " + ci + " (" + candidates[ci][0] + "): decLen=" + dec.length + " decClass=" + cls + " evenClass=" + evenCls + " score=" + score);
-        if (score > bestScore) {
+        // An empty plaintext is a padding false positive, never the challenge.
+        if (dec.length > 0 && score > bestScore) {
           try {
             solvedChallenge = Se(session, identData, k);
             authKey = k;
