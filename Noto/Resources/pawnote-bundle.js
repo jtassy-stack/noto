@@ -22967,7 +22967,8 @@
       try {
         identData = await he(session, {
           username: entLogin,
-          deviceUUID: deviceUUID,
+          // pronotepy sends an empty uuidAppliMobile for ENT logins.
+          deviceUUID: "",
           // NOTO HAND PATCH: no mobile-app request, exactly like pronotepy's ENT
           // login. With demandeConnexionAppliMobile the server encrypts the
           // challenge with a key we cannot derive (2026-10-29: every candidate
@@ -23025,6 +23026,16 @@
             bestScore = score;
           } catch (e) {}
         }
+      }
+      // NOTO HAND PATCH: current pronotepy no longer decrypts the ENT challenge.
+      // It encrypts the challenge string as is with the ENT key
+      // (MD5 of SHA256(f) in uppercase hex) and the session IV. Use that when no
+      // derivation yields a real plaintext (2026-10-29: every one failed or was empty).
+      if (!solvedChallenge) {
+        const entKey = Pe({ alea: "" }, "", entPasswordRaw || entPassword);
+        solvedChallenge = se.encrypt(String(identData.challenge), entKey, ivBuf());
+        authKey = entKey;
+        console.log("[noto] ENT using plain challenge encryption (pronotepy), outLen=" + solvedChallenge.length);
       }
       if (solvedChallenge) console.log("[noto] ENT using best candidate, score=" + bestScore);
       if (!solvedChallenge) {
