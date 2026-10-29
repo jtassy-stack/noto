@@ -324,7 +324,7 @@ struct PronoteQRLoginView: View {
         step = .loading
         errorMessage = nil
 
-        let deviceUUID = getOrCreateDeviceUUID()
+        let deviceUUID = PronoteAccountStore.deviceUUID()
 
         do {
             let bridge = try PawnoteBridge()
@@ -340,13 +340,7 @@ struct PronoteQRLoginView: View {
 
             // Persist refresh token — failure here means session will be lost on relaunch
             do {
-                let tokenData = try JSONEncoder().encode(refreshToken)
-                try KeychainService.save(key: "pronote_token_\(refreshToken.username)", data: tokenData)
-                var knownUsernames = UserDefaults.standard.stringArray(forKey: "pronote_known_usernames") ?? []
-                if !knownUsernames.contains(refreshToken.username) {
-                    knownUsernames.append(refreshToken.username)
-                    UserDefaults.standard.set(knownUsernames, forKey: "pronote_known_usernames")
-                }
+                try PronoteAccountStore.save(refreshToken)
             } catch {
                 logger.error("Keychain save failed for \(refreshToken.username): \(error)")
                 errorMessage = "Connexion réussie mais impossible de sauvegarder vos identifiants. Réessayez."
@@ -469,7 +463,7 @@ struct PronoteQRLoginView: View {
                 }
             }
 
-            PronoteService.shared.setBridge(bridge)
+            PronoteService.shared.setBridge(bridge, for: refreshToken.username)
 
             let addedName = resolved.last?.firstName ?? refreshToken.username
             let note: String? = hadPartialFailure
@@ -484,7 +478,9 @@ struct PronoteQRLoginView: View {
                 raw = error.localizedDescription.lowercased()
             }
 
-            if raw.contains("page does not exist") || raw.contains("requested page") {
+            if case PronoteError.doubleAuthRequired = error {
+                errorMessage = PronoteError.doubleAuthRequired.localizedDescription
+            } else if raw.contains("page does not exist") || raw.contains("requested page") {
                 errorMessage = "QR code expiré ou URL Pronote invalide. Régénérez le QR code dans Pronote et réessayez."
             } else if raw.contains("challenge") || raw.contains("credentials") || raw.contains("badcredentials") {
                 errorMessage = "Code PIN incorrect. Vérifiez le code à 4 chiffres choisi dans Pronote et réessayez."
@@ -535,19 +531,6 @@ struct PronoteQRLoginView: View {
         dismiss()
     }
 
-    private func getOrCreateDeviceUUID() -> String {
-        if let data = try? KeychainService.load(key: "device_uuid"),
-           let uuid = String(data: data, encoding: .utf8) {
-            return uuid
-        }
-        let uuid = UUID().uuidString
-        do {
-            try KeychainService.save(key: "device_uuid", data: Data(uuid.utf8))
-        } catch {
-            logger.error("Failed to persist device UUID: \(error)")
-        }
-        return uuid
-    }
 
 }
 

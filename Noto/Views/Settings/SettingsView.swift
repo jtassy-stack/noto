@@ -512,13 +512,8 @@ struct SettingsView: View {
     // MARK: Actions
 
     private func disconnect(child: Child) {
-        // Best-effort Keychain cleanup — log on failure so ops can see
-        // lingering tokens rather than silently leaving them on device.
-        do {
-            try KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
-        } catch {
-            NSLog("[noto][warn] disconnect(child:) Keychain delete failed: \(error.localizedDescription)")
-        }
+        // Pronote tokens are per parent account, not per child, so they
+        // are only dropped once no Pronote child is left (below).
         if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
             do {
                 try KeychainService.delete(key: "ed_credentials_\(accountId)")
@@ -538,8 +533,13 @@ struct SettingsView: View {
         // id that way; this keeps the Keychain blob truthful).
         let childKey = MailboxRouting.childKey(child)
         FamilySyncShareService.revokeOnChildRemoval(child)
+        let wasPronote = child.schoolType == .pronote || child.entProvider == .monlycee
         modelContext.delete(child)
         try? modelContext.save()
+        if wasPronote, !(family?.children ?? []).contains(where: { $0.schoolType == .pronote || $0.entProvider == .monlycee }) {
+            PronoteAccountStore.removeAll()
+            PronoteService.shared.disconnect()
+        }
         do {
             try IMAPService.reassignOrphans(removedChildID: childKey)
         } catch {
@@ -573,7 +573,6 @@ struct SettingsView: View {
         if let children = family?.children {
             for child in children {
                 FamilySyncShareService.revokeOnChildRemoval(child)
-                try? KeychainService.delete(key: "PronoteRefreshToken_\(child.id)")
                 if child.schoolType == .ecoledirecte, let accountId = child.edAccountId {
                     try? KeychainService.delete(key: "ed_credentials_\(accountId)")
                 }
@@ -585,6 +584,8 @@ struct SettingsView: View {
         for family in families {
             modelContext.delete(family)
         }
+        PronoteAccountStore.removeAll()
+        PronoteService.shared.disconnect()
         try? IMAPService.clearAllConfigs()
         imapConfigs = []
         try? modelContext.save()

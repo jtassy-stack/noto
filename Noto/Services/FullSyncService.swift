@@ -61,15 +61,15 @@ final class FullSyncService {
             if pronoteService.bridge == nil {
                 await PronoteAutoConnect.autoConnect(modelContext: modelContext)
             }
-            if let bridge = pronoteService.bridge {
-                // Resolve each child to its pawnote-session index via
+            if pronoteService.bridge != nil {
+                // Resolve each child to its session and pawnote index via
                 // pawnoteID (or firstName fallback) — SwiftData order
-                // has no relation to the bridge's internal child list,
-                // so enumerated() would silently sync the wrong kid.
-                let pawnoteRoster = bridge.getChildren()
+                // has no relation to a bridge's internal child list,
+                // so enumerated() would silently sync the wrong kid, and
+                // a family can span two Pronote accounts.
                 let syncService = PronoteSyncService(modelContext: modelContext)
                 for child in directPronoteChildren {
-                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
+                    guard let (bridge, idx) = pronoteService.resolve(child: child) else {
                         // Surface the skip as a user-visible error instead of
                         // a silent continue — otherwise the banner reads "tout
                         // va bien" while one kid's dashboard freezes. The
@@ -95,11 +95,10 @@ final class FullSyncService {
             if pronoteService.bridge == nil {
                 await PronoteAutoConnect.autoConnect(modelContext: modelContext)
             }
-            if let bridge = pronoteService.bridge {
-                let pawnoteRoster = bridge.getChildren()
+            if pronoteService.bridge != nil {
                 let syncService = PronoteSyncService(modelContext: modelContext)
                 for child in monlyceeChildren {
-                    guard let idx = ChildIndexResolver.resolve(child: child, pawnoteChildren: pawnoteRoster) else {
+                    guard let (bridge, idx) = pronoteService.resolve(child: child) else {
                         logger.warning("Skipping monlycee sync for \(child.firstName, privacy: .private): no matching pawnote resource")
                         result.errors.append("Impossible de synchroniser \(child.firstName) — reconnectez-vous via QR code pour relier cet enfant à Pronote.")
                         continue

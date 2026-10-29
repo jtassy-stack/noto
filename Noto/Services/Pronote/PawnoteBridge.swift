@@ -65,24 +65,9 @@ final class PawnoteBridge {
                 }
                 globalThis.TextDecoder = TextDecoder;
             }
-            if (typeof URLSearchParams === 'undefined') {
-                class URLSearchParams {
-                    constructor(init) {
-                        this._params = {};
-                        if (typeof init === 'string') {
-                            init.replace(/^\\?/, '').split('&').forEach(p => {
-                                const [k, v] = p.split('=');
-                                if (k) this._params[decodeURIComponent(k)] = decodeURIComponent(v || '');
-                            });
-                        }
-                    }
-                    set(k, v) { this._params[k] = String(v); }
-                    get(k) { return this._params[k] ?? null; }
-                    toString() { return Object.entries(this._params).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&'); }
-                }
-                globalThis.URLSearchParams = URLSearchParams;
-            }
         """)
+
+        context.evaluateScript(Self.urlPolyfillJS)
 
         // Provide a fetch polyfill (pawnote needs HTTP)
         setupFetch(context)
@@ -127,12 +112,7 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid login response")
         }
 
-        return PronoteRefreshToken(
-            url: dict["url"] as? String ?? "",
-            token: dict["token"] as? String ?? "",
-            username: dict["username"] as? String ?? "",
-            kind: .parent
-        )
+        return Self.refreshToken(from: dict)
     }
 
     /// Login via ENT/CAS SSO. Requires CAS cookies to already be in HTTPCookieStorage.shared.
@@ -153,12 +133,7 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid ENT login response")
         }
 
-        return PronoteRefreshToken(
-            url: dict["url"] as? String ?? "",
-            token: dict["token"] as? String ?? "",
-            username: dict["username"] as? String ?? "",
-            kind: .parent
-        )
+        return Self.refreshToken(from: dict)
     }
 
     /// Transfer cookies from WKWebView to HTTPCookieStorage so pawnote's fetch polyfill can use them.
@@ -187,17 +162,24 @@ final class PawnoteBridge {
         }
     }
 
-    func loginWithToken(url: String, username: String, token: String, deviceUUID: String) async throws -> PronoteRefreshToken {
+    /// Reopens a session from a stored token. Replays the account kind and
+    /// the navigator identifier of the previous login (see
+    /// `PronoteRefreshToken`); a missing navigator id (token stored by an
+    /// earlier build) is passed as null and pawnote asks for a new one.
+    func loginWithToken(_ stored: PronoteRefreshToken, deviceUUID: String) async throws -> PronoteRefreshToken {
         context.evaluateScript("globalThis._pawnoteSession = PawnoteBridge.createSession()")
         session = context.objectForKeyedSubscript("_pawnoteSession")
 
+        let navigator = stored.navigatorIdentifier.map { "\"\($0.jsEscaped)\"" } ?? "null"
         let result = try await callAsync("""
             PawnoteBridge.loginToken(
                 \(sessionRef),
-                "\(url.jsEscaped)",
-                "\(username.jsEscaped)",
-                "\(token.jsEscaped)",
-                "\(deviceUUID.jsEscaped)"
+                "\(stored.url.jsEscaped)",
+                "\(stored.username.jsEscaped)",
+                "\(stored.token.jsEscaped)",
+                "\(deviceUUID.jsEscaped)",
+                \(stored.kind.rawValue),
+                \(navigator)
             )
         """)
 
@@ -205,12 +187,32 @@ final class PawnoteBridge {
             throw PronoteError.invalidResponse("Invalid login response")
         }
 
+        return Self.refreshToken(from: dict)
+    }
+
+    /// Maps a pawnote login result. `kind` is pawnote's numeric AccountKind
+    /// (6 élève / 7 parent / 8 professeur); an unknown value falls back to
+    /// parent, the historical assumption.
+    static func refreshToken(from dict: [String: Any]) -> PronoteRefreshToken {
+        let kindRaw = (dict["kind"] as? Int) ?? Int((dict["kind"] as? Double) ?? 0)
+        let navigator = (dict["navigatorIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return PronoteRefreshToken(
             url: dict["url"] as? String ?? "",
             token: dict["token"] as? String ?? "",
             username: dict["username"] as? String ?? "",
-            kind: .parent
+            kind: PronoteAccountKind(rawValue: kindRaw) ?? .parent,
+            navigatorIdentifier: navigator
         )
+    }
+
+    /// Turns the message of a JS exception into the typed error the UI
+    /// knows how to explain. Everything else stays `invalidResponse`.
+    static func error(fromJSMessage message: String) -> PronoteError {
+        if message.hasPrefix("DOUBLE_AUTH_REQUIRED") { return .doubleAuthRequired }
+        let lower = message.lowercased()
+        if lower.contains("suspended") || lower.contains("suspendu") { return .suspendedIP }
+        if lower.contains("rate limit") || lower.contains("too many") { return .rateLimited }
+        return .invalidResponse("JS error: \(message)")
     }
 
     // MARK: - Children
@@ -378,7 +380,7 @@ final class PawnoteBridge {
                !errorVal.isNull, !errorVal.isUndefined,
                let errorStr = errorVal.toString(), !errorStr.isEmpty {
                 context.evaluateScript("delete globalThis.\(resultKey); delete globalThis.\(errorKey)")
-                throw PronoteError.invalidResponse("JS error: \(errorStr)")
+                throw Self.error(fromJSMessage: errorStr)
             }
 
             if let resultVal = context.objectForKeyedSubscript(resultKey),
@@ -395,6 +397,62 @@ final class PawnoteBridge {
     }
 
     // MARK: - Fetch Polyfill
+
+    /// URLSearchParams + URL polyfills for JavaScriptCore, which has neither.
+    /// `href` is computed from `searchParams`: pawnote sets Pronote's query
+    /// parameters through `searchParams.set`. Exposed for tests.
+    nonisolated static let urlPolyfillJS = """
+            if (typeof URLSearchParams === 'undefined') {
+                class URLSearchParams {
+                    constructor(init) {
+                        this._params = {};
+                        if (typeof init === 'string') {
+                            init.replace(/^\\?/, '').split('&').forEach(p => {
+                                const [k, v] = p.split('=');
+                                if (k) this._params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+                            });
+                        }
+                    }
+                    set(k, v) { this._params[k] = String(v); }
+                    append(k, v) { this._params[k] = String(v); }
+                    get(k) { return this._params[k] ?? null; }
+                    has(k) { return Object.prototype.hasOwnProperty.call(this._params, k); }
+                    delete(k) { delete this._params[k]; }
+                    entries() { return Object.entries(this._params)[Symbol.iterator](); }
+                    toString() { return Object.entries(this._params).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&'); }
+                }
+                globalThis.URLSearchParams = URLSearchParams;
+            }
+            if (typeof URL === 'undefined') {
+                class URL {
+                    constructor(url, base) {
+                        if (base) url = base.replace(/\\/$/, '') + '/' + url.replace(/^\\//, '');
+                        const match = url.match(/^(https?:\\/\\/[^/?#]+)(\\/[^?#]*)?([^#]*)?/);
+                        this.protocol = url.startsWith('https') ? 'https:' : 'http:';
+                        this.host = match ? match[1].replace(/^https?:\\/\\//, '') : '';
+                        this.hostname = this.host.split(':')[0];
+                        this.pathname = match && match[2] ? match[2] : '/';
+                        const hashIndex = url.indexOf('#');
+                        this.hash = hashIndex === -1 ? '' : url.slice(hashIndex);
+                        this.origin = this.protocol + '//' + this.host;
+                        this.searchParams = new URLSearchParams(match && match[3] ? match[3] : '');
+                    }
+                    // Computed from searchParams so that searchParams.set(...) reaches
+                    // the request: pawnote builds Pronote URLs that way (fd=1, bydlg,
+                    // login). A href frozen at construction dropped them, and Pronote
+                    // answered « Votre navigateur est incompatible » instead of the
+                    // page holding Start() (seen on 2026.2.7 after the MonLycée CAS).
+                    get search() {
+                        const q = this.searchParams.toString();
+                        return q ? '?' + q : '';
+                    }
+                    get href() { return this.origin + this.pathname + this.search + this.hash; }
+                    toString() { return this.href; }
+                    toJSON() { return this.href; }
+                }
+                globalThis.URL = URL;
+            }
+        """
 
     private func setupFetch(_ context: JSContext) {
         // Provide a native fetch implementation for pawnote
@@ -424,8 +482,15 @@ final class PawnoteBridge {
                         }
                     }
                 }
-                // Inject appliMobile=1 as a separate cookie so it's stored and forwarded on redirects
-                if let appliCookie = HTTPCookie(properties: [
+                // Inject appliMobile=1 as a separate cookie so it's stored and forwarded on redirects.
+                // `appliMobile: false` (the ENT page fetch) removes it instead: with it Pronote
+                // serves its direct login page and never redirects to the ENT's CAS.
+                if options.objectForKeyedSubscript("appliMobile")?.isBoolean == true,
+                   options.objectForKeyedSubscript("appliMobile")?.toBool() == false {
+                    for cookie in HTTPCookieStorage.shared.cookies(for: url) ?? [] where cookie.name == "appliMobile" {
+                        HTTPCookieStorage.shared.deleteCookie(cookie)
+                    }
+                } else if let appliCookie = HTTPCookie(properties: [
                     .name: "appliMobile", .value: "1",
                     .domain: url.host ?? "", .path: "/", .discard: true
                 ]) {
@@ -475,6 +540,7 @@ final class PawnoteBridge {
                             "content": content,
                             "statusCode": statusCode,
                             "headers": headers,
+                            "finalUrl": response?.url?.absoluteString ?? "",
                         ]
                         jsResolve.call(withArguments: [result])
                     }
@@ -489,19 +555,21 @@ final class PawnoteBridge {
         // fetch(url, opts) → { status, content: string, headers }
         context.evaluateScript("""
             globalThis.fetch = async (urlOrHref, opts = {}) => {
-                const url = typeof urlOrHref === 'string' ? urlOrHref : urlOrHref.href || urlOrHref.toString();
+                const url = typeof urlOrHref === 'string' ? urlOrHref : urlOrHref.toString();
                 const result = await __nativeFetch({
                     url: url,
                     method: opts.method || 'GET',
                     headers: opts.headers || {},
                     content: opts.body || undefined,
                     redirect: opts.redirect || 'follow',
+                    appliMobile: opts.appliMobile === false ? false : true,
                 });
                 // Return format compatible with both standard fetch and @literate.ink
                 const hdrs = result.headers || {};
                 return {
                     ok: result.statusCode >= 200 && result.statusCode < 300,
                     status: result.statusCode,
+                    url: result.finalUrl || url,
                     text: async () => result.content,
                     json: async () => JSON.parse(result.content),
                     headers: {
@@ -511,24 +579,6 @@ final class PawnoteBridge {
                 };
             };
 
-            // Also need URL class for pawnote
-            if (typeof URL === 'undefined') {
-                class URL {
-                    constructor(url, base) {
-                        if (base) url = base.replace(/\\/$/, '') + '/' + url.replace(/^\\//, '');
-                        const match = url.match(/^(https?:\\/\\/[^/?#]+)(\\/[^?#]*)?([^#]*)?/);
-                        this.protocol = url.startsWith('https') ? 'https:' : 'http:';
-                        this.host = match ? match[1].replace(/^https?:\\/\\//, '') : '';
-                        this.hostname = this.host.split(':')[0];
-                        this.pathname = match && match[2] ? match[2] : '/';
-                        this.search = match && match[3] ? match[3] : '';
-                        this.href = url;
-                        this.searchParams = new URLSearchParams(this.search);
-                    }
-                    toString() { return this.href; }
-                }
-                globalThis.URL = URL;
-            }
         """)
     }
 

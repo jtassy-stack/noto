@@ -1,5 +1,28 @@
 "use strict";
 (() => {
+  // NOTO HAND PATCH: Pronote 2026.2.7 ends the call with ");}catch" instead of ")}catch".
+  // Take the balanced {...} object after "Start(" (input has spaces/newlines removed),
+  // falling back to the old end markers.
+  var __notoStartBody = (e) => {
+    const k = e.indexOf("Start(");
+    if (k === -1) return null;
+    let i = k + 6;
+    if (e[i] === "{") {
+      let depth = 0, q = null;
+      for (let j = i; j < e.length; j++) {
+        const ch = e[j];
+        if (q) { if (ch === "\\") j++; else if (ch === q) q = null; continue; }
+        if (ch === '"' || ch === "'") q = ch;
+        else if (ch === "{") depth++;
+        else if (ch === "}" && --depth === 0) return e.substring(i, j + 1);
+      }
+    }
+    for (const m of [");}catch", ")}catch", ");}"]) {
+      const end = e.indexOf(m, i);
+      if (end !== -1) return e.substring(i, end);
+    }
+    return null;
+  };
   var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -17868,8 +17891,9 @@
     e.headers || (e.headers = {}), n(e.headers) ? e.headers.set(t, r) : e.headers[t] = r;
   };
   var d = async (e) => {
-    const t = await fetch(e.url.href, { redirect: e.redirect ?? "follow", headers: e.headers ?? {}, method: e.method ?? "GET", body: e.content });
-    return { status: t.status, content: await t.text(), headers: t.headers };
+    // NOTO HAND PATCH: forward `appliMobile` and expose the final URL (ENT login).
+    const t = await fetch(e.url.href, { redirect: e.redirect ?? "follow", headers: e.headers ?? {}, method: e.method ?? "GET", body: e.content, appliMobile: e.appliMobile });
+    return { status: t.status, content: await t.text(), headers: t.headers, finalUrl: t.url };
   };
 
   // node_modules/@niicojs/pawnote/dist/index.mjs
@@ -22188,7 +22212,7 @@
     const { content: o2 } = await i(r), c3 = o2.match(X)?.groups?.version?.split(".").map(Number);
     if (!c3) throw new w();
     try {
-      const e = o2.replace(/ /gu, "").replace(/\n/gu, ""), s = "Start(", t = ")}catch", i2 = e.substring(e.indexOf(s) + s.length, e.indexOf(t)).replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ').replace(/'/gu, '"');
+      const e = o2.replace(/ /gu, "").replace(/\n/gu, ""), s = "Start(", t = ")}catch", i2 = (__notoStartBody(e) ?? e.substring(e.indexOf(s) + s.length, e.indexOf(t))).replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ').replace(/'/gu, '"');
       return { information: W(JSON.parse(i2), n3.base, c3), version: c3 };
     } catch (e) {
       if (o2.includes("Votre adresse IP est provisoirement suspendue")) throw new D();
@@ -22688,23 +22712,43 @@
         token: refresh.token,
         username: refresh.username,
         url: refresh.url,
-        kind: refresh.kind
+        kind: refresh.kind,
+        navigatorIdentifier: refresh.navigatorIdentifier ?? null
       };
     },
-    // Token login (reconnection)
-    loginToken: async (session, url, username, token, deviceUUID) => {
-      const refresh = await ye(session, {
-        url,
-        kind: V.PARENT,
-        username,
-        token,
-        deviceUUID
-      });
+    // Token login (reconnection). `kind` is the numeric AccountKind the
+    // previous login returned (6 élève / 7 parent / 8 professeur) and
+    // `navigatorIdentifier` the `identifiantNav` Pronote handed out then:
+    // both must be replayed, Pronote refuses a mobile token presented for
+    // another space or from an unknown navigator. Missing values fall back
+    // to the pre-fix behaviour (parent, fresh navigator).
+    // A SecurityError (Pronote asks to set up double authentication) is
+    // rethrown with a stable prefix the Swift side maps to
+    // PronoteError.doubleAuthRequired. (NOTO HAND PATCH: mirrors
+    // pawnote-bridge.js; re-apply on a rebuild.)
+    loginToken: async (session, url, username, token, deviceUUID, kind, navigatorIdentifier) => {
+      let refresh;
+      try {
+        refresh = await ye(session, {
+          url,
+          kind: typeof kind === "number" && kind > 0 ? kind : V.PARENT,
+          username,
+          token,
+          deviceUUID,
+          navigatorIdentifier: navigatorIdentifier || undefined
+        });
+      } catch (e) {
+        if (e && e.name === "SecurityError") {
+          throw new Error("DOUBLE_AUTH_REQUIRED: " + (e.message || ""));
+        }
+        throw e;
+      }
       return {
         token: refresh.token,
         username: refresh.username,
         url: refresh.url,
-        kind: refresh.kind
+        kind: refresh.kind,
+        navigatorIdentifier: refresh.navigatorIdentifier ?? null
       };
     },
     // Credentials login
@@ -22720,7 +22764,8 @@
         token: refresh.token,
         username: refresh.username,
         url: refresh.url,
-        kind: refresh.kind
+        kind: refresh.kind,
+        navigatorIdentifier: refresh.navigatorIdentifier ?? null
       };
     },
     // Get children from session
@@ -22855,14 +22900,15 @@
 
       // Step 1: Fetch mobile.parent.html with redirect:follow (CAS redirects must be followed)
       // pawnote's built-in fetchSessionPage uses redirect:manual which breaks CAS flows.
-      let information, version;
+      let information, version, entLogin, entPassword, entLoginRaw, entPasswordRaw;
       try {
         const pageUrl = new URL(baseUrl + "/mobile.parent.html");
-        for (const [k, v2] of Object.entries({ ...ve, bydlg: "A6ABB224-12DD-4E31-AD3E-8A39A1C2C335" })) {
-          pageUrl.searchParams.set(k, v2);
-        }
+        // NOTO HAND PATCH: only fd=1. `login=true` and `bydlg` ask Pronote for its
+        // direct login page and skip the CAS redirect, so the page never carries
+        // the ENT identity (Start fields e/f) and the challenge cannot be solved.
+        pageUrl.searchParams.set("fd", "1");
         // Use redirect:follow so CAS redirect chain is traversed
-        const resp = await session.fetcher({ url: pageUrl, redirect: "follow" });
+        const resp = await session.fetcher({ url: pageUrl, redirect: "follow", appliMobile: false, headers: { "User-Agent": Z } });
         const html = resp.content;
 
         // Extract version — works for both old Pronote (inline Start()) and new Vite builds (meta/script tag)
@@ -22877,54 +22923,89 @@
         const noSpaces = html.replace(/ /gu, "").replace(/\n/gu, "");
         const startIdx = noSpaces.indexOf("Start(");
         if (startIdx === -1) throw new Error("Start() not found (len=" + html.length + " ver=" + versionStr + " prefix=" + html.substring(0, 300).replace(/\n/g, ' ') + ")");
-        const endIdx = noSpaces.indexOf(")}catch");
-        const startJson = noSpaces.substring(startIdx + 6, endIdx)
+        const startBody = __notoStartBody(noSpaces);
+        if (startBody === null) throw new Error("Start() end not found (ver=" + versionStr + ")");
+        const startJson = startBody
           .replace(/(['"])?([a-z0-9A-Z_]+)(['"])?:/gu, '"$2": ')
           .replace(/'/gu, '"');
 
-        information = W(JSON.parse(startJson), baseUrl, versionArr);
+        const startData = JSON.parse(startJson);
+        information = W(startData, baseUrl, versionArr);
         version = versionArr;
+        // After the CAS round trip Pronote puts the ENT login (e) and a one-time
+        // password (f) in Start(), like pronotepy reads them.
+        if (!startData.e || !startData.f) {
+          throw new Error("ENT_NO_CAS_IDENTITY (keys=" + Object.keys(startData).join(",") + " finalUrl=" + String(resp.finalUrl || "").split("?")[0] + ")");
+        }
+        entLogin = String(startData.e);
+        entPassword = String(startData.f);
+        // The space-stripped/regex-rewritten JSON above can alter values (spaces,
+        // ':' or quotes inside them): also read e/f straight from the raw page.
+        const rawStart = html.substring(html.indexOf("Start"), html.indexOf("Start") + 6000);
+        const rawField = (k) => {
+          const m = rawStart.match(new RegExp("[{,]\\s*['\"]?" + k + "['\"]?\\s*:\\s*(['\"])((?:\\\\.|(?!\\1)[^\\\\])*)\\1"));
+          return m ? m[2] : null;
+        };
+        entLoginRaw = rawField("e");
+        entPasswordRaw = rawField("f");
+        console.log("[noto] ENT start: keys=" + Object.keys(startData).join(",") + " eLen=" + entLogin.length + " fLen=" + entPassword.length + " eRawLen=" + (entLoginRaw ? entLoginRaw.length : -1) + " fRawLen=" + (entPasswordRaw ? entPasswordRaw.length : -1) + " fSame=" + (entPasswordRaw === entPassword));
       } catch (e) {
         throw new Error("ENT_STEP1_FAIL: " + (e && e.message || String(e)));
       }
       session.information = information;
       session.instance = { version };
+      // Like pronotepy and pawnote's credentials login, the ENT session's POSTs
+      // go without the appliMobile cookie.
+      const baseFetcher = session.fetcher;
+      session.fetcher = (o) => baseFetcher({ ...o, appliMobile: false });
       try { session.instance = await me(session); } catch (e) {
         throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
       }
 
-      // Step 2: Identification with pourENT:true (CAS provides the identity)
-      let identData;
+      // Steps 2-3: Identification with pourENT:true (CAS provides the identity),
+      // then the challenge, encrypted as is with the ENT key like current
+      // pronotepy: MD5 of SHA256(f) in uppercase hex, session IV.
+      // NOTO HAND PATCH: first ask for a mobile-app connection, so Pronote hands
+      // out jetonConnexionAppliMobile and the next launch reconnects without
+      // MonLycée. If Pronote refuses that, retry in the same session without it
+      // (the mode that worked on 2026-10-29, no reconnection token).
+      const entKey = Pe({ alea: "" }, "", entPasswordRaw || entPassword);
+      const ivBuf = () => import_node_forge.default.util.createBuffer(session.information.aesIV);
+      const tryAuth = async (mobile) => {
+        let identData;
+        try {
+          identData = await he(session, {
+            username: entLogin,
+            deviceUUID: mobile ? deviceUUID : "",
+            requestFirstMobileAuthentication: mobile,
+            reuseMobileAuthentication: false,
+            requestFromQRCode: false,
+            useCAS: true,
+          });
+        } catch (e) {
+          throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
+        }
+        console.log("[noto] ENT ident (mobile=" + mobile + "): alea=" + (identData.alea ? "set" : "empty") + " challengeLen=" + String(identData.challenge || "").length);
+        const solved = se.encrypt(String(identData.challenge), entKey, ivBuf());
+        const authData = await fe(session, solved);
+        return { identData, authData };
+      };
+      let identData, authData;
+      const authKey = entKey;
       try {
-        identData = await he(session, {
-          username: "",
-          deviceUUID: deviceUUID,
-          requestFirstMobileAuthentication: true,
-          reuseMobileAuthentication: false,
-          requestFromQRCode: false,
-          useCAS: true,
-        });
+        ({ identData, authData } = await tryAuth(true));
+        console.log("[noto] ENT auth ok (mobile=true), token=" + (authData.jetonConnexionAppliMobile ? "yes" : "no"));
       } catch (e) {
-        throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
+        console.log("[noto] ENT auth (mobile=true) refused: " + (e && e.name) + " " + String(e && e.message || "").split(":")[0]);
+        try {
+          ({ identData, authData } = await tryAuth(false));
+          console.log("[noto] ENT auth ok (mobile=false), token=" + (authData.jetonConnexionAppliMobile ? "yes" : "no"));
+        } catch (e2) {
+          console.log("[noto] ENT auth refused: " + (e2 && e2.name));
+          throw new Error("ENT_AUTH_FAIL: " + (e2 && e2.message || String(e2)));
+        }
       }
-
-      // Step 3: Solve challenge with empty password (CAS session provides auth)
-      const username = identData.login || "";
-      const opts = { username, password: "" };
-      Ne(opts, "password", identData);
-      const authKey = Pe(identData, opts.username, opts.password);
-      let solvedChallenge;
-      try {
-        solvedChallenge = Se(session, identData, authKey);
-      } catch (e) {
-        throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + "): " + (e && e.message || String(e)));
-      }
-      let authData;
-      try {
-        authData = await fe(session, solvedChallenge);
-      } catch (e) {
-        throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
-      }
+      const username = identData.login || entLogin;
 
       Ie(session, authData, authKey);
 

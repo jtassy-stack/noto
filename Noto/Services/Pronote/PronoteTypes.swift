@@ -152,11 +152,20 @@ struct PronoteInstanceInfo: Sendable {
     let casURL: String?
 }
 
-struct PronoteRefreshToken: Codable, Sendable {
+/// What nōto keeps to reopen a Pronote session without a new QR scan.
+/// `kind` and `navigatorIdentifier` come back from pawnote on every login
+/// and must be replayed as-is: Pronote keys the mobile token on the account
+/// space (élève / parent) and on the `identifiantNav` it handed out, so a
+/// token replayed as « parent » for a student QR, or with a fresh navigator
+/// id, is refused. `navigatorIdentifier` is optional so tokens stored by
+/// earlier builds (which dropped it) still decode; they get a value on
+/// their first successful reconnect.
+struct PronoteRefreshToken: Codable, Sendable, Equatable {
     let url: String
     let token: String
     let username: String
     let kind: PronoteAccountKind
+    var navigatorIdentifier: String? = nil
 }
 
 // MARK: - Errors
@@ -168,6 +177,11 @@ enum PronoteError: Error, LocalizedError {
     case suspendedIP
     case rateLimited
     case securityModal
+    /// Pronote asks the account to set up double authentication (PIN /
+    /// trusted device) before it hands out a mobile token. pawnote's token
+    /// login throws on it; the parent has to go through the Pronote app or
+    /// web once, then rescan.
+    case doubleAuthRequired
     case encryptionFailed(String)
     case networkError(Error)
     case invalidResponse(String)
@@ -181,6 +195,7 @@ enum PronoteError: Error, LocalizedError {
         case .suspendedIP: "Adresse IP temporairement bloquée"
         case .rateLimited: "Trop de requêtes, réessayez dans quelques minutes"
         case .securityModal: "Vérification de sécurité requise — connectez-vous depuis Pronote"
+        case .doubleAuthRequired: "Pronote demande une double authentification. Connectez-vous une fois dans l'app ou sur le site Pronote, puis rescannez le QR code."
         case .encryptionFailed(let msg): "Erreur de chiffrement: \(msg)"
         case .networkError(let err): "Erreur réseau: \(err.localizedDescription)"
         case .invalidResponse(let msg): "Réponse invalide: \(msg)"
