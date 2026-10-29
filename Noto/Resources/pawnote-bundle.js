@@ -22991,92 +22991,50 @@
         throw new Error("ENT_PARAMS_FAIL: " + (e && e.message || String(e)));
       }
 
-      // Step 2: Identification with pourENT:true (CAS provides the identity)
-      let identData;
-      try {
-        identData = await he(session, {
-          username: entLogin,
-          // pronotepy sends an empty uuidAppliMobile for ENT logins.
-          deviceUUID: "",
-          // NOTO HAND PATCH: no mobile-app request, exactly like pronotepy's ENT
-          // login. With demandeConnexionAppliMobile the server encrypts the
-          // challenge with a key we cannot derive (2026-10-29: every candidate
-          // failed or decrypted to nothing, then BadCredentialsError).
-          requestFirstMobileAuthentication: false,
-          reuseMobileAuthentication: false,
-          requestFromQRCode: false,
-          useCAS: true,
-        });
-      } catch (e) {
-        throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
-      }
-
-      // Step 3: Solve the challenge with the ENT credentials from Start().
-      // ENT key = SHA256(f) uppercased, no alea and no username prefix (pronotepy).
-      const username = identData.login || entLogin;
-      // The challenge is decrypted locally, so several key derivations can be
-      // tried without any extra request: pronotepy's ENT rule first, then the
-      // regular password rule, with the raw / parsed / lowercased values.
-      const fValues = [...new Set([entPasswordRaw, entPassword].filter((v) => typeof v === "string" && v.length))];
-      const eValues = [...new Set([identData.login, entLoginRaw, entLogin].filter((v) => typeof v === "string" && v.length))];
-      const candidates = [];
-      for (const f of fValues) for (const fv of [...new Set([f, f.toLowerCase()])]) {
-        candidates.push(["ent", () => Pe({ alea: "" }, "", fv)]);
-        for (const ev of eValues) for (const evv of [...new Set([ev, ev.toLowerCase()])]) {
-          candidates.push(["pwd", () => Pe(identData, evv, fv)]);
-        }
-      }
-      console.log("[noto] ENT ident: alea=" + (identData.alea ? "set" : "empty") + " modeCompLog=" + identData.modeCompLog + " modeCompMdp=" + identData.modeCompMdp + " challengeLen=" + String(identData.challenge || "").length + " candidates=" + candidates.length);
-      // A wrong key still "decrypts" when the padding happens to be valid, so
-      // describe each plaintext (lengths and character classes, never values)
-      // and prefer the one that looks like Pronote's challenge.
-      const classOf = (t) => /^[0-9]*$/.test(t) ? "digits" : /^[0-9a-fA-F]*$/.test(t) ? "hex" : /^[\x20-\x7e]*$/.test(t) ? "ascii" : "binary";
+      // Steps 2-3: Identification with pourENT:true (CAS provides the identity),
+      // then the challenge, encrypted as is with the ENT key like current
+      // pronotepy: MD5 of SHA256(f) in uppercase hex, session IV.
+      // NOTO HAND PATCH: first ask for a mobile-app connection, so Pronote hands
+      // out jetonConnexionAppliMobile and the next launch reconnects without
+      // MonLycée. If Pronote refuses that, retry in the same session without it
+      // (the mode that worked on 2026-10-29, no reconnection token).
+      const entKey = Pe({ alea: "" }, "", entPasswordRaw || entPassword);
       const ivBuf = () => import_node_forge.default.util.createBuffer(session.information.aesIV);
-      let solvedChallenge, authKey, bestScore = -1;
-      for (let ci = 0; ci < candidates.length; ci++) {
-        let k, dec;
+      const tryAuth = async (mobile) => {
+        let identData;
         try {
-          k = candidates[ci][1]();
-          dec = import_node_forge.default.util.decodeUtf8(se.decrypt(identData.challenge, k, ivBuf()));
+          identData = await he(session, {
+            username: entLogin,
+            deviceUUID: mobile ? deviceUUID : "",
+            requestFirstMobileAuthentication: mobile,
+            reuseMobileAuthentication: false,
+            requestFromQRCode: false,
+            useCAS: true,
+          });
         } catch (e) {
-          console.log("[noto] ENT candidate " + ci + " (" + candidates[ci][0] + "): no decrypt");
-          continue;
+          throw new Error("ENT_IDENT_FAIL: " + (e && e.message || String(e)));
         }
-        let even = "";
-        for (let i = 0; i < dec.length; i += 2) even += dec.charAt(i);
-        const cls = classOf(dec), evenCls = classOf(even);
-        const score = { digits: 3, hex: 3, ascii: 2, binary: 0 }[evenCls] + { digits: 1, hex: 1, ascii: 1, binary: 0 }[cls];
-        console.log("[noto] ENT candidate " + ci + " (" + candidates[ci][0] + "): decLen=" + dec.length + " decClass=" + cls + " evenClass=" + evenCls + " score=" + score);
-        // An empty plaintext is a padding false positive, never the challenge.
-        if (dec.length > 0 && score > bestScore) {
-          try {
-            solvedChallenge = Se(session, identData, k);
-            authKey = k;
-            bestScore = score;
-          } catch (e) {}
-        }
-      }
-      // NOTO HAND PATCH: current pronotepy no longer decrypts the ENT challenge.
-      // It encrypts the challenge string as is with the ENT key
-      // (MD5 of SHA256(f) in uppercase hex) and the session IV. Use that when no
-      // derivation yields a real plaintext (2026-10-29: every one failed or was empty).
-      if (!solvedChallenge) {
-        const entKey = Pe({ alea: "" }, "", entPasswordRaw || entPassword);
-        solvedChallenge = se.encrypt(String(identData.challenge), entKey, ivBuf());
-        authKey = entKey;
-        console.log("[noto] ENT using plain challenge encryption (pronotepy), outLen=" + solvedChallenge.length);
-      }
-      if (solvedChallenge) console.log("[noto] ENT using best candidate, score=" + bestScore);
-      if (!solvedChallenge) {
-        throw new Error("ENT_CHALLENGE_FAIL(alea=" + (identData.alea || "empty") + ",hasChallenge=" + Boolean(identData.challenge) + ",tried=" + candidates.length + "): no key derivation decrypts the challenge");
-      }
-      let authData;
+        console.log("[noto] ENT ident (mobile=" + mobile + "): alea=" + (identData.alea ? "set" : "empty") + " challengeLen=" + String(identData.challenge || "").length);
+        const solved = se.encrypt(String(identData.challenge), entKey, ivBuf());
+        const authData = await fe(session, solved);
+        return { identData, authData };
+      };
+      let identData, authData;
+      const authKey = entKey;
       try {
-        authData = await fe(session, solvedChallenge);
+        ({ identData, authData } = await tryAuth(true));
+        console.log("[noto] ENT auth ok (mobile=true), token=" + (authData.jetonConnexionAppliMobile ? "yes" : "no"));
       } catch (e) {
-        console.log("[noto] ENT auth refused: " + (e && e.name));
-        throw new Error("ENT_AUTH_FAIL: " + (e && e.message || String(e)));
+        console.log("[noto] ENT auth (mobile=true) refused: " + (e && e.name) + " " + String(e && e.message || "").split(":")[0]);
+        try {
+          ({ identData, authData } = await tryAuth(false));
+          console.log("[noto] ENT auth ok (mobile=false), token=" + (authData.jetonConnexionAppliMobile ? "yes" : "no"));
+        } catch (e2) {
+          console.log("[noto] ENT auth refused: " + (e2 && e2.name));
+          throw new Error("ENT_AUTH_FAIL: " + (e2 && e2.message || String(e2)));
+        }
       }
+      const username = identData.login || entLogin;
 
       Ie(session, authData, authKey);
 
